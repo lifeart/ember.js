@@ -1,11 +1,12 @@
-import { run, next, setOnerror } from 'ember-metal';
+import { next, run } from '@ember/runloop';
+import { setOnerror } from 'ember-error-handling';
 import Test from '../lib/test';
 import Adapter from '../lib/adapters/adapter';
 import QUnitAdapter from '../lib/adapters/qunit';
-import { Application as EmberApplication } from 'ember-application';
+import EmberApplication from '@ember/application';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
 import { RSVP } from 'ember-runtime';
-import { getDebugFunction, setDebugFunction } from 'ember-debug';
+import { getDebugFunction, setDebugFunction } from '@ember/debug';
 
 const originalDebug = getDebugFunction('debug');
 const noop = function() {};

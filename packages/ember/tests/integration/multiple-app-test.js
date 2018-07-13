@@ -1,7 +1,8 @@
 import { moduleFor, ApplicationTestCase } from 'internal-test-helpers';
-import { Application } from 'ember-application';
+import Application from '@ember/application';
 import { Component } from 'ember-glimmer';
-import { assign, getOwner } from 'ember-utils';
+import { getOwner } from 'ember-owner';
+import { assign } from '@ember/polyfills';
 import { resolve } from 'rsvp';
 
 moduleFor(
@@ -30,7 +31,7 @@ moduleFor(
       let secondApplicationOptions = { rootElement: '#two' };
       let myOptions = assign(applicationOptions, secondApplicationOptions, options);
       this.secondApp = Application.create(myOptions);
-      this.secondResolver = myOptions.Resolver.lastInstance;
+      this.secondResolver = this.secondApp.__registry__.resolver;
       return this.secondApp;
     }
 

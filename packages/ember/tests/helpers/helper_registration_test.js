@@ -1,5 +1,6 @@
 import { moduleFor, ApplicationTestCase } from 'internal-test-helpers';
-import { Controller, Service, inject } from 'ember-runtime';
+import Controller from '@ember/controller';
+import Service, { inject as injectService } from '@ember/service';
 import { Helper, helper } from 'ember-glimmer';
 
 moduleFor(
@@ -87,7 +88,7 @@ moduleFor(
       this.add(
         'helper:full-name',
         Helper.extend({
-          nameBuilder: inject.service('name-builder'),
+          nameBuilder: injectService('name-builder'),
           compute() {
             this.get('nameBuilder').build();
           },

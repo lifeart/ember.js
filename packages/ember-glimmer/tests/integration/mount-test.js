@@ -1,10 +1,10 @@
-import { getOwner } from 'ember-utils';
+import { getOwner } from 'ember-owner';
 import { moduleFor, ApplicationTest, RenderingTest } from '../utils/test-case';
 import { compile, Component } from '../utils/helpers';
-import { Controller } from 'ember-runtime';
+import Controller from '@ember/controller';
 import { set } from 'ember-metal';
-import { Engine, getEngineParent } from 'ember-application';
-import { EMBER_ENGINES_MOUNT_PARAMS } from 'ember/features';
+import Engine, { getEngineParent } from '@ember/engine';
+import { EMBER_ENGINES_MOUNT_PARAMS } from '@ember/canary-features';
 
 if (EMBER_ENGINES_MOUNT_PARAMS) {
   moduleFor(

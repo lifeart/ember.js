@@ -1,9 +1,9 @@
 import { NoneLocation } from 'ember-routing';
 import { RouterTestCase, moduleFor } from 'internal-test-helpers';
 import { Transition } from 'router';
-import { Controller } from 'ember-runtime';
+import Controller from '@ember/controller';
 
-import { EMBER_ROUTING_ROUTER_SERVICE } from 'ember/features';
+import { EMBER_ROUTING_ROUTER_SERVICE } from '@ember/canary-features';
 
 if (EMBER_ROUTING_ROUTER_SERVICE) {
   moduleFor(

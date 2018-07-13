@@ -1,3 +1,4 @@
+import { assert } from '@ember/debug';
 import {
   AbstractIterable,
   combine,
@@ -9,7 +10,6 @@ import {
   VersionedReference,
 } from '@glimmer/reference';
 import { Opaque, Option } from '@glimmer/util';
-import { assert } from 'ember-debug';
 import { get, objectAt, tagFor, tagForProperty } from 'ember-metal';
 import { _contentFor, isEmberArray } from 'ember-runtime';
 import { guidFor, HAS_NATIVE_SYMBOL, isProxy } from 'ember-utils';
@@ -98,8 +98,8 @@ class ArrayIterator extends BoundedIterator {
 }
 
 class EmberArrayIterator extends BoundedIterator {
-  static from(array: Opaque, keyFor: KeyFor): OpaqueIterator {
-    let length = get(array, 'length');
+  static from(array: Opaque[], keyFor: KeyFor): OpaqueIterator {
+    let { length } = array;
 
     if (length === 0) {
       return EMPTY_ITERATOR;
@@ -113,7 +113,7 @@ class EmberArrayIterator extends BoundedIterator {
   }
 
   valueFor(position: number): Opaque {
-    return objectAt(this.array, position);
+    return objectAt(this.array as any, position);
   }
 }
 
@@ -139,7 +139,6 @@ class ObjectIterator extends BoundedIterator {
     let keys: Opaque[] = [];
     let values: Opaque[] = [];
     let length = 0;
-
     let isMapLike = false;
 
     obj.forEach((value: Opaque, key: Opaque) => {
@@ -147,10 +146,8 @@ class ObjectIterator extends BoundedIterator {
 
       if (isMapLike) {
         keys.push(key);
-        values.push(value);
-      } else {
-        values.push(value);
       }
+      values.push(value);
 
       length++;
     });
@@ -358,7 +355,7 @@ class EachIterable implements EmberIterable {
     if (Array.isArray(iterable)) {
       return ArrayIterator.from(iterable, keyFor);
     } else if (isEmberArray(iterable)) {
-      return EmberArrayIterator.from(iterable, keyFor);
+      return EmberArrayIterator.from(iterable as Opaque[], keyFor);
     } else if (HAS_NATIVE_SYMBOL && isNativeIterable(iterable)) {
       return ArrayLikeNativeIterator.from(iterable, keyFor);
     } else if (hasForEach(iterable)) {
@@ -448,11 +445,11 @@ function Identity(value: Opaque): string {
 }
 
 function KeyPath(keyPath: string): KeyFor {
-  return (value: Opaque) => String(get(value, keyPath));
+  return (value: Opaque) => String(get(value as any, keyPath));
 }
 
 function Unique(func: KeyFor): KeyFor {
-  let seen = new Set();
+  let seen = {};
 
   return (value: Opaque, memo: Opaque, position: number) => {
     let key = func(value, memo, position);

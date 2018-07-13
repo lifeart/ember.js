@@ -1,7 +1,7 @@
-import { assign } from 'ember-utils';
+import { assign } from '@ember/polyfills';
 import { addObserver } from 'ember-metal';
-import { Error as EmberError } from 'ember-debug';
-import { DEBUG } from 'ember-env-flags';
+import EmberError from '@ember/error';
+import { DEBUG } from '@glimmer/env';
 
 import hasElement from './has_element';
 

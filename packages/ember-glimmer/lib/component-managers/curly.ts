@@ -1,3 +1,8 @@
+import { assert, deprecate } from '@ember/debug';
+import { POSITIONAL_PARAM_CONFLICT } from '@ember/deprecated-features';
+import { _instrumentStart } from '@ember/instrumentation';
+import { assign } from '@ember/polyfills';
+import { DEBUG } from '@glimmer/env';
 import {
   ComponentCapabilities,
   Option,
@@ -10,7 +15,6 @@ import {
   Arguments,
   Bounds,
   ComponentDefinition,
-  ComponentManager,
   ElementOperations,
   Invocation,
   PreparedArguments,
@@ -21,12 +25,10 @@ import {
 } from '@glimmer/runtime';
 import { Destroyable, EMPTY_ARRAY } from '@glimmer/util';
 import { privatize as P } from 'container';
-import { assert, deprecate } from 'ember-debug';
-import { DEBUG } from 'ember-env-flags';
 import { ENV } from 'ember-environment';
-import { _instrumentStart, get } from 'ember-metal';
-import { String as StringUtils } from 'ember-runtime';
-import { assign, getOwner, guidFor } from 'ember-utils';
+import { get } from 'ember-metal';
+import { getOwner } from 'ember-owner';
+import { guidFor } from 'ember-utils';
 import { addChildView, OwnedTemplateMeta, setViewElement } from 'ember-views';
 import { BOUNDS, DIRTY_TAG, HAS_BLOCK, IS_DISPATCHING_ATTRS, ROOT_REF } from '../component';
 import Environment from '../environment';
@@ -36,14 +38,13 @@ import { Factory as TemplateFactory, OwnedTemplate } from '../template';
 import {
   AttributeBinding,
   ClassNameBinding,
-  ColonClassNameBindingReference,
   IsVisibleBinding,
   referenceForKey,
+  SimpleClassNameBindingReference,
 } from '../utils/bindings';
 import ComponentStateBucket, { Component } from '../utils/curly-component-state-bucket';
 import { processComponentArgs } from '../utils/process-args';
 import AbstractManager from './abstract';
-import CustomComponentManager, { CustomComponentState } from './custom';
 import DefinitionState from './definition-state';
 
 function aliasIdToElementId(args: Arguments, props: any) {
@@ -87,7 +88,8 @@ function applyAttributeBindings(
   }
 
   if (seen.indexOf('id') === -1) {
-    operations.setAttribute('id', PrimitiveReference.create(component.elementId), true, null);
+    let id = component.elementId ? component.elementId : guidFor(component);
+    operations.setAttribute('id', PrimitiveReference.create(id), false, null);
   }
 
   if (seen.indexOf('style') === -1) {
@@ -143,10 +145,12 @@ export default class CurlyComponentManager
   }
 
   getTagName(state: ComponentStateBucket): Option<string> {
-    const { component } = state;
-    if (component.tagName === '') {
+    const { component, hasWrappedElement } = state;
+
+    if (!hasWrappedElement) {
       return null;
     }
+
     return (component && component.tagName) || 'div';
   }
 
@@ -155,7 +159,7 @@ export default class CurlyComponentManager
   }
 
   prepareArgs(state: DefinitionState, args: Arguments): Option<PreparedArguments> {
-    const { positionalParams } = state.ComponentClass.class;
+    const { positionalParams } = state.ComponentClass.class!;
 
     // early exits
     if (
@@ -179,17 +183,19 @@ export default class CurlyComponentManager
       const count = Math.min(positionalParams.length, args.positional.length);
       named = {};
       assign(named, args.named.capture().map);
-      for (let i = 0; i < count; i++) {
-        const name = positionalParams[i];
-        deprecate(
-          `You cannot specify both a positional param (at position ${i}) and the hash argument \`${name}\`.`,
-          !args.named.has(name),
-          {
-            id: 'ember-glimmer.positional-param-conflict',
-            until: '3.5.0',
-          }
-        );
-        named[name] = args.positional.at(i);
+      if (POSITIONAL_PARAM_CONFLICT) {
+        for (let i = 0; i < count; i++) {
+          const name = positionalParams[i];
+          deprecate(
+            `You cannot specify both a positional param (at position ${i}) and the hash argument \`${name}\`.`,
+            !args.named.has(name),
+            {
+              id: 'ember-glimmer.positional-param-conflict',
+              until: '3.5.0',
+            }
+          );
+          named[name] = args.positional.at(i);
+        }
       }
     } else {
       return null;
@@ -271,8 +277,10 @@ export default class CurlyComponentManager
 
     component.trigger('didReceiveAttrs');
 
+    let hasWrappedElement = component.tagName !== '';
+
     // We usually do this in the `didCreateElement`, but that hook doesn't fire for tagless components
-    if (component.tagName === '') {
+    if (!hasWrappedElement) {
       if (environment.isInteractive) {
         component.trigger('willRender');
       }
@@ -286,7 +294,13 @@ export default class CurlyComponentManager
 
     // Track additional lifecycle metadata about this component in a state bucket.
     // Essentially we're saving off all the state we'll need in the future.
-    let bucket = new ComponentStateBucket(environment, component, capturedArgs, finalizer);
+    let bucket = new ComponentStateBucket(
+      environment,
+      component,
+      capturedArgs,
+      finalizer,
+      hasWrappedElement
+    );
 
     if (args.named.has('class')) {
       bucket.classRef = args.named.get('class');
@@ -296,7 +310,7 @@ export default class CurlyComponentManager
       processComponentInitializationAssertions(component, props);
     }
 
-    if (environment.isInteractive && component.tagName !== '') {
+    if (environment.isInteractive && hasWrappedElement) {
       component.trigger('willRender');
     }
 
@@ -316,26 +330,16 @@ export default class CurlyComponentManager
 
     let { attributeBindings, classNames, classNameBindings } = component;
 
-    operations.setAttribute('id', PrimitiveReference.create(guidFor(component)), false, null);
-
     if (attributeBindings && attributeBindings.length) {
       applyAttributeBindings(element, attributeBindings, component, operations);
     } else {
-      if (component.elementId) {
-        operations.setAttribute('id', PrimitiveReference.create(component.elementId), false, null);
-      }
+      let id = component.elementId ? component.elementId : guidFor(component);
+      operations.setAttribute('id', PrimitiveReference.create(id), false, null);
       IsVisibleBinding.install(element, component, operations);
     }
 
-    if (classRef && classRef.value()) {
-      const ref =
-        classRef.value() === true
-          ? new ColonClassNameBindingReference(
-              classRef,
-              StringUtils.dasherize(classRef['_propertyKey']),
-              null
-            )
-          : classRef;
+    if (classRef) {
+      const ref = new SimpleClassNameBindingReference(classRef, classRef['_propertyKey']);
       operations.setAttribute('class', ref, false, null);
     }
 
@@ -352,8 +356,7 @@ export default class CurlyComponentManager
     }
     operations.setAttribute('class', PrimitiveReference.create('ember-view'), false, null);
 
-    const ariaRole = get(component, 'ariaRole');
-    if (ariaRole) {
+    if ('ariaRole' in component) {
       operations.setAttribute('role', referenceForKey(component, 'ariaRole'), false, null);
     }
 
@@ -555,13 +558,10 @@ export class CurlyComponentDefinition implements ComponentDefinition {
   public args: CurriedArgs | undefined;
   public state: DefinitionState;
   public symbolTable: ProgramSymbolTable | undefined;
-
+  public manager: CurlyComponentManager = CURLY_COMPONENT_MANAGER;
   // tslint:disable-next-line:no-shadowed-variable
   constructor(
     public name: string,
-    public manager:
-      | ComponentManager<ComponentStateBucket, DefinitionState>
-      | CustomComponentManager<CustomComponentState<any>> = CURLY_COMPONENT_MANAGER,
     public ComponentClass: any,
     public handle: Option<VMHandle>,
     template: OwnedTemplate,

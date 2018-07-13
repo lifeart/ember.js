@@ -1,15 +1,6 @@
 import { context } from 'ember-environment';
-import {
-  meta,
-  set,
-  get,
-  computed,
-  defineProperty,
-  addListener,
-  watch,
-  unwatch,
-  deleteMeta,
-} from '../..';
+import { set, get, computed, defineProperty, addListener, watch, unwatch } from '../..';
+import { deleteMeta, meta } from 'ember-meta';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
 
 let didCount, didKeys, originalLookup;
@@ -179,7 +170,7 @@ moduleFor(
       watch(objA, 'b.foo');
 
       let meta_objB = meta(objB);
-      let chainNode = meta(objA).readableChains()._chains.b._chains.foo;
+      let chainNode = meta(objA).readableChains().chains.b.chains.foo;
 
       assert.equal(meta_objB.peekWatching('foo'), 1, 'should be watching foo');
       assert.equal(

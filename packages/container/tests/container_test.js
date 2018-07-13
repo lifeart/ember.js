@@ -1,5 +1,6 @@
-import { OWNER, assign } from 'ember-utils';
-import { EMBER_MODULE_UNIFICATION } from 'ember/features';
+import { OWNER } from 'ember-owner';
+import { assign } from '@ember/polyfills';
+import { EMBER_MODULE_UNIFICATION } from '@ember/canary-features';
 import { Registry } from '..';
 import { factory, moduleFor, AbstractTestCase } from 'internal-test-helpers';
 
@@ -668,6 +669,42 @@ moduleFor(
       // note: _guid and isDestroyed are being set in the `factory` constructor
       // not via registry/container shenanigans
       assert.deepEqual(Object.keys(instance), []);
+    }
+
+    [`@test assert when calling lookup after destroy on a container`](assert) {
+      let registry = new Registry();
+      let container = registry.container();
+      let Component = factory();
+      registry.register('component:foo-bar', Component);
+      let instance = container.lookup('component:foo-bar');
+      assert.ok(instance, 'precond lookup successful');
+
+      this.runTask(() => {
+        container.destroy();
+        container.finalizeDestroy();
+      });
+
+      expectAssertion(() => {
+        container.lookup('component:foo-bar');
+      });
+    }
+
+    [`@test assert when calling factoryFor after destroy on a container`](assert) {
+      let registry = new Registry();
+      let container = registry.container();
+      let Component = factory();
+      registry.register('component:foo-bar', Component);
+      let instance = container.factoryFor('component:foo-bar');
+      assert.ok(instance, 'precond lookup successful');
+
+      this.runTask(() => {
+        container.destroy();
+        container.finalizeDestroy();
+      });
+
+      expectAssertion(() => {
+        container.factoryFor('component:foo-bar');
+      });
     }
 
     // this is skipped until templates and the glimmer environment do not require `OWNER` to be

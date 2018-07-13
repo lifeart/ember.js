@@ -1,6 +1,6 @@
 import { get } from 'ember-metal';
-import { info } from 'ember-debug';
-import { DEBUG } from 'ember-env-flags';
+import { info } from '@ember/debug';
+import { DEBUG } from '@glimmer/env';
 /**
 @module ember
 */

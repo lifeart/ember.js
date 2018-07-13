@@ -1,9 +1,9 @@
 /**
 @module ember
 */
-
-import { Mixin, descriptorFor } from 'ember-metal';
-import { assert } from 'ember-debug';
+import { descriptorFor } from 'ember-meta';
+import { Mixin } from 'ember-metal';
+import { assert } from '@ember/debug';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -76,6 +76,18 @@ export default Mixin.create({
     Component.extend({
       classNameBindings: ['isUrgent:urgent'],
       isUrgent: true
+    });
+    ```
+
+    If you would like to specify a class that should only be added when the
+    property is false, you can declare a binding like this:
+
+    ```javascript
+    // Applies the 'disabled' class to the view element
+    import Component from '@ember/component';
+    Component.extend({
+      classNameBindings: ['isEnabled::disabled'],
+      isEnabled: false
     });
     ```
 

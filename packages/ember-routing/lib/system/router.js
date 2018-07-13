@@ -1,23 +1,17 @@
-import { assign, getOwner } from 'ember-utils';
-import {
-  get,
-  set,
-  defineProperty,
-  computed,
-  run,
-  once,
-  scheduleOnce,
-  schedule,
-  cancel,
-} from 'ember-metal';
-import { Error as EmberError, deprecate, assert, info } from 'ember-debug';
+import { getOwner } from 'ember-owner';
+import { assign } from '@ember/polyfills';
+import { cancel, once, run, scheduleOnce, schedule } from '@ember/runloop';
+import { get, set, defineProperty, computed } from 'ember-metal';
+import EmberError from '@ember/error';
+import { assert, deprecate, info } from '@ember/debug';
 import { Object as EmberObject, Evented, typeOf, A as emberA } from 'ember-runtime';
 import { defaultSerialize, hasDefaultSerialize } from './route';
 import EmberRouterDSL from './dsl';
 import EmberLocation from '../location/api';
 import { resemblesURL, getActiveTargetName, calculateCacheKey, extractRouteArgs } from '../utils';
 import RouterState from './router_state';
-import { DEBUG } from 'ember-env-flags';
+import { DEBUG } from '@glimmer/env';
+import { ORPHAN_OUTLET_RENDER } from '@ember/deprecated-features';
 
 /**
 @module @ember/routing
@@ -33,7 +27,7 @@ const { slice } = Array.prototype;
 
 /**
   The `EmberRouter` class manages the application state and URLs. Refer to
-  the [routing guide](https://emberjs.com/guides/routing/) for documentation.
+  the [routing guide](https://guides.emberjs.com/release/routing/) for documentation.
 
   @class EmberRouter
   @extends EmberObject
@@ -1425,7 +1419,7 @@ EmberRouter.reopenClass({
     ```
 
     For more detailed documentation and examples please see
-    [the guides](https://emberjs.com/guides/routing/defining-your-routes/).
+    [the guides](https://guides.emberjs.com/release/routing/defining-your-routes/).
 
     @method map
     @param callback
@@ -1541,7 +1535,7 @@ function appendLiveRoute(liveRoutes, defaultParentState, renderOptions) {
   if (target) {
     set(target.outlets, renderOptions.outlet, myState);
   } else {
-    if (renderOptions.into) {
+    if (ORPHAN_OUTLET_RENDER && renderOptions.into) {
       deprecate(
         `Rendering into a {{render}} helper that resolves to an {{outlet}} is deprecated.`,
         false,
@@ -1559,7 +1553,23 @@ function appendLiveRoute(liveRoutes, defaultParentState, renderOptions) {
       // helper, and people are allowed to target templates rendered
       // by the render helper. So instead we defer doing anyting with
       // these orphan renders until afterRender.
-      appendOrphan(liveRoutes, renderOptions.into, myState);
+      if (!liveRoutes.outlets.__ember_orphans__) {
+        liveRoutes.outlets.__ember_orphans__ = {
+          render: {
+            name: '__ember_orphans__',
+          },
+          outlets: Object.create(null),
+        };
+      }
+
+      liveRoutes.outlets.__ember_orphans__.outlets[renderOptions.into] = myState;
+      schedule('afterRender', () => {
+        // `wasUsed` gets set by the render helper.
+        assert(
+          `You attempted to render into '${renderOptions.into}' but it was not found`,
+          liveRoutes.outlets.__ember_orphans__.outlets[renderOptions.into].wasUsed
+        );
+      });
     } else {
       liveRoutes = myState;
     }
@@ -1568,25 +1578,6 @@ function appendLiveRoute(liveRoutes, defaultParentState, renderOptions) {
     liveRoutes,
     ownState: myState,
   };
-}
-
-function appendOrphan(liveRoutes, into, myState) {
-  if (!liveRoutes.outlets.__ember_orphans__) {
-    liveRoutes.outlets.__ember_orphans__ = {
-      render: {
-        name: '__ember_orphans__',
-      },
-      outlets: Object.create(null),
-    };
-  }
-  liveRoutes.outlets.__ember_orphans__.outlets[into] = myState;
-  schedule('afterRender', () => {
-    // `wasUsed` gets set by the render helper.
-    assert(
-      `You attempted to render into '${into}' but it was not found`,
-      liveRoutes.outlets.__ember_orphans__.outlets[into].wasUsed
-    );
-  });
 }
 
 function representEmptyRoute(liveRoutes, defaultParentState, route) {

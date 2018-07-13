@@ -29,7 +29,6 @@ const {
   nodeModuleUtils,
   emberVersionES,
   emberLicense,
-  emberFeaturesES,
   nodeTests,
   buildEmberEnvFlagsES,
   getPackagesES,
@@ -66,12 +65,9 @@ module.exports = function() {
     getPackagesES(),
   ]);
 
-  let es = new MergeTrees(
-    [packagesES, emberFeaturesES(), dependenciesES, templateCompilerDependenciesES],
-    {
-      overwrite: true,
-    }
-  );
+  let es = new MergeTrees([packagesES, dependenciesES, templateCompilerDependenciesES], {
+    overwrite: true,
+  });
   let pkgAndTestESInAMD = toNamedAMD(es);
   let emberEnvFlagsDebug = toNamedAMD(buildEmberEnvFlagsES({ DEBUG: true }));
 
@@ -96,6 +92,8 @@ module.exports = function() {
         'container/lib/**',
         'ember-environment/index.js',
         'ember-environment/lib/**',
+        'ember-browser-environment/index.js',
+        'ember-browser-environment/lib/**',
         'ember-glimmer/index.js',
         'ember-glimmer/lib/**',
         'ember-metal/index.js',
@@ -106,6 +104,7 @@ module.exports = function() {
     }),
     rollupPackage(packagesES, 'container'),
     rollupPackage(packagesES, 'ember-environment'),
+    rollupPackage(packagesES, 'ember-browser-environment'),
     rollupPackage(packagesES, 'ember-glimmer'),
     rollupPackage(packagesES, 'ember-metal'),
     rollupPackage(packagesES, 'ember-utils'),
@@ -115,12 +114,16 @@ module.exports = function() {
   let packagesES5 = toES5(packagesESRollup);
   let dependenciesES5 = toES5(dependenciesES);
   let templateCompilerDependenciesES5 = toES5(templateCompilerDependenciesES);
-  let emberDebugFeaturesES5 = toES5(emberFeaturesES());
 
   // Bundling
   let emberTestsBundle = new MergeTrees([
     new Funnel(packagesES5, {
-      include: ['internal-test-helpers/**', '*/tests/**', 'license.js'],
+      include: [
+        'internal-test-helpers/**',
+        '*/*/tests/**' /* scoped packages */,
+        '*/tests/**' /* packages */,
+        'license.js',
+      ],
     }),
     loader,
     license,
@@ -135,10 +138,14 @@ module.exports = function() {
 
   let emberDebugBundle = new MergeTrees([
     new Funnel(packagesES5, {
-      exclude: ['*/tests/**', 'ember-template-compiler/**', 'internal-test-helpers/**'],
+      exclude: [
+        '*/*/tests/**' /* scoped packages */,
+        '*/tests/**' /* packages */,
+        'ember-template-compiler/**',
+        'internal-test-helpers/**',
+      ],
     }),
     dependenciesES5,
-    emberDebugFeaturesES5,
     loader,
     license,
     nodeModule,
@@ -152,7 +159,13 @@ module.exports = function() {
 
   let emberTestingBundle = new MergeTrees([
     new Funnel(packagesES5, {
-      include: ['ember-debug/**', 'ember-testing/**', 'license.js'],
+      include: [
+        '@ember/debug/lib/**',
+        '@ember/debug/index.js',
+        'ember-testing/index.js',
+        'ember-testing/lib/**',
+        'license.js',
+      ],
     }),
     loader,
     license,
@@ -176,9 +189,16 @@ module.exports = function() {
     return new MergeTrees([
       new Funnel(packagesES5, {
         include: [
+          '@ember/canary-features/**',
+          '@ember/debug/index.js',
+          '@ember/debug/lib/**',
+          '@ember/deprecated-features/**',
+          '@ember/error/index.js',
+          '@ember/polyfills/index.js',
+          '@ember/polyfills/lib/**',
           'ember/version.js',
-          'ember-debug/**',
           'ember-environment.js',
+          'ember-browser-environment.js',
           'ember-template-compiler/**',
           'ember-utils.js',
         ],
@@ -194,14 +214,12 @@ module.exports = function() {
     let babelProdHelpersES5 = toES5(babelHelpers('prod'), {
       environment: 'production',
     });
-    let productionFeatures = toES5(emberFeaturesES(true), {
-      environment: 'production',
-    });
 
     let emberProdBundle = new MergeTrees([
       new Funnel(prodPackagesES5, {
         exclude: [
-          '*/tests/**',
+          '*/*/tests/**' /* scoped packages */,
+          '*/tests/**' /* packages */,
           'ember-template-compiler/**',
           'ember-testing/**',
           'internal-test-helpers/**',
@@ -213,7 +231,6 @@ module.exports = function() {
       nodeModule,
       bootstrapModule('ember'),
       babelProdHelpersES5,
-      productionFeatures,
     ]);
 
     emberProdBundle = concatBundle(emberProdBundle, {
@@ -229,7 +246,12 @@ module.exports = function() {
 
     let emberTestsBundle = new MergeTrees([
       new Funnel(prodPackagesES5, {
-        include: ['internal-test-helpers/**', '*/tests/**', 'license.js'],
+        include: [
+          'internal-test-helpers/**',
+          '*/*/tests/**' /* scoped packages */,
+          '*/tests/**' /* packages */,
+          'license.js',
+        ],
       }),
       loader,
       license,
@@ -253,7 +275,6 @@ module.exports = function() {
       license,
       babelProdHelpersES5,
       nodeModule,
-      productionFeatures,
     ]);
 
     emberTemplateCompilerBundle = concatBundle(emberTemplateCompilerBundle, {
@@ -268,7 +289,6 @@ module.exports = function() {
       license,
       babelDebugHelpersES5,
       nodeModule,
-      emberDebugFeaturesES5,
     ]);
 
     emberTemplateCompilerBundle = concatBundle(emberTemplateCompilerBundle, {
@@ -300,7 +320,7 @@ function glimmerDependenciesES() {
   if (ENV === 'development') {
     let hasGlimmerDebug = true;
     try {
-      require('@glimmer/debug'); // eslint-disable-line node/no-missing-require
+      require.resolve('@glimmer/debug');
     } catch (e) {
       hasGlimmerDebug = false;
     }

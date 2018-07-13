@@ -1,5 +1,6 @@
-import { MANDATORY_SETTER } from 'ember/features';
-import { get, set, watch, unwatch, meta as metaFor } from '../..';
+import { DEBUG } from '@glimmer/env';
+import { get, set, watch, unwatch } from '../..';
+import { meta as metaFor } from 'ember-meta';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
 
 function hasMandatorySetter(object, property) {
@@ -14,7 +15,7 @@ function hasMetaValue(object, property) {
   return metaFor(object).peekValues(property) !== undefined;
 }
 
-if (MANDATORY_SETTER) {
+if (DEBUG) {
   moduleFor(
     'mandory-setters',
     class extends AbstractTestCase {

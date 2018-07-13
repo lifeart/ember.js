@@ -1,16 +1,16 @@
 import TestResolverApplicationTestCase from './test-resolver-application';
-import { Application } from 'ember-application';
+import Application from '@ember/application';
 import { Router } from 'ember-routing';
-import { assign } from 'ember-utils';
+import { assign } from '@ember/polyfills';
 
 export default class ApplicationTestCase extends TestResolverApplicationTestCase {
   constructor() {
     super(...arguments);
 
     let { applicationOptions } = this;
-    this.application = this.runTask(() => this.createApplication(applicationOptions));
+    this.application = this.runTask(this.createApplication.bind(this, applicationOptions));
 
-    this.resolver = applicationOptions.Resolver.lastInstance;
+    this.resolver = this.application.__registry__.resolver;
 
     if (this.resolver) {
       this.resolver.add('router:main', Router.extend(this.routerOptions));

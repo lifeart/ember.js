@@ -1,4 +1,4 @@
-import { Controller } from 'ember-runtime';
+import Controller from '@ember/controller';
 import { moduleFor, ApplicationTestCase } from 'internal-test-helpers';
 import { Component } from 'ember-glimmer';
 
@@ -29,12 +29,12 @@ moduleFor(
         ComponentClass: Component.extend({
           classNames: ['component-with-action'],
           click() {
-            this.sendAction();
+            this.action();
           },
         }),
       });
 
-      this.addTemplate('index', '{{component-with-action action="componentAction"}}');
+      this.addTemplate('index', '{{component-with-action action=(action "componentAction")}}');
 
       return this.visit('/').then(() => {
         this.runTask(() => this.$('.component-with-action').click());

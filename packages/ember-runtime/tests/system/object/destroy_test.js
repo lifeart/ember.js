@@ -1,14 +1,8 @@
-import {
-  run,
-  observer,
-  get,
-  set,
-  beginPropertyChanges,
-  endPropertyChanges,
-  peekMeta,
-} from 'ember-metal';
+import { run } from '@ember/runloop';
+import { observer, get, set, beginPropertyChanges, endPropertyChanges } from 'ember-metal';
+import { peekMeta } from 'ember-meta';
 import EmberObject from '../../../lib/system/object';
-import { MANDATORY_SETTER } from 'ember/features';
+import { DEBUG } from '@glimmer/env';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
 
 moduleFor(
@@ -36,7 +30,7 @@ moduleFor(
     ['@test should raise an exception when modifying watched properties on a destroyed object'](
       assert
     ) {
-      if (MANDATORY_SETTER) {
+      if (DEBUG) {
         let obj = EmberObject.extend({
           fooDidChange: observer('foo', function() {}),
         }).create({

@@ -1,4 +1,4 @@
-import { assign } from 'ember-utils';
+import { assign } from '@ember/polyfills';
 import { compile } from 'ember-template-compiler';
 import { EventDispatcher } from 'ember-views';
 import { helper, Helper, Component, _resetRenderers } from 'ember-glimmer';
@@ -168,6 +168,11 @@ export default class AbstractRenderingTestCase extends AbstractTestCase {
         })
       );
     }
+  }
+
+  registerComponentManager(name, manager) {
+    let owner = this.env.owner || this.owner;
+    owner.register(`component-manager:${name}`, manager);
   }
 
   registerTemplate(name, template) {

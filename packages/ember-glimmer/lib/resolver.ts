@@ -1,3 +1,7 @@
+import { EMBER_MODULE_UNIFICATION, GLIMMER_CUSTOM_COMPONENT_MANAGER } from '@ember/canary-features';
+import { assert } from '@ember/debug';
+import { RENDER_HELPER } from '@ember/deprecated-features';
+import { _instrumentStart } from '@ember/instrumentation';
 import {
   ComponentDefinition,
   Opaque,
@@ -5,18 +9,14 @@ import {
   RuntimeResolver as IRuntimeResolver,
 } from '@glimmer/interfaces';
 import { LazyCompiler, Macros, PartialDefinition } from '@glimmer/opcode-compiler';
-import { ComponentManager, getDynamicVar, Helper, ModifierManager } from '@glimmer/runtime';
+import { getDynamicVar, Helper, ModifierManager } from '@glimmer/runtime';
 import { privatize as P } from 'container';
-import { assert } from 'ember-debug';
 import { ENV } from 'ember-environment';
-import { _instrumentStart } from 'ember-metal';
-import { LookupOptions, Owner, setOwner } from 'ember-utils';
+import { LookupOptions, Owner, setOwner } from 'ember-owner';
 import { lookupComponent, lookupPartial, OwnedTemplateMeta } from 'ember-views';
-import { EMBER_MODULE_UNIFICATION, GLIMMER_CUSTOM_COMPONENT_MANAGER } from 'ember/features';
 import CompileTimeLookup from './compile-time-lookup';
 import { CurlyComponentDefinition } from './component-managers/curly';
-import CustomComponentManager, { CustomComponentState } from './component-managers/custom';
-import DefinitionState from './component-managers/definition-state';
+import { CustomManagerDefinition, ManagerDelegate } from './component-managers/custom';
 import { TemplateOnlyComponentDefinition } from './component-managers/template-only';
 import { isHelperFactory, isSimpleHelper } from './helper';
 import { default as classHelper } from './helpers/-class';
@@ -40,8 +40,7 @@ import { mountHelper } from './syntax/mount';
 import { outletHelper } from './syntax/outlet';
 import { renderHelper } from './syntax/render';
 import { Factory as TemplateFactory, Injections, OwnedTemplate } from './template';
-import ComponentStateBucket from './utils/curly-component-state-bucket';
-import getCustomComponentManager from './utils/custom-component-manager';
+import { getComponentManager } from './utils/custom-component-manager';
 import { ClassBasedHelperReference, SimpleHelperReference } from './utils/references';
 
 function instrumentationPayload(name: string) {
@@ -75,8 +74,11 @@ const BUILTINS_HELPERS = {
   '-get-dynamic-var': getDynamicVar,
   '-mount': mountHelper,
   '-outlet': outletHelper,
-  '-render': renderHelper,
 };
+
+if (RENDER_HELPER) {
+  BUILTINS_HELPERS['-render'] = renderHelper;
+}
 
 const BUILTIN_MODIFIERS = {
   action: new ActionModifierManager(),
@@ -99,10 +101,14 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
   } = BUILTIN_MODIFIERS;
 
   // supports directly imported late bound layouts on component.prototype.layout
-  private templateCache: WeakMap<Owner, WeakMap<TemplateFactory, OwnedTemplate>> = new WeakMap();
+  private templateCache: Map<Owner, Map<TemplateFactory, OwnedTemplate>> = new Map();
+  private componentDefinitionCache: Map<object, ComponentDefinition | null> = new Map();
+  private customManagerCache: Map<string, ManagerDelegate<Opaque>> = new Map();
 
   public templateCacheHits = 0;
   public templateCacheMisses = 0;
+  public componentDefinitionCount = 0;
+  public helperDefinitionCount = 0;
 
   constructor() {
     let macros = new Macros();
@@ -113,9 +119,13 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
   /***  IRuntimeResolver ***/
 
   /**
+   * public componentDefHandleCount = 0;
    * Called while executing Append Op.PushDynamicComponentManager if string
    */
   lookupComponentDefinition(name: string, meta: OwnedTemplateMeta): Option<ComponentDefinition> {
+    assert('You cannot use `textarea` as a component name.', name !== 'textarea');
+    assert('You cannot use `input` as a component name.', name !== 'input');
+
     let handle = this.lookupComponentHandle(name, meta);
     if (handle === null) {
       assert(
@@ -127,7 +137,12 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
   }
 
   lookupComponentHandle(name: string, meta: OwnedTemplateMeta) {
-    return this.handle(this._lookupComponentDefinition(name, meta));
+    let nextHandle = this.handles.length;
+    let handle = this.handle(this._lookupComponentDefinition(name, meta));
+    if (nextHandle === handle) {
+      this.componentDefinitionCount++;
+    }
+    return handle;
   }
 
   /**
@@ -142,9 +157,15 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
    * Called by CompileTimeLookup compiling Unknown or Helper OpCode
    */
   lookupHelper(name: string, meta: OwnedTemplateMeta): Option<number> {
-    let handle = this._lookupHelper(name, meta);
-    if (handle !== null) {
-      return this.handle(handle);
+    let nextHandle = this.handles.length;
+    let helper = this._lookupHelper(name, meta);
+    if (helper !== null) {
+      let handle = this.handle(helper);
+
+      if (nextHandle === handle) {
+        this.helperDefinitionCount++;
+      }
+      return handle;
     }
     return null;
   }
@@ -174,7 +195,7 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
   createTemplate(factory: TemplateFactory, owner: Owner): OwnedTemplate {
     let cache = this.templateCache.get(owner);
     if (cache === undefined) {
-      cache = new WeakMap();
+      cache = new Map();
       this.templateCache.set(owner, cache);
     }
     let template = cache.get(factory);
@@ -192,7 +213,7 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
   }
 
   // needed for lazy compile time lookup
-  private handle(obj: any | null | undefined) {
+  private handle(obj: Opaque) {
     if (obj === undefined || obj === null) {
       return null;
     }
@@ -229,15 +250,11 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
       return null;
     }
 
-    if (isSimpleHelper(factory)) {
-      const helper = factory.create().compute;
-      return (_vm, args) => {
-        return SimpleHelperReference.create(helper, args.capture());
-      };
-    }
-
     return (vm, args) => {
       const helper = factory.create();
+      if (isSimpleHelper(helper)) {
+        return new SimpleHelperReference(helper.compute, args.capture());
+      }
       vm.newDestroyable(helper);
       return ClassBasedHelperReference.create(helper, args.capture());
     };
@@ -245,21 +262,16 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
 
   private _lookupPartial(name: string, meta: OwnedTemplateMeta): PartialDefinition {
     const template = lookupPartial(name, meta.owner);
-    const partial = new PartialDefinition(name, lookupPartial(name, meta.owner));
 
     if (template) {
-      return partial;
+      return new PartialDefinition(name, template);
     } else {
       throw new Error(`${name} is not a partial`);
     }
   }
 
   private _lookupModifier(name: string) {
-    let modifier = this.builtInModifiers[name];
-    if (modifier !== undefined) {
-      return modifier;
-    }
-    return null;
+    return this.builtInModifiers[name];
   }
 
   private _parseNameForNamespace(_name: string) {
@@ -291,32 +303,74 @@ export default class RuntimeResolver implements IRuntimeResolver<OwnedTemplateMe
       makeOptions(meta.moduleName, namespace)
     );
 
-    if (layout && !component && ENV._TEMPLATE_ONLY_GLIMMER_COMPONENTS) {
-      return new TemplateOnlyComponentDefinition(layout);
+    let key = component === undefined ? layout : component;
+
+    if (key === undefined) {
+      return null;
     }
 
-    let manager:
-      | ComponentManager<ComponentStateBucket, DefinitionState>
-      | CustomComponentManager<CustomComponentState<any>>
-      | undefined;
-
-    if (GLIMMER_CUSTOM_COMPONENT_MANAGER && component && component.class) {
-      manager = getCustomComponentManager(meta.owner, component.class);
+    let cachedComponentDefinition = this.componentDefinitionCache.get(key);
+    if (cachedComponentDefinition !== undefined) {
+      return cachedComponentDefinition;
     }
 
     let finalizer = _instrumentStart('render.getComponentDefinition', instrumentationPayload, name);
+
+    if (layout && !component && ENV._TEMPLATE_ONLY_GLIMMER_COMPONENTS) {
+      let definition = new TemplateOnlyComponentDefinition(layout);
+      finalizer();
+      this.componentDefinitionCache.set(key, definition);
+      return definition;
+    }
+
+    if (GLIMMER_CUSTOM_COMPONENT_MANAGER && component && component.class) {
+      let managerId = getComponentManager(component.class);
+      if (managerId) {
+        let manager = this._lookupComponentManager(meta.owner, managerId);
+        assert(
+          `Could not find custom component manager '${managerId}' which was specified by ${
+            component.class
+          }`,
+          !!manager
+        );
+
+        let definition = new CustomManagerDefinition(
+          name,
+          component,
+          manager,
+          layout || meta.owner.lookup<OwnedTemplate>(P`template:components/-default`)
+        );
+        finalizer();
+        this.componentDefinitionCache.set(key, definition);
+        return definition;
+      }
+    }
+
     let definition =
       layout || component
         ? new CurlyComponentDefinition(
             name,
-            manager,
             component || meta.owner.factoryFor(P`component:-default`),
             null,
-            layout
+            layout! // TODO fix type
           )
         : null;
 
     finalizer();
+
+    this.componentDefinitionCache.set(key, definition);
+
     return definition;
+  }
+
+  _lookupComponentManager(owner: Owner, managerId: string): ManagerDelegate<Opaque> {
+    if (this.customManagerCache.has(managerId)) {
+      return this.customManagerCache.get(managerId)!;
+    }
+    let delegate = owner.lookup<ManagerDelegate<Opaque>>(`component-manager:${managerId}`);
+
+    this.customManagerCache.set(managerId, delegate);
+
+    return delegate;
   }
 }

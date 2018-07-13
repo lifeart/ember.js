@@ -1,6 +1,6 @@
+import { DEBUG } from '@glimmer/env';
 import { addObserver, computed, get, set, isWatching, removeObserver } from 'ember-metal';
 import { HAS_NATIVE_PROXY } from 'ember-utils';
-import { MANDATORY_GETTER, EMBER_METAL_ES5_GETTERS } from 'ember/features';
 import ObjectProxy from '../../lib/system/object_proxy';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
 
@@ -100,6 +100,31 @@ moduleFor(
       assert.equal(JSON.stringify(proxy), JSON.stringify({ content: { foo: 'FOO' } }));
     }
 
+    ['@test calling a function on the proxy avoids the assertion'](assert) {
+      if (DEBUG && HAS_NATIVE_PROXY) {
+        let proxy = ObjectProxy.extend({
+          init() {
+            if (!this.foobar) {
+              this.foobar = function() {
+                let content = get(this, 'content');
+                return content.foobar.apply(content, []);
+              };
+            }
+          },
+        }).create({
+          content: {
+            foobar() {
+              return 'xoxo';
+            },
+          },
+        });
+
+        assert.equal(proxy.foobar(), 'xoxo', 'should be able to use a function from a proxy');
+      } else {
+        assert.expect(0);
+      }
+    }
+
     [`@test setting a property on the proxy avoids the assertion`](assert) {
       let proxy = ObjectProxy.create({
         toJSON: undefined,
@@ -128,7 +153,7 @@ moduleFor(
     }
 
     ['@test getting proxied properties with [] should be an error'](assert) {
-      if (MANDATORY_GETTER && EMBER_METAL_ES5_GETTERS && HAS_NATIVE_PROXY) {
+      if (DEBUG && HAS_NATIVE_PROXY) {
         let proxy = ObjectProxy.create({
           content: {
             foo: 'FOO',

@@ -1,16 +1,12 @@
-import { assign, getOwner } from 'ember-utils';
-import { get, set, getProperties, setProperties, computed, once, isEmpty } from 'ember-metal';
-import { assert, info, isTesting, deprecate } from 'ember-debug';
-import { DEBUG } from 'ember-env-flags';
-import {
-  typeOf,
-  copy,
-  String as StringUtils,
-  Object as EmberObject,
-  A as emberA,
-  Evented,
-  ActionHandler,
-} from 'ember-runtime';
+import { ROUTER_ROUTER } from '@ember/deprecated-features';
+import { getOwner } from 'ember-owner';
+import { assign } from '@ember/polyfills';
+import { once } from '@ember/runloop';
+import { get, set, getProperties, setProperties, computed, isEmpty } from 'ember-metal';
+import { assert, deprecate, info, isTesting } from '@ember/debug';
+import { DEBUG } from '@glimmer/env';
+import { classify } from '@ember/string';
+import { typeOf, Object as EmberObject, A as emberA, Evented, ActionHandler } from 'ember-runtime';
 import generateController from './generate_controller';
 import {
   stashParamNames,
@@ -53,7 +49,7 @@ export function hasDefaultSerialize(route) {
 
 /**
   The `Route` class is used to define individual routes. Refer to
-  the [routing guide](https://emberjs.com/guides/routing/) for documentation.
+  the [routing guide](https://guides.emberjs.com/release/routing/) for documentation.
 
   @class Route
   @extends EmberObject
@@ -108,18 +104,20 @@ let Route = EmberObject.extend(ActionHandler, Evented, {
   */
   queryParams: {},
 
-  router: computed('_router', function() {
-    deprecate(
-      'Route#router is an intimate API that has been renamed to Route#_router. However you might want to consider using the router service',
-      false,
-      {
-        id: 'ember-routing.route-router',
-        until: '3.5.0',
-        url: 'https://emberjs.com/deprecations/v3.x#toc_ember-routing-route-router',
-      }
-    );
-    return this._router;
-  }),
+  router: ROUTER_ROUTER
+    ? computed('_router', function() {
+        deprecate(
+          'Route#router is an intimate API that has been renamed to Route#_router. However you might want to consider using the router service',
+          false,
+          {
+            id: 'ember-routing.route-router',
+            until: '3.5.0',
+            url: 'https://emberjs.com/deprecations/v3.x#toc_ember-routing-route-router',
+          }
+        );
+        return this._router;
+      })
+    : undefined,
 
   /**
     The name of the route, dot-delimited.
@@ -131,6 +129,20 @@ let Route = EmberObject.extend(ActionHandler, Evented, {
     @for Route
     @type String
     @since 1.0.0
+    @public
+  */
+
+  /**
+    The name of the route, dot-delimited, including the engine prefix
+    if applicable.
+
+    For example, a route found at `addon/routes/posts/post.js` within an
+    engine named `admin` will have a `fullRouteName` of `admin.posts.post`.
+
+    @property fullRouteName
+    @for Route
+    @type String
+    @since 2.10.0
     @public
   */
 
@@ -1588,7 +1600,7 @@ let Route = EmberObject.extend(ActionHandler, Evented, {
 
     if (!name) {
       if (sawParams) {
-        return copy(params);
+        return Object.assign({}, params);
       } else {
         if (transition.resolveIndex < 1) {
           return;
@@ -1648,7 +1660,7 @@ let Route = EmberObject.extend(ActionHandler, Evented, {
         let modelClass = owner.factoryFor(`model:${name}`);
 
         assert(
-          `You used the dynamic segment ${name}_id in your route ${routeName}, but ${namespace}.${StringUtils.classify(
+          `You used the dynamic segment ${name}_id in your route ${routeName}, but ${namespace}.${classify(
             name
           )} did not exist and you did not override your route's \`model\` hook.`,
           !!modelClass
@@ -1660,10 +1672,7 @@ let Route = EmberObject.extend(ActionHandler, Evented, {
 
         modelClass = modelClass.class;
 
-        assert(
-          `${StringUtils.classify(name)} has no method \`find\`.`,
-          typeof modelClass.find === 'function'
-        );
+        assert(`${classify(name)} has no method \`find\`.`, typeof modelClass.find === 'function');
 
         return modelClass.find(value);
       },
@@ -1911,7 +1920,10 @@ let Route = EmberObject.extend(ActionHandler, Evented, {
   modelFor(_name) {
     let name;
     let owner = getOwner(this);
-    let transition = this._router ? this._router._routerMicrolib.activeTransition : null;
+    let transition =
+      this._router && this._router._routerMicrolib
+        ? this._router._routerMicrolib.activeTransition
+        : null;
 
     // Only change the route name when there is an active transition.
     // Otherwise, use the passed in route name.

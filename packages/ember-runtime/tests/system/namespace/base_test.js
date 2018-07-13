@@ -1,5 +1,7 @@
 import { context } from 'ember-environment';
-import { run, get, setNamespaceSearchDisabled } from 'ember-metal';
+import { run } from '@ember/runloop';
+import { get, setNamespaceSearchDisabled } from 'ember-metal';
+import { guidFor } from 'ember-utils';
 import EmberObject from '../../../lib/system/object';
 import Namespace from '../../../lib/system/namespace';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
@@ -33,7 +35,12 @@ moduleFor(
     }
 
     ['@test Namespace should be duck typed'](assert) {
-      assert.ok(get(Namespace.create(), 'isNamespace'), 'isNamespace property is true');
+      let namespace = Namespace.create();
+      try {
+        assert.ok(get(namespace, 'isNamespace'), 'isNamespace property is true');
+      } finally {
+        run(namespace, 'destroy');
+      }
     }
 
     ['@test Namespace is found and named'](assert) {
@@ -81,7 +88,7 @@ moduleFor(
 
     ['@test Lowercase namespaces are no longer supported'](assert) {
       let nsC = (lookup.namespaceC = Namespace.create());
-      assert.equal(nsC.toString(), undefined);
+      assert.equal(nsC.toString(), guidFor(nsC));
     }
 
     ['@test A namespace can be assigned a custom name'](assert) {
@@ -89,23 +96,27 @@ moduleFor(
         name: 'NamespaceA',
       });
 
-      let nsB = (lookup.NamespaceB = Namespace.create({
-        name: 'CustomNamespaceB',
-      }));
+      try {
+        let nsB = (lookup.NamespaceB = Namespace.create({
+          name: 'CustomNamespaceB',
+        }));
 
-      nsA.Foo = EmberObject.extend();
-      nsB.Foo = EmberObject.extend();
+        nsA.Foo = EmberObject.extend();
+        nsB.Foo = EmberObject.extend();
 
-      assert.equal(
-        nsA.Foo.toString(),
-        'NamespaceA.Foo',
-        "The namespace's name is used when the namespace is not in the lookup object"
-      );
-      assert.equal(
-        nsB.Foo.toString(),
-        'CustomNamespaceB.Foo',
-        "The namespace's name is used when the namespace is in the lookup object"
-      );
+        assert.equal(
+          nsA.Foo.toString(),
+          'NamespaceA.Foo',
+          "The namespace's name is used when the namespace is not in the lookup object"
+        );
+        assert.equal(
+          nsB.Foo.toString(),
+          'CustomNamespaceB.Foo',
+          "The namespace's name is used when the namespace is in the lookup object"
+        );
+      } finally {
+        run(nsA, 'destroy');
+      }
     }
 
     ['@test Calling namespace.nameClasses() eagerly names all classes'](assert) {
@@ -137,6 +148,8 @@ moduleFor(
       UI.Nav = Namespace.create();
 
       assert.equal(Namespace.byName('UI.Nav'), UI.Nav);
+
+      run(UI.Nav, 'destroy');
     }
 
     ['@test Destroying a namespace before caching lookup removes it from the list of namespaces'](

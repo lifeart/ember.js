@@ -1,5 +1,5 @@
-import { assign } from 'ember-utils';
-import { assert } from 'ember-debug';
+import { assign } from '@ember/polyfills';
+import { assert } from '@ember/debug';
 
 let uuid = 0;
 
@@ -28,6 +28,11 @@ class DSL {
 
         return ['array', 'basic', 'object', 'application'].indexOf(name) === -1;
       })()
+    );
+
+    assert(
+      `'${name}' is not a valid route name. It cannot contain a ':'. You may want to use the 'path' option instead.`,
+      name.indexOf(':') === -1
     );
 
     if (this.enableLoadingSubstates) {

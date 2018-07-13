@@ -1,4 +1,5 @@
-import { get, set, run, addObserver, removeObserver } from 'ember-metal';
+import { run } from '@ember/runloop';
+import { get, set, addObserver, removeObserver } from 'ember-metal';
 import { Object as EmberObject, A as emberA } from 'ember-runtime';
 import EmberDataAdapter from '../lib/data_adapter';
 import { moduleFor, ApplicationTestCase } from 'internal-test-helpers';
@@ -28,6 +29,11 @@ const DataAdapter = EmberDataAdapter.extend({
 moduleFor(
   'Data Adapter',
   class extends ApplicationTestCase {
+    teardown() {
+      super.teardown();
+      adapter = undefined;
+    }
+
     ['@test Model types added'](assert) {
       this.add(
         'data-adapter:main',

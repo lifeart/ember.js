@@ -1,4 +1,3 @@
-import { DESCRIPTOR_TRAP, EMBER_METAL_ES5_GETTERS } from 'ember/features';
 import { Object as EmberObject } from 'ember-runtime';
 import {
   ComputedProperty,
@@ -10,8 +9,9 @@ import {
   set,
   isWatching,
   addObserver,
-  meta as metaFor,
+  notifyPropertyChange,
 } from '..';
+import { meta as metaFor } from 'ember-meta';
 import { moduleFor, AbstractTestCase } from 'internal-test-helpers';
 
 let obj, count;
@@ -46,53 +46,68 @@ moduleFor(
     }
 
     ['@test computed property can be accessed without `get`'](assert) {
-      if (EMBER_METAL_ES5_GETTERS) {
-        let obj = {};
-        let count = 0;
-        defineProperty(
-          obj,
-          'foo',
-          computed(function(key) {
-            count++;
-            return 'computed ' + key;
-          })
-        );
+      let obj = {};
+      let count = 0;
+      defineProperty(
+        obj,
+        'foo',
+        computed(function(key) {
+          count++;
+          return 'computed ' + key;
+        })
+      );
 
-        assert.equal(obj.foo, 'computed foo', 'should return value');
-        assert.equal(count, 1, 'should have invoked computed property');
-      } else {
-        assert.expect(0);
-      }
+      assert.equal(obj.foo, 'computed foo', 'should return value');
+      assert.equal(count, 1, 'should have invoked computed property');
     }
 
-    ['@test accessing computed property descriptor through the object triggers an assertion'](
+    ['@test `notifyPropertyChange` works for a computed property not setup using Ember.defineProperty #GH16427'](
       assert
     ) {
-      if (!EMBER_METAL_ES5_GETTERS && DESCRIPTOR_TRAP) {
-        let obj = {
-          toString() {
-            return 'obj';
-          },
-        };
-        let count = 0;
-        defineProperty(
-          obj,
-          'foo',
-          computed(function(key) {
-            count++;
-            return 'computed ' + key;
-          })
-        );
+      let obj = {
+        a: 50,
+        b: computed(function() {
+          return this.a / 5;
+        }),
+      };
 
-        expectAssertion(
-          () => obj.foo.isDescriptor,
-          /You attempted to access `foo\.isDescriptor` \(on `obj`\)/
-        );
-        expectAssertion(() => obj.foo.get(), /You attempted to access `foo\.get` \(on `obj`\)/);
-        assert.strictEqual(count, 0, 'should not have invoked computed property');
-      } else {
-        assert.expect(0);
-      }
+      expectDeprecation(function() {
+        assert.equal(get(obj, 'b'), 10);
+      });
+
+      obj.a = 10;
+      notifyPropertyChange(obj, 'b');
+
+      assert.equal(obj.b, 2);
+    }
+
+    ['@test set works for a computed property not setup using Ember.defineProperty'](assert) {
+      let obj = {
+        a: 50,
+        b: computed('a', {
+          get() {
+            return this.a * 2;
+          },
+          set(_, value) {
+            set(this, 'a', value / 2);
+            return value;
+          },
+        }),
+      };
+
+      assert.equal(obj.a, 50);
+
+      expectDeprecation(function() {
+        set(obj, 'b', 80);
+      });
+
+      assert.equal(obj.b, 80);
+      assert.equal(obj.a, 40);
+
+      set(obj, 'a', 100);
+
+      assert.equal(obj.a, 100);
+      assert.equal(obj.b, 200);
     }
 
     ['@test defining computed property should invoke property on get'](assert) {

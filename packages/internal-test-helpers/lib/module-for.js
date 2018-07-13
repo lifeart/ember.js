@@ -1,4 +1,4 @@
-import { isFeatureEnabled } from 'ember-debug';
+import { isEnabled } from '@ember/canary-features';
 import applyMixins from './apply-mixins';
 import getAllPropertyNames from './get-all-property-names';
 import { all } from 'rsvp';
@@ -49,9 +49,9 @@ export default function moduleFor(description, TestClass, ...mixins) {
 
   function shouldTest(features) {
     return features.every(feature => {
-      if (feature[0] === '!' && isFeatureEnabled(feature.slice(1))) {
+      if (feature[0] === '!' && isEnabled(feature.slice(1))) {
         return false;
-      } else if (!isFeatureEnabled(feature)) {
+      } else if (!isEnabled(feature)) {
         return false;
       } else {
         return true;
@@ -73,7 +73,7 @@ export default function moduleFor(description, TestClass, ...mixins) {
         return this.instance[name](assert);
       });
     } else {
-      let match = /^@feature\(([a-z-!]+)\) /.exec(name);
+      let match = /^@feature\(([A-Z_a-z-!]+)\) /.exec(name);
 
       if (match) {
         let features = match[1].replace(/ /g, '').split(',');

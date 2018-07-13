@@ -1,13 +1,10 @@
 import { moduleFor, ApplicationTestCase } from 'internal-test-helpers';
-
-import { Controller, inject, A as emberA } from 'ember-runtime';
-import {
-  instrumentationSubscribe as subscribe,
-  instrumentationReset as reset,
-  alias,
-} from 'ember-metal';
+import Controller, { inject as injectController } from '@ember/controller';
+import { A as emberA } from 'ember-runtime';
+import { alias } from 'ember-metal';
+import { subscribe, reset } from '@ember/instrumentation';
 import { Route, NoneLocation } from 'ember-routing';
-import { EMBER_IMPROVED_INSTRUMENTATION } from 'ember/features';
+import { EMBER_IMPROVED_INSTRUMENTATION } from '@ember/canary-features';
 
 // IE includes the host name
 function normalizeUrl(url) {
@@ -1726,7 +1723,7 @@ moduleFor(
         'controller:application',
         Controller.extend({
           defaultPost: { id: 1 },
-          postController: inject.controller('post'),
+          postController: injectController('post'),
           currentPost: alias('postController.model'),
         })
       );

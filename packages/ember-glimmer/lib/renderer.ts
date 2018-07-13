@@ -1,3 +1,5 @@
+import { assert } from '@ember/debug';
+import { backburner, getCurrentRunLoop } from '@ember/runloop';
 import { Simple } from '@glimmer/interfaces';
 import { CURRENT_TAG, VersionedPathReference } from '@glimmer/reference';
 import {
@@ -13,8 +15,7 @@ import {
   UNDEFINED_REFERENCE,
 } from '@glimmer/runtime';
 import { Opaque } from '@glimmer/util';
-import { assert } from 'ember-debug';
-import { backburner, getCurrentRunLoop, runInTransaction, setHasViews } from 'ember-metal';
+import { runInTransaction, setHasViews } from 'ember-metal';
 import { fallbackViewRegistry, getViewElement, getViewId, setViewElement } from 'ember-views';
 import RSVP from 'rsvp';
 import { BOUNDS } from './component';

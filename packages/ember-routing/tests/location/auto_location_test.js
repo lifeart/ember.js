@@ -1,6 +1,8 @@
-import { assign, OWNER } from 'ember-utils';
-import { environment } from 'ember-environment';
-import { get, run } from 'ember-metal';
+import { OWNER } from 'ember-owner';
+import { assign } from '@ember/polyfills';
+import { window } from 'ember-browser-environment';
+import { run } from '@ember/runloop';
+import { get } from 'ember-metal';
 import AutoLocation from '../../lib/location/auto_location';
 import { getHistoryPath, getHashPath } from '../../lib/location/auto_location';
 import HistoryLocation from '../../lib/location/history_location';
@@ -38,7 +40,7 @@ function mockBrowserHistory(overrides, assert) {
 }
 
 function createLocation(location, history) {
-  let owner = buildOwner();
+  owner = buildOwner();
 
   owner.register('location:history', HistoryLocation);
   owner.register('location:hash', HashLocation);
@@ -54,14 +56,15 @@ function createLocation(location, history) {
   return autolocation;
 }
 
-let location;
+let location, owner;
 
 moduleFor(
   'AutoLocation',
   class extends AbstractTestCase {
     teardown() {
-      if (location) {
-        run(location, 'destroy');
+      if (owner) {
+        run(owner, 'destroy');
+        owner = location = undefined;
       }
     }
 
@@ -69,7 +72,7 @@ moduleFor(
       let location = AutoLocation.create();
 
       assert.ok(location.global, 'has a global defined');
-      assert.strictEqual(location.global, environment.window, 'has the environments window global');
+      assert.strictEqual(location.global, window, 'has the environments window global');
     }
 
     ["@test AutoLocation should return concrete implementation's value for `getURL`"](assert) {

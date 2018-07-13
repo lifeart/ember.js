@@ -1,8 +1,9 @@
-import { tryInvoke, getOwner } from 'ember-utils';
+import { getOwner } from 'ember-owner';
+import { tryInvoke } from 'ember-utils';
 import { get, set } from 'ember-metal';
-import { assert } from 'ember-debug';
+import { assert } from '@ember/debug';
 import { Object as EmberObject } from 'ember-runtime';
-import { environment } from 'ember-environment';
+import { location, history, window, userAgent } from 'ember-browser-environment';
 
 import {
   supportsHashChange,
@@ -71,7 +72,7 @@ export default EmberObject.extend({
     @property location
     @default environment.location
   */
-  location: environment.location,
+  location: location,
 
   /**
     @private
@@ -83,7 +84,7 @@ export default EmberObject.extend({
     @property history
     @default environment.history
   */
-  history: environment.history,
+  history: history,
 
   /**
    @private
@@ -94,7 +95,7 @@ export default EmberObject.extend({
    @property global
    @default window
   */
-  global: environment.window,
+  global: window,
 
   /**
     @private
@@ -106,7 +107,7 @@ export default EmberObject.extend({
     @property userAgent
     @default environment.history
   */
-  userAgent: environment.userAgent,
+  userAgent: userAgent,
 
   /**
     @private

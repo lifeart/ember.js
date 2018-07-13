@@ -1,8 +1,8 @@
 import AbstractApplicationTestCase from './abstract-application';
-import { Resolver as DefaultResolver } from 'ember-application';
-import { Application } from 'ember-application';
+import DefaultResolver from '@ember/application/globals-resolver';
+import Application from '@ember/application';
 import { setTemplates, setTemplate } from 'ember-glimmer';
-import { assign } from 'ember-utils';
+import { assign } from '@ember/polyfills';
 import { Router } from 'ember-routing';
 
 export default class ApplicationTestCase extends AbstractApplicationTestCase {
@@ -14,6 +14,7 @@ export default class ApplicationTestCase extends AbstractApplicationTestCase {
 
   get applicationOptions() {
     return assign(super.applicationOptions, {
+      name: 'TestApp',
       autoboot: false,
       Resolver: DefaultResolver,
     });

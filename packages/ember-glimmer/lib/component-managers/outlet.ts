@@ -1,3 +1,6 @@
+import { _instrumentStart } from '@ember/instrumentation';
+import { assign } from '@ember/polyfills';
+import { DEBUG } from '@glimmer/env';
 import { ComponentCapabilities, Option, Unique } from '@glimmer/interfaces';
 import { CONSTANT_TAG, Tag, VersionedPathReference } from '@glimmer/reference';
 import {
@@ -11,10 +14,8 @@ import {
   WithStaticLayout,
 } from '@glimmer/runtime';
 import { Destroyable } from '@glimmer/util';
-import { DEBUG } from 'ember-env-flags';
 import { ENV } from 'ember-environment';
-import { _instrumentStart } from 'ember-metal';
-import { assign, guidFor } from 'ember-utils';
+import { guidFor } from 'ember-utils';
 import { OwnedTemplateMeta } from 'ember-views';
 import { DynamicScope } from '../renderer';
 import RuntimeResolver from '../resolver';

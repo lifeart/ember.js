@@ -1,9 +1,7 @@
 language: node_js
-sudo: required
 dist: trusty
-
 node_js:
-  - "6"
+  - "10"
 
 addons:
   firefox: "latest"
@@ -31,16 +29,21 @@ install:
 - |
     yarn install
 
-after_success:
-  - "./bin/publish_builds"
-
 branches:
   only:
     - master
     - beta
     - release
+    # release branches
+    - /^(?:release|lts)-\d+-\d+$/
     # npm version tags
     - /^v\d+\.\d+\.\d+/
+
+stages:
+  - basic test
+  - additional tests
+  - name: deploy
+    if: type IN (push)
 
 env:
   global:
@@ -53,7 +56,6 @@ env:
     - secure: ! 'KXJmcGLpnxnPmmei/qPNVcdQxLX1xyYIaVocinQ0YAjtBvCtAwg63EWMFnGp
 
       VIzUNikE+Cej3g+nwEdDJiL1c9NFPL+zCnriR2iMVjPak+IQaG3YcMm0T+hY
-
       /WLEPAquZBKw1gU6lBEUuDumTlkXQQdHz3cJYoidAXz3uV1EXIU='
     - secure: ! 'qCW0BVNFuQjAI53pvvE6oeGxtEdZ+RlvcCpYjU4vxEjedidEEcHKtIVh7d7J
 
@@ -61,13 +63,45 @@ env:
 
       I/BFT0MbnR6JVCZiPV7TCWPgY1gvgZ6TEEIKGqauDMUBdL8ZK6I='
     - secure: e0yxVfwVW61d3Mi/QBOsY6Rfd1mZd3VXUd9xNRoz/fkvQJRuVwDe7oG3NOuJ4LZzvMw7BJ+zpDV9D8nKhAyPEEOgpkkMHUB7Ds83pHG4qSMzm4EAwBCadDLXCQirldz8dzN5FAqgGucXoj5fj/p2SKOkO6qWIZveGr8pdBJEG1E=
-  matrix:
-    - TEST_SUITE=browserstack
-    - TEST_SUITE=each-package-tests BUILD_TYPE=canary PUBLISH=true
-    - TEST_SUITE=built-tests EMBER_ENV=production
-    - TEST_SUITE=old-jquery-and-extend-prototypes
-    - TEST_SUITE=node
-    - TEST_SUITE=blueprints
-    - TEST_SUITE=travis-browsers
-    - TEST_SUITE=each-package-tests BUILD_TYPE=alpha PUBLISH=true
-    - TEST_SUITE=code-quality
+
+jobs:
+  fail_fast: true
+
+  include:
+
+    - stage: basic test
+      env: TEST_SUITE=each-package-tests
+
+    - env: TEST_SUITE=code-quality
+      script:
+        # avoiding `yarn test` here because pretest does a build, which isn't needed
+        - node bin/run-tests.js
+
+    - stage: additional tests
+
+      env: TEST_SUITE=browserstack
+    - env:
+      - TEST_SUITE=built-tests
+      - EMBER_ENV=production
+    - env: TEST_SUITE=old-jquery-and-extend-prototypes
+    - env: TEST_SUITE=node
+      node_js: "6"
+    - env: TEST_SUITE=blueprints
+      node_js: "6"
+    - env: TEST_SUITE=travis-browsers
+    - env:
+      - TEST_SUITE=each-package-tests
+      - BUILD_TYPE=alpha
+
+    - stage: deploy
+      env:
+      - BUILD_TYPE=canary
+      - PUBLISH=true
+      script:
+        - "./bin/publish_builds"
+
+    - env:
+      - BUILD_TYPE=alpha
+      - PUBLISH=true
+      script:
+        - "./bin/publish_builds"

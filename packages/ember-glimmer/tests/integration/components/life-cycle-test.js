@@ -1,4 +1,5 @@
-import { set, setProperties, schedule } from 'ember-metal';
+import { schedule } from '@ember/runloop';
+import { set, setProperties } from 'ember-metal';
 import { A as emberA } from 'ember-runtime';
 import { Component } from '../../utils/helpers';
 import { strip } from '../../utils/abstract-test-case';
@@ -15,6 +16,7 @@ class LifeCycleHooksTest extends RenderingTest {
     this.components = {};
     this.componentRegistry = [];
     this.teardownAssertions = [];
+    this.viewRegistry = this.owner.lookup('-view-registry:main');
   }
 
   afterEach() {
@@ -58,7 +60,7 @@ class LifeCycleHooksTest extends RenderingTest {
   }
 
   assertRegisteredViews(label) {
-    let viewRegistry = this.owner.lookup('-view-registry:main');
+    let viewRegistry = this.viewRegistry;
     let topLevelId = getViewId(this.component);
     let actual = Object.keys(viewRegistry)
       .sort()

@@ -1,10 +1,10 @@
+import { assert } from '@ember/debug';
+import { dasherize } from '@ember/string';
 import { Opaque, Option, Simple } from '@glimmer/interfaces';
 import { CachedReference, combine, map, Reference, Tag } from '@glimmer/reference';
 import { ElementOperations, PrimitiveReference } from '@glimmer/runtime';
 import { Core, Ops } from '@glimmer/wire-format';
-import { assert } from 'ember-debug';
 import { get } from 'ember-metal';
-import { String as StringUtils } from 'ember-runtime';
 import { ROOT_REF } from '../component';
 import { Component } from './curly-component-state-bucket';
 import { referenceFromParts } from './references';
@@ -63,7 +63,7 @@ export const AttributeBinding = {
         'You cannot use class as an attributeBinding, use classNameBindings instead.',
         microsyntax !== 'class'
       );
-      return [microsyntax, microsyntax.toLowerCase(), true];
+      return [microsyntax, microsyntax, true];
     } else {
       let prop = microsyntax.substring(0, colonIndex);
       let attribute = microsyntax.substring(colonIndex + 1);
@@ -193,7 +193,7 @@ export const ClassNameBinding = {
   },
 };
 
-class SimpleClassNameBindingReference extends CachedReference<Option<string>> {
+export class SimpleClassNameBindingReference extends CachedReference<Option<string>> {
   public tag: Tag;
   private dasherizedPath: Option<string>;
 
@@ -211,7 +211,7 @@ class SimpleClassNameBindingReference extends CachedReference<Option<string>> {
 
     if (value === true) {
       let { path, dasherizedPath } = this;
-      return dasherizedPath || (this.dasherizedPath = StringUtils.dasherize(path));
+      return dasherizedPath || (this.dasherizedPath = dasherize(path));
     } else if (value || value === 0) {
       return String(value);
     } else {
@@ -220,7 +220,7 @@ class SimpleClassNameBindingReference extends CachedReference<Option<string>> {
   }
 }
 
-export class ColonClassNameBindingReference extends CachedReference<Option<string>> {
+class ColonClassNameBindingReference extends CachedReference<Option<string>> {
   public tag: Tag;
 
   constructor(

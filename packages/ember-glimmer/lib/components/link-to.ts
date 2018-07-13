@@ -296,10 +296,11 @@
   @public
 */
 
-import { assert, warn } from 'ember-debug';
-import { DEBUG } from 'ember-env-flags';
-import { computed, flaggedInstrument, get } from 'ember-metal';
-import { inject } from 'ember-runtime';
+import { assert, warn } from '@ember/debug';
+import { flaggedInstrument } from '@ember/instrumentation';
+import { inject as injectService } from '@ember/service';
+import { DEBUG } from '@glimmer/env';
+import { computed, get } from 'ember-metal';
 import { isSimpleClick } from 'ember-views';
 import EmberComponent, { HAS_BLOCK } from '../component';
 import layout from '../templates/link-to';
@@ -500,7 +501,7 @@ const LinkComponent = EmberComponent.extend({
     this.on(eventName, this, this._invoke);
   },
 
-  _routing: inject.service('-routing'),
+  _routing: injectService('-routing'),
 
   /**
     Accessed as a classname binding to apply the `LinkComponent`'s `disabledClass`
@@ -519,7 +520,7 @@ const LinkComponent = EmberComponent.extend({
     },
 
     set(_key: string, value: any): boolean {
-      this._isDisabled = value;
+      (this as any)._isDisabled = value;
 
       return value ? get(this, 'disabledClass') : false;
     },

@@ -1,16 +1,17 @@
+import { getOwner } from 'ember-owner';
 /**
 @module ember
 */
 
-import { assign, getOwner } from 'ember-utils';
-import { assert } from 'ember-debug';
-import { get, set, isNone } from 'ember-metal';
+import { assign } from '@ember/polyfills';
+import { assert } from '@ember/debug';
+import { get, set } from 'ember-metal';
 import { Object as EmberObject } from 'ember-runtime';
-import jQuery from './jquery';
+import jQuery, { jQueryDisabled } from './jquery';
 import ActionManager from './action_manager';
 import fallbackViewRegistry from '../compat/fallback-view-registry';
+import addJQueryEventDeprecation from './jquery_event_deprecation';
 
-const HAS_JQUERY = jQuery !== undefined;
 const ROOT_ELEMENT_CLASS = 'ember-application';
 const ROOT_ELEMENT_SELECTOR = `.${ROOT_ELEMENT_CLASS}`;
 
@@ -134,40 +135,15 @@ export default EmberObject.extend({
     @param addedEvents {Object}
   */
   setup(addedEvents, _rootElement) {
-    let event, rootElement;
     let events = (this._finalEvents = assign({}, get(this, 'events'), addedEvents));
 
-    if (!isNone(_rootElement)) {
+    if (_rootElement !== undefined && _rootElement !== null) {
       set(this, 'rootElement', _rootElement);
     }
 
     let rootElementSelector = get(this, 'rootElement');
-    if (HAS_JQUERY) {
-      rootElement = jQuery(rootElementSelector);
-      assert(
-        `You cannot use the same root element (${rootElement.selector ||
-          rootElement[0].tagName}) multiple times in an Ember.Application`,
-        !rootElement.is(ROOT_ELEMENT_SELECTOR)
-      );
-      assert(
-        'You cannot make a new Ember.Application using a root element that is a descendent of an existing Ember.Application',
-        !rootElement.closest(ROOT_ELEMENT_SELECTOR).length
-      );
-      assert(
-        'You cannot make a new Ember.Application using a root element that is an ancestor of an existing Ember.Application',
-        !rootElement.find(ROOT_ELEMENT_SELECTOR).length
-      );
-
-      rootElement.addClass(ROOT_ELEMENT_CLASS);
-
-      if (!rootElement.is(ROOT_ELEMENT_SELECTOR)) {
-        throw new TypeError(
-          `Unable to add '${ROOT_ELEMENT_CLASS}' class to root element (${rootElement.selector ||
-            rootElement[0]
-              .tagName}). Make sure you set rootElement to the body or an element in the body.`
-        );
-      }
-    } else {
+    let rootElement;
+    if (jQueryDisabled) {
       if (typeof rootElementSelector !== 'string') {
         rootElement = rootElementSelector;
       } else {
@@ -206,11 +182,36 @@ export default EmberObject.extend({
           rootElement.tagName}). Make sure you set rootElement to the body or an element in the body.`,
         rootElement.classList.contains(ROOT_ELEMENT_CLASS)
       );
+    } else {
+      rootElement = jQuery(rootElementSelector);
+      assert(
+        `You cannot use the same root element (${rootElement.selector ||
+          rootElement[0].tagName}) multiple times in an Ember.Application`,
+        !rootElement.is(ROOT_ELEMENT_SELECTOR)
+      );
+      assert(
+        'You cannot make a new Ember.Application using a root element that is a descendent of an existing Ember.Application',
+        !rootElement.closest(ROOT_ELEMENT_SELECTOR).length
+      );
+      assert(
+        'You cannot make a new Ember.Application using a root element that is an ancestor of an existing Ember.Application',
+        !rootElement.find(ROOT_ELEMENT_SELECTOR).length
+      );
+
+      rootElement.addClass(ROOT_ELEMENT_CLASS);
+
+      if (!rootElement.is(ROOT_ELEMENT_SELECTOR)) {
+        throw new TypeError(
+          `Unable to add '${ROOT_ELEMENT_CLASS}' class to root element (${rootElement.selector ||
+            rootElement[0]
+              .tagName}). Make sure you set rootElement to the body or an element in the body.`
+        );
+      }
     }
 
     let viewRegistry = this._getViewRegistry();
 
-    for (event in events) {
+    for (let event in events) {
       if (events.hasOwnProperty(event)) {
         this.setupHandler(rootElement, event, events[event], viewRegistry);
       }
@@ -237,43 +238,7 @@ export default EmberObject.extend({
       return;
     }
 
-    if (HAS_JQUERY) {
-      rootElement.on(`${event}.ember`, '.ember-view', function(evt) {
-        let view = viewRegistry[this.id];
-        let result = true;
-
-        if (view) {
-          result = view.handleEvent(eventName, evt);
-        }
-
-        return result;
-      });
-
-      rootElement.on(`${event}.ember`, '[data-ember-action]', evt => {
-        let attributes = evt.currentTarget.attributes;
-        let handledActions = [];
-
-        for (let i = 0; i < attributes.length; i++) {
-          let attr = attributes.item(i);
-          let attrName = attr.name;
-
-          if (attrName.lastIndexOf('data-ember-action-', 0) !== -1) {
-            let action = ActionManager.registeredActions[attr.value];
-
-            // We have to check for action here since in some cases, jQuery will trigger
-            // an event on `removeChild` (i.e. focusout) after we've already torn down the
-            // action handlers for the view.
-            if (action && action.eventName === eventName && handledActions.indexOf(action) === -1) {
-              action.handler(evt);
-              // Action handlers can mutate state which in turn creates new attributes on the element.
-              // This effect could cause the `data-ember-action` attribute to shift down and be invoked twice.
-              // To avoid this, we keep track of which actions have been handled.
-              handledActions.push(action);
-            }
-          }
-        }
-      });
-    } else {
+    if (jQueryDisabled) {
       let viewHandler = (target, event) => {
         let view = viewRegistry[target.id];
         let result = true;
@@ -346,6 +311,44 @@ export default EmberObject.extend({
       });
 
       rootElement.addEventListener(event, handleEvent);
+    } else {
+      rootElement.on(`${event}.ember`, '.ember-view', function(evt) {
+        let view = viewRegistry[this.id];
+        let result = true;
+
+        if (view) {
+          result = view.handleEvent(eventName, addJQueryEventDeprecation(evt));
+        }
+
+        return result;
+      });
+
+      rootElement.on(`${event}.ember`, '[data-ember-action]', evt => {
+        let attributes = evt.currentTarget.attributes;
+        let handledActions = [];
+
+        evt = addJQueryEventDeprecation(evt);
+
+        for (let i = 0; i < attributes.length; i++) {
+          let attr = attributes.item(i);
+          let attrName = attr.name;
+
+          if (attrName.lastIndexOf('data-ember-action-', 0) !== -1) {
+            let action = ActionManager.registeredActions[attr.value];
+
+            // We have to check for action here since in some cases, jQuery will trigger
+            // an event on `removeChild` (i.e. focusout) after we've already torn down the
+            // action handlers for the view.
+            if (action && action.eventName === eventName && handledActions.indexOf(action) === -1) {
+              action.handler(evt);
+              // Action handlers can mutate state which in turn creates new attributes on the element.
+              // This effect could cause the `data-ember-action` attribute to shift down and be invoked twice.
+              // To avoid this, we keep track of which actions have been handled.
+              handledActions.push(action);
+            }
+          }
+        }
+      });
     }
   },
 
@@ -369,12 +372,12 @@ export default EmberObject.extend({
       return;
     }
 
-    if (HAS_JQUERY) {
-      jQuery(rootElementSelector).off('.ember', '**');
-    } else {
+    if (jQueryDisabled) {
       for (let event in this._eventHandlers) {
         rootElement.removeEventListener(event, this._eventHandlers[event]);
       }
+    } else {
+      jQuery(rootElementSelector).off('.ember', '**');
     }
 
     rootElement.classList.remove(ROOT_ELEMENT_CLASS);

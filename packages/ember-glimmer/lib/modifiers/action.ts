@@ -1,3 +1,6 @@
+import { assert } from '@ember/debug';
+import { flaggedInstrument } from '@ember/instrumentation';
+import { join } from '@ember/runloop';
 import { Simple } from '@glimmer/interfaces';
 import { RevisionTag, TagWrapper } from '@glimmer/reference';
 import {
@@ -8,8 +11,6 @@ import {
   ModifierManager,
 } from '@glimmer/runtime';
 import { Destroyable } from '@glimmer/util';
-import { assert } from 'ember-debug';
-import { flaggedInstrument, join } from 'ember-metal';
 import { uuid } from 'ember-utils';
 import { ActionManager, isSimpleClick } from 'ember-views';
 import { INVOKE } from '../utils/references';

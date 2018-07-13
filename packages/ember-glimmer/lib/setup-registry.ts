@@ -1,5 +1,6 @@
-import { privatize as P } from 'container';
-import { ENV, environment } from 'ember-environment';
+import { privatize as P, Registry } from 'container';
+import { hasDOM } from 'ember-browser-environment';
+import { ENV } from 'ember-environment';
 import Component from './component';
 import Checkbox from './components/checkbox';
 import LinkToComponent from './components/link-to';
@@ -21,12 +22,6 @@ import ComponentTemplate from './templates/component';
 import OutletTemplate from './templates/outlet';
 import RootTemplate from './templates/root';
 import OutletView from './views/outlet';
-
-interface Registry {
-  injection(name: string, name2: string, name3: string): void;
-  register(name: string, value: any): void;
-  optionsForType(type: string, options: any): void;
-}
 
 export function setupApplicationRegistry(registry: Registry) {
   registry.injection(
@@ -62,7 +57,7 @@ export function setupApplicationRegistry(registry: Registry) {
   registry.register('renderer:-dom', InteractiveRenderer);
   registry.register('renderer:-inert', InertRenderer);
 
-  if (environment.hasDOM) {
+  if (hasDOM) {
     registry.injection('service:-glimmer-environment', 'updateOperations', 'service:-dom-changes');
   }
 
@@ -74,7 +69,7 @@ export function setupApplicationRegistry(registry: Registry) {
 
   registry.register('service:-dom-tree-construction', {
     create({ document }: { document: HTMLDocument }) {
-      let Implementation = environment.hasDOM ? DOMTreeConstruction : NodeDOMTreeConstruction;
+      let Implementation = hasDOM ? DOMTreeConstruction : NodeDOMTreeConstruction;
       return new Implementation(document);
     },
   });

@@ -1,12 +1,14 @@
 /**
 @module ember
 */
+import { assert } from '@ember/debug';
+import { flaggedInstrument } from '@ember/instrumentation';
+import { join } from '@ember/runloop';
+import { DEBUG } from '@glimmer/env';
 import { isConst, VersionedPathReference } from '@glimmer/reference';
 import { Arguments, VM } from '@glimmer/runtime';
 import { Opaque } from '@glimmer/util';
-import { assert } from 'ember-debug';
-import { DEBUG } from 'ember-env-flags';
-import { flaggedInstrument, get, isNone, join } from 'ember-metal';
+import { get } from 'ember-metal';
 import { ACTION, INVOKE, UnboundReference } from '../utils/references';
 
 /**
@@ -29,8 +31,8 @@ import { ACTION, INVOKE, UnboundReference } from '../utils/references';
   In these contexts,
   the helper is called a "closure action" helper. Its behavior is simple:
   If passed a function name, read that function off the `actions` property
-  of the current context. Once that function is read (or if a function was
-  passed), create a closure over that function and any arguments.
+  of the current context. Once that function is read, or immediately if a function was
+  passed, create a closure over that function and any arguments.
   The resulting value of an action helper used this way is simply a function.
 
   For example, in the attribute context:
@@ -363,7 +365,10 @@ function makeClosureAction(
   let self: any;
   let fn: any;
 
-  assert(`Action passed is null or undefined in (action) from ${target}.`, !isNone(action));
+  assert(
+    `Action passed is null or undefined in (action) from ${target}.`,
+    action !== undefined && action !== null
+  );
 
   if (typeof action[INVOKE] === 'function') {
     self = action;

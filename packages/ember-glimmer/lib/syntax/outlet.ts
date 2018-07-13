@@ -31,8 +31,6 @@ import { OutletReference, OutletState } from '../utils/outlet';
   {{my-footer}}
   ```
 
-  See [templates guide](https://emberjs.com/guides/templates/the-application-template/) for
-  additional information on using `{{outlet}}` in `application.hbs`.
   You may also specify a name for the `{{outlet}}`, which is useful when using more than one
   `{{outlet}}` in a template:
 
@@ -55,7 +53,7 @@ import { OutletReference, OutletState } from '../utils/outlet';
   });
   ```
 
-  See the [routing guide](https://emberjs.com/guides/routing/rendering-a-template/) for more
+  See the [routing guide](https://guides.emberjs.com/release/routing/rendering-a-template/) for more
   information on how your `route` interacts with the `{{outlet}}` helper.
   Note: Your content __will not render__ if there isn't an `{{outlet}}` for it.
 
@@ -82,7 +80,7 @@ export function outletMacro(
   builder: OpcodeBuilder<OwnedTemplateMeta>
 ) {
   let expr: WireFormat.Expressions.Helper = [WireFormat.Ops.Helper, '-outlet', params || [], hash];
-  builder.dynamicComponent(expr, [], null, false, null, null);
+  builder.dynamicComponent(expr, null, [], null, false, null, null);
   return true;
 }
 

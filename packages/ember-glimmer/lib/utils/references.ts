@@ -1,3 +1,4 @@
+import { DEBUG } from '@glimmer/env';
 import { Opaque } from '@glimmer/interfaces';
 import {
   combine,
@@ -19,10 +20,8 @@ import {
   PrimitiveReference,
 } from '@glimmer/runtime';
 import { Option } from '@glimmer/util';
-import { DEBUG } from 'ember-env-flags';
 import { didRender, get, set, tagFor, tagForProperty, watchKey } from 'ember-metal';
 import { isProxy, symbol } from 'ember-utils';
-import { EMBER_GLIMMER_DETECT_BACKTRACKING_RERENDER, MANDATORY_SETTER } from 'ember/features';
 import { HelperFunction, HelperInstance, RECOMPUTE_TAG } from '../helper';
 import emberToBool from './to-bool';
 
@@ -113,7 +112,7 @@ let TwoWayFlushDetectionTag: {
   ): TagWrapper<TwoWayFlushDetectionTag>;
 };
 
-if (EMBER_GLIMMER_DETECT_BACKTRACKING_RERENDER) {
+if (DEBUG) {
   TwoWayFlushDetectionTag = class {
     public tag: Tag;
     public parent: Opaque;
@@ -186,7 +185,7 @@ export class RootPropertyReference extends PropertyReference
     this._parentValue = parentValue;
     this._propertyKey = propertyKey;
 
-    if (EMBER_GLIMMER_DETECT_BACKTRACKING_RERENDER) {
+    if (DEBUG) {
       this.tag = TwoWayFlushDetectionTag.create(
         tagForProperty(parentValue, propertyKey),
         propertyKey,
@@ -196,7 +195,7 @@ export class RootPropertyReference extends PropertyReference
       this.tag = tagForProperty(parentValue, propertyKey);
     }
 
-    if (MANDATORY_SETTER) {
+    if (DEBUG) {
       watchKey(parentValue, propertyKey);
     }
   }
@@ -204,7 +203,7 @@ export class RootPropertyReference extends PropertyReference
   compute() {
     let { _parentValue, _propertyKey } = this;
 
-    if (EMBER_GLIMMER_DETECT_BACKTRACKING_RERENDER) {
+    if (DEBUG) {
       (this.tag.inner as TwoWayFlushDetectionTag).didCompute(_parentValue);
     }
 
@@ -232,7 +231,7 @@ export class NestedPropertyReference extends PropertyReference {
     this._parentObjectTag = parentObjectTag;
     this._propertyKey = propertyKey;
 
-    if (EMBER_GLIMMER_DETECT_BACKTRACKING_RERENDER) {
+    if (DEBUG) {
       let tag = combine([parentReferenceTag, parentObjectTag]);
       this.tag = TwoWayFlushDetectionTag.create(tag, propertyKey, this);
     } else {
@@ -254,11 +253,11 @@ export class NestedPropertyReference extends PropertyReference {
     }
 
     if ((parentValueType === 'object' && parentValue !== null) || parentValueType === 'function') {
-      if (MANDATORY_SETTER) {
+      if (DEBUG) {
         watchKey(parentValue, _propertyKey);
       }
 
-      if (EMBER_GLIMMER_DETECT_BACKTRACKING_RERENDER) {
+      if (DEBUG) {
         (this.tag.inner as TwoWayFlushDetectionTag).didCompute(parentValue);
       }
 
@@ -325,7 +324,7 @@ export class ConditionalReference extends GlimmerConditionalReference
   toBool(predicate: Opaque) {
     if (isProxy(predicate)) {
       this.objectTag.inner.update(tagForProperty(predicate, 'isTruthy'));
-      return get(predicate, 'isTruthy');
+      return get(predicate as object, 'isTruthy');
     } else {
       this.objectTag.inner.update(tagFor(predicate));
       return emberToBool(predicate);
@@ -437,7 +436,7 @@ export class UnboundReference<T> extends ConstReference<T> {
   }
 
   get(key: string) {
-    return valueToRef(get(this.inner, key), false);
+    return valueToRef(get(this.inner as any, key), false);
   }
 }
 

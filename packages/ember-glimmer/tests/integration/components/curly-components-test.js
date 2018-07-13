@@ -1,13 +1,15 @@
+import { run } from '@ember/runloop';
+import { DEBUG } from '@glimmer/env';
 /* globals EmberDev */
-import { set, get, observer, on, computed, run } from 'ember-metal';
-import { Object as EmberObject, A as emberA, inject, Service } from 'ember-runtime';
+import { set, get, observer, on, computed } from 'ember-metal';
+import Service, { inject as injectService } from '@ember/service';
+import { Object as EmberObject, A as emberA } from 'ember-runtime';
 import { jQueryDisabled } from 'ember-views';
 import { ENV } from 'ember-environment';
 import { Component, compile, htmlSafe } from '../../utils/helpers';
 import { strip } from '../../utils/abstract-test-case';
 import { moduleFor, RenderingTest } from '../../utils/test-case';
 import { classes, equalTokens, equalsElement, styles } from '../../utils/test-helpers';
-import { MANDATORY_SETTER } from 'ember/features';
 
 moduleFor(
   'Components test: curly components',
@@ -357,6 +359,70 @@ moduleFor(
       this.assertComponentElement(this.firstChild, {
         tagName: 'div',
         attrs: { class: 'ember-view' },
+        content: 'hello',
+      });
+    }
+
+    ['@test should update class using inline if, initially false, no alternate']() {
+      this.registerComponent('foo-bar', { template: 'hello' });
+
+      this.render('{{foo-bar class=(if predicate "thing") }}', {
+        predicate: false,
+      });
+
+      this.assertComponentElement(this.firstChild, {
+        tagName: 'div',
+        attrs: { class: 'ember-view' },
+        content: 'hello',
+      });
+
+      this.runTask(() => set(this.context, 'predicate', true));
+      this.runTask(() => this.rerender());
+
+      this.assertComponentElement(this.firstChild, {
+        tagName: 'div',
+        attrs: { class: classes('ember-view thing') },
+        content: 'hello',
+      });
+
+      this.runTask(() => set(this.context, 'predicate', false));
+      this.runTask(() => this.rerender());
+
+      this.assertComponentElement(this.firstChild, {
+        tagName: 'div',
+        attrs: { class: 'ember-view' },
+        content: 'hello',
+      });
+    }
+
+    ['@test should update class using inline if, initially true, no alternate']() {
+      this.registerComponent('foo-bar', { template: 'hello' });
+
+      this.render('{{foo-bar class=(if predicate "thing") }}', {
+        predicate: true,
+      });
+
+      this.assertComponentElement(this.firstChild, {
+        tagName: 'div',
+        attrs: { class: classes('ember-view thing') },
+        content: 'hello',
+      });
+
+      this.runTask(() => set(this.context, 'predicate', false));
+      this.runTask(() => this.rerender());
+
+      this.assertComponentElement(this.firstChild, {
+        tagName: 'div',
+        attrs: { class: 'ember-view' },
+        content: 'hello',
+      });
+
+      this.runTask(() => set(this.context, 'predicate', true));
+      this.runTask(() => this.rerender());
+
+      this.assertComponentElement(this.firstChild, {
+        tagName: 'div',
+        attrs: { class: classes('ember-view thing') },
         content: 'hello',
       });
     }
@@ -1756,6 +1822,59 @@ moduleFor(
       this.assertComponentElement(this.firstChild, { attrs: { role: 'main' } });
     }
 
+    ['@test with ariaRole defined but initially falsey GH#16379']() {
+      this.registerComponent('aria-test', {
+        template: 'Here!',
+      });
+
+      this.render('{{aria-test ariaRole=role}}', {
+        role: undefined,
+      });
+
+      this.assertComponentElement(this.firstChild, { attrs: {} });
+
+      this.runTask(() => this.rerender());
+
+      this.assertComponentElement(this.firstChild, { attrs: {} });
+
+      this.runTask(() => this.context.set('role', 'input'));
+
+      this.assertComponentElement(this.firstChild, {
+        attrs: { role: 'input' },
+      });
+
+      this.runTask(() => this.context.set('role', undefined));
+
+      this.assertComponentElement(this.firstChild, { attrs: {} });
+    }
+
+    ['@test without ariaRole defined initially']() {
+      // we are using the ability to lazily add a role as a sign that we are
+      // doing extra work
+      let instance;
+      this.registerComponent('aria-test', {
+        ComponentClass: Component.extend({
+          init() {
+            this._super(...arguments);
+            instance = this;
+          },
+        }),
+        template: 'Here!',
+      });
+
+      this.render('{{aria-test}}');
+
+      this.assertComponentElement(this.firstChild, { attrs: {} });
+
+      this.runTask(() => this.rerender());
+
+      this.assertComponentElement(this.firstChild, { attrs: {} });
+
+      this.runTask(() => instance.set('ariaRole', 'input'));
+
+      this.assertComponentElement(this.firstChild, { attrs: {} });
+    }
+
     ['@test `template` specified in component is overridden by block']() {
       this.registerComponent('with-template', {
         ComponentClass: Component.extend({
@@ -2637,7 +2756,7 @@ moduleFor(
 
       this.assertText('initial value - initial value');
 
-      if (MANDATORY_SETTER) {
+      if (DEBUG) {
         expectAssertion(() => {
           component.bar = 'foo-bar';
         }, /You must use set\(\) to set the `bar` property \(of .+\) to `foo-bar`\./);
@@ -2776,7 +2895,7 @@ moduleFor(
 
       this.registerComponent('foo-bar', {
         ComponentClass: Component.extend({
-          name: inject.service(),
+          name: injectService(),
         }),
         template: '{{name.last}}',
       });
@@ -2805,7 +2924,7 @@ moduleFor(
     ['@test injecting an unknown service raises an exception']() {
       this.registerComponent('foo-bar', {
         ComponentClass: Component.extend({
-          missingService: inject.service(),
+          missingService: injectService(),
         }),
       });
 

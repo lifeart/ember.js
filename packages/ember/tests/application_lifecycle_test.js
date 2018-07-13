@@ -1,8 +1,8 @@
 import { moduleFor, AutobootApplicationTestCase } from 'internal-test-helpers';
-import { Application } from 'ember-application';
+import Application from '@ember/application';
 import { Route, Router } from 'ember-routing';
 import { Component } from 'ember-glimmer';
-import { getDebugFunction, setDebugFunction } from 'ember-debug';
+import { getDebugFunction, setDebugFunction } from '@ember/debug';
 
 const originalDebug = getDebugFunction('debug');
 const noop = function() {};

@@ -5,16 +5,15 @@
 import {
   get,
   objectAt,
-  computed,
   alias,
   PROPERTY_DID_CHANGE,
   addArrayObserver,
   removeArrayObserver,
+  replace,
 } from 'ember-metal';
-import { isArray } from '../utils';
 import EmberObject from './object';
-import { MutableArray } from '../mixins/array';
-import { assert } from 'ember-debug';
+import { isArray, MutableArray } from '../mixins/array';
+import { assert } from '@ember/debug';
 
 const ARRAY_OBSERVER_MAPPING = {
   willChange: '_arrangedContentArrayWillChange',
@@ -60,14 +59,30 @@ const ARRAY_OBSERVER_MAPPING = {
   ap.get('firstObject'); // . 'DOG'
   ```
 
+  When overriding this class, it is important to place the call to
+  `_super` *after* setting `content` so the internal observers have
+  a chance to fire properly:
+
+  ```javascript
+  import { A } from '@ember/array';
+  import ArrayProxy from '@ember/array/proxy';
+
+  export default ArrayProxy.extend({
+    init() {
+      this.set('content', A(['dog', 'cat', 'fish']));
+      this._super(...arguments);
+    }
+  });
+  ```
+
   @class ArrayProxy
   @extends EmberObject
   @uses MutableArray
   @public
 */
-export default EmberObject.extend(MutableArray, {
+export default class ArrayProxy extends EmberObject {
   init() {
-    this._super(...arguments);
+    super.init(...arguments);
 
     /*
       `this._objectsDirtyIndex` determines which indexes in the `this._objects`
@@ -87,11 +102,11 @@ export default EmberObject.extend(MutableArray, {
 
     this._arrangedContent = null;
     this._addArrangedContentArrayObsever();
-  },
+  }
 
   willDestroy() {
     this._removeArrangedContentArrayObsever();
-  },
+  }
 
   /**
     The content array. Must be an object that implements `Array` and/or
@@ -101,17 +116,6 @@ export default EmberObject.extend(MutableArray, {
     @type EmberArray
     @public
   */
-  content: null,
-
-  /**
-   The array that the proxy pretends to be. In the default `ArrayProxy`
-   implementation, this and `content` are the same. Subclasses of `ArrayProxy`
-   can override this property to provide things like sorting and filtering.
-
-   @property arrangedContent
-   @public
-  */
-  arrangedContent: alias('content'),
 
   /**
     Should actually retrieve the object at the specified index from the
@@ -127,7 +131,7 @@ export default EmberObject.extend(MutableArray, {
   */
   objectAtContent(idx) {
     return objectAt(get(this, 'arrangedContent'), idx);
-  },
+  }
 
   replace(idx, amt, objects) {
     assert(
@@ -135,7 +139,7 @@ export default EmberObject.extend(MutableArray, {
       get(this, 'arrangedContent') === get(this, 'content')
     );
     this.replaceContent(idx, amt, objects);
-  },
+  }
 
   /**
     Should actually replace the specified objects on the content array.
@@ -154,7 +158,7 @@ export default EmberObject.extend(MutableArray, {
   */
   replaceContent(idx, amt, objects) {
     get(this, 'content').replace(idx, amt, objects);
-  },
+  }
 
   // Overriding objectAt is not supported.
   objectAt(idx) {
@@ -177,10 +181,10 @@ export default EmberObject.extend(MutableArray, {
     }
 
     return this._objects[idx];
-  },
+  }
 
   // Overriding length is not supported.
-  length: computed(function() {
+  get length() {
     if (this._lengthDirty) {
       let arrangedContent = get(this, 'arrangedContent');
       this._length = arrangedContent ? get(arrangedContent, 'length') : 0;
@@ -188,7 +192,27 @@ export default EmberObject.extend(MutableArray, {
     }
 
     return this._length;
-  }).volatile(),
+  }
+
+  set length(value) {
+    let length = this.length;
+    let removedCount = length - value;
+    let added;
+
+    if (removedCount === 0) {
+      return;
+    } else if (removedCount < 0) {
+      added = new Array(-removedCount);
+      removedCount = 0;
+    }
+
+    let content = get(this, 'content');
+    if (content) {
+      replace(content, value, removedCount, added);
+
+      this._invalidate();
+    }
+  }
 
   [PROPERTY_DID_CHANGE](key) {
     if (key === 'arrangedContent') {
@@ -199,13 +223,14 @@ export default EmberObject.extend(MutableArray, {
       this._removeArrangedContentArrayObsever();
       this.arrayContentWillChange(0, oldLength, newLength);
 
-      this._objectsDirtyIndex = 0;
-      this._lengthDirty = true;
+      this._invalidate();
 
       this.arrayContentDidChange(0, oldLength, newLength);
       this._addArrangedContentArrayObsever();
+    } else if (key === 'content') {
+      this._invalidate();
     }
-  },
+  }
 
   _addArrangedContentArrayObsever() {
     let arrangedContent = get(this, 'arrangedContent');
@@ -220,15 +245,15 @@ export default EmberObject.extend(MutableArray, {
 
       this._arrangedContent = arrangedContent;
     }
-  },
+  }
 
   _removeArrangedContentArrayObsever() {
     if (this._arrangedContent) {
       removeArrayObserver(this._arrangedContent, this, ARRAY_OBSERVER_MAPPING);
     }
-  },
+  }
 
-  _arrangedContentArrayWillChange() {},
+  _arrangedContentArrayWillChange() {}
 
   _arrangedContentArrayDidChange(proxy, idx, removedCnt, addedCnt) {
     this.arrayContentWillChange(idx, removedCnt, addedCnt);
@@ -250,5 +275,22 @@ export default EmberObject.extend(MutableArray, {
     this._lengthDirty = true;
 
     this.arrayContentDidChange(idx, removedCnt, addedCnt);
-  },
+  }
+
+  _invalidate() {
+    this._objectsDirtyIndex = 0;
+    this._lengthDirty = true;
+  }
+}
+
+ArrayProxy.reopen(MutableArray, {
+  /**
+    The array that the proxy pretends to be. In the default `ArrayProxy`
+    implementation, this and `content` are the same. Subclasses of `ArrayProxy`
+    can override this property to provide things like sorting and filtering.
+
+    @property arrangedContent
+    @public
+  */
+  arrangedContent: alias('content'),
 });

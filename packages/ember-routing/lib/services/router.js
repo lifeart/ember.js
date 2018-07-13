@@ -1,8 +1,5 @@
-/**
-@module ember
-*/
-
-import { Service, readOnly } from 'ember-runtime';
+import Service from '@ember/service';
+import { readOnly } from '@ember/object/computed';
 import { shallowEqual, resemblesURL, extractRouteArgs } from '../utils';
 
 /**

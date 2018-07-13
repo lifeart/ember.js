@@ -1,12 +1,13 @@
-import { inject } from 'ember-runtime';
+import { inject as injectService } from '@ember/service';
 import { Component } from 'ember-glimmer';
 import { Route, NoneLocation } from 'ember-routing';
-import { Controller } from 'ember-runtime';
-import { run, get } from 'ember-metal';
+import Controller from '@ember/controller';
+import { run } from '@ember/runloop';
+import { get } from 'ember-metal';
 import { RouterTestCase, moduleFor } from 'internal-test-helpers';
 import { Transition } from 'router';
 
-import { EMBER_ROUTING_ROUTER_SERVICE } from 'ember/features';
+import { EMBER_ROUTING_ROUTER_SERVICE } from '@ember/canary-features';
 
 if (EMBER_ROUTING_ROUTER_SERVICE) {
   moduleFor(
@@ -104,7 +105,7 @@ if (EMBER_ROUTING_ROUTER_SERVICE) {
 
         this.addComponent('foo-bar', {
           ComponentClass: Component.extend({
-            routerService: inject.service('router'),
+            routerService: injectService('router'),
             init() {
               this._super();
               componentInstance = this;
@@ -136,7 +137,7 @@ if (EMBER_ROUTING_ROUTER_SERVICE) {
 
         this.addComponent('foo-bar', {
           ComponentClass: Component.extend({
-            routerService: inject.service('router'),
+            routerService: injectService('router'),
             init() {
               this._super();
               componentInstance = this;
@@ -170,7 +171,7 @@ if (EMBER_ROUTING_ROUTER_SERVICE) {
 
         this.addComponent('foo-bar', {
           ComponentClass: Component.extend({
-            routerService: inject.service('router'),
+            routerService: injectService('router'),
             init() {
               this._super();
               componentInstance = this;
@@ -215,7 +216,7 @@ if (EMBER_ROUTING_ROUTER_SERVICE) {
 
         this.addComponent('foo-bar', {
           ComponentClass: Component.extend({
-            routerService: inject.service('router'),
+            routerService: injectService('router'),
             init() {
               this._super();
               componentInstance = this;

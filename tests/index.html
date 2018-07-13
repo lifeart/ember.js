@@ -59,18 +59,13 @@
           ENV.__test_hook_count__ += object;
         });
 
-        window.ENV.FEATURES = !!QUnit.urlParams.prod ? {{PROD_FEATURES}} : {{DEV_FEATURES}};
 
         // Handle extending prototypes
         ENV['EXTEND_PROTOTYPES'] = !!QUnit.urlParams.extendprototypes;
 
         // Handle testing feature flags
         if (QUnit.urlParams.enableoptionalfeatures) {
-          for (var feature in window.ENV.FEATURES) {
-            if (window.ENV.FEATURES[feature] === null) {
-              window.ENV.FEATURES[feature] = true;
-            }
-          }
+          ENV.ENABLE_OPTIONAL_FEATURES = true;
         }
 
         ENV['RAISE_ON_DEPRECATION'] = true;
@@ -95,7 +90,7 @@
     </script>
 
     <script type="text/javascript">
-      var setTesting = Ember.__loader.require('ember-debug')['setTesting'];
+      var setTesting = Ember.__loader.require('@ember/debug')['setTesting'];
       setTesting(true);
     </script>
 
@@ -142,7 +137,7 @@
 
         var EmberDevTestHelperAssert = window.Ember.__loader.require('internal-test-helpers/lib/ember-dev/index')['default'];
         var setupQUnit = window.Ember.__loader.require('internal-test-helpers/lib/ember-dev/setup-qunit')['default'];
-        var debugModule = window.Ember.__loader.require('ember-debug');
+        var debugModule = window.Ember.__loader.require('@ember/debug');
         var testHelpers = new EmberDevTestHelperAssert({
           Ember: window.Ember,
           runningProdBuild: EmberDev.runningProdBuild,
@@ -192,6 +187,9 @@
         });
 
         QUnit.testDone(function(results) {
+          // release the test callback (polyfill for https://github.com/qunitjs/qunit/pull/1279)
+          QUnit.config.current.callback = undefined;
+
           var oldFixture = document.getElementById('qunit-fixture');
           var parent = oldFixture.parentElement;
           var newFixture = document.createElement('div');
@@ -205,6 +203,11 @@
           } else {
             testsPassed++;
           }
+        });
+
+        QUnit.moduleDone(function() {
+          // release the module hooks (polyfill for https://github.com/qunitjs/qunit/pull/1279)
+          QUnit.config.current.module.hooks = {};
         });
 
         QUnit.done(function(result) {

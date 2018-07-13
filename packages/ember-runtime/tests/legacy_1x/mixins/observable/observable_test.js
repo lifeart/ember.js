@@ -1,6 +1,7 @@
 import { context } from 'ember-environment';
-import { get, computed, run, observer } from 'ember-metal';
-import { w } from '../../../../lib/system/string';
+import { run } from '@ember/runloop';
+import { get, computed, observer } from 'ember-metal';
+import { w } from '@ember/string';
 import EmberObject from '../../../../lib/system/object';
 import Observable from '../../../../lib/mixins/observable';
 import { A as emberA } from '../../../../lib/mixins/array';

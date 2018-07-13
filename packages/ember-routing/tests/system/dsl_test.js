@@ -1,4 +1,4 @@
-import { setOwner } from 'ember-utils';
+import { setOwner } from 'ember-owner';
 import EmberRouter from '../../lib/system/router';
 import { buildOwner, moduleFor, AbstractTestCase } from 'internal-test-helpers';
 
@@ -33,6 +33,19 @@ moduleFor(
           router._initRouterJs();
         }, "'" + reservedName + "' cannot be used as a route name.");
       });
+    }
+
+    ['@test [GH#16642] better error when using a colon in a route name']() {
+      expectAssertion(() => {
+        Router = EmberRouter.extend();
+
+        Router.map(function() {
+          this.route('resource/:id');
+        });
+
+        let router = Router.create();
+        router._initRouterJs();
+      }, "'resource/:id' is not a valid route name. It cannot contain a ':'. You may want to use the 'path' option instead.");
     }
 
     ['@test should retain resource namespace if nested with routes'](assert) {

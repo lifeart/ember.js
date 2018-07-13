@@ -1,6 +1,7 @@
-import { assign, getOwner } from 'ember-utils';
+import { getOwner } from 'ember-owner';
+import { assign } from '@ember/polyfills';
 import { get } from 'ember-metal';
-import { Error as EmberError } from 'ember-debug';
+import EmberError from '@ember/error';
 
 const ALL_PERIODS_REGEX = /\./g;
 

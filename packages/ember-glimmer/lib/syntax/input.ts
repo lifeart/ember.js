@@ -1,10 +1,10 @@
 /**
 @module ember
 */
+import { assert } from '@ember/debug';
 import { Option } from '@glimmer/interfaces';
 import { OpcodeBuilder } from '@glimmer/opcode-compiler';
 import * as WireFormat from '@glimmer/wire-format';
-import { assert } from 'ember-debug';
 import { OwnedTemplateMeta } from 'ember-views';
 import { wrapComponentClassAttribute } from '../utils/bindings';
 import { hashToArgs } from './utils';
@@ -24,7 +24,7 @@ function buildSyntax(
   The `{{input}}` helper lets you create an HTML `<input />` component.
   It causes an `TextField` component to be rendered.  For more info,
   see the [TextField](/api/ember/release/classes/TextField) docs and
-  the [templates guide](https://emberjs.com/guides/templates/input-helpers/).
+  the [templates guide](https://guides.emberjs.com/release/templates/input-helpers/).
 
   ```handlebars
   {{input value="987"}}
@@ -176,7 +176,7 @@ export function inputMacro(
         // there is an AST plugin that converts this to an expression
         // it really should just compile in the component call too.
         let inputTypeExpr = params[0] as WireFormat.Expression;
-        builder.dynamicComponent(inputTypeExpr, params.slice(1), hash, true, null, null);
+        builder.dynamicComponent(inputTypeExpr, null, params.slice(1), hash, true, null, null);
         return true;
       }
       if (typeArg === 'checkbox') {

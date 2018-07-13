@@ -1,3 +1,6 @@
+import { warn } from '@ember/debug';
+import { DEBUG } from '@glimmer/env';
+import { Option } from '@glimmer/interfaces';
 import { OpaqueIterable, VersionedReference } from '@glimmer/reference';
 import {
   ElementBuilder,
@@ -5,9 +8,7 @@ import {
   SimpleDynamicAttribute,
 } from '@glimmer/runtime';
 import { Destroyable, Opaque } from '@glimmer/util';
-import { warn } from 'ember-debug';
-import { DEBUG } from 'ember-env-flags';
-import { OWNER, Owner } from 'ember-utils';
+import { OWNER, Owner } from 'ember-owner';
 import { constructStyleDeprecationMessage, lookupComponent } from 'ember-views';
 import DebugStack from './utils/debug-stack';
 import createIterable from './utils/iterable';
@@ -142,10 +143,10 @@ if (DEBUG) {
     element,
     attribute: string,
     isTrusting: boolean,
-    _namespace?
+    namespace: Option<string>
   ) {
     if (attribute === 'style' && !isTrusting) {
-      return StyleAttributeManager;
+      return new StyleAttributeManager({ element, name: attribute, namespace });
     }
 
     return GlimmerEnvironment.prototype.attributeFor.call(
@@ -153,7 +154,7 @@ if (DEBUG) {
       element,
       attribute,
       isTrusting,
-      _namespace
+      namespace
     );
   };
 }

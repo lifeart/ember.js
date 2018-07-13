@@ -1,8 +1,9 @@
+import { _instrumentStart } from '@ember/instrumentation';
+import { DEBUG } from '@glimmer/env';
 import { ComponentCapabilities } from '@glimmer/interfaces';
 import { Arguments, ComponentDefinition } from '@glimmer/runtime';
 import { FACTORY_FOR } from 'container';
-import { DEBUG } from 'ember-env-flags';
-import { _instrumentStart } from 'ember-metal';
+import { Factory } from 'ember-owner';
 import { DIRTY_TAG } from '../component';
 import Environment from '../environment';
 import { DynamicScope } from '../renderer';
@@ -47,8 +48,10 @@ class RootComponentManager extends CurlyComponentManager {
 
     dynamicScope.view = component;
 
+    let hasWrappedElement = component.tagName !== '';
+
     // We usually do this in the `didCreateElement`, but that hook doesn't fire for tagless components
-    if (component.tagName === '') {
+    if (!hasWrappedElement) {
       if (environment.isInteractive) {
         component.trigger('willRender');
       }
@@ -64,7 +67,7 @@ class RootComponentManager extends CurlyComponentManager {
       processComponentInitializationAssertions(component, {});
     }
 
-    return new ComponentStateBucket(environment, component, null, finalizer);
+    return new ComponentStateBucket(environment, component, null, finalizer, hasWrappedElement);
   }
 }
 
@@ -92,9 +95,9 @@ export class RootComponentDefinition implements ComponentDefinition {
     this.manager = manager;
     let factory = FACTORY_FOR.get(component);
     this.state = {
-      name: factory.fullName.slice(10),
+      name: factory!.fullName.slice(10),
       capabilities: ROOT_CAPABILITIES,
-      ComponentClass: factory,
+      ComponentClass: factory as Factory<any, any>,
       handle: null,
     };
   }
