@@ -67,6 +67,7 @@ function assertMessage(moduleName: string, node: AST.PathExpression): string {
 function isAttrs(node: AST.PathExpression, symbols: string[], moduleName: string) {
   if (!Array.isArray(node.parts)) {
     assertMessage(moduleName, node);
+    return false;
   }
 
   let name = node.parts[0];
