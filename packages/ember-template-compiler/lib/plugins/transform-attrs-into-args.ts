@@ -1,3 +1,4 @@
+import { assert } from '@ember/debug';
 import { AST, ASTPlugin } from '@glimmer/syntax';
 import calculateLocationDisplay from '../system/calculate-location-display';
 import { EmberASTPluginEnvironment } from '../types';
@@ -66,7 +67,7 @@ function assertMessage(moduleName: string, node: AST.PathExpression): string {
 
 function isAttrs(node: AST.PathExpression, symbols: string[], moduleName: string) {
   if (!Array.isArray(node.parts)) {
-    assertMessage(moduleName, node);
+    assert(assertMessage(moduleName, node));
     return false;
   }
 
