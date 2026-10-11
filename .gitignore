@@ -20,6 +20,8 @@ dist
 dist-prod
 # Assembled consumable GXT package (scripts/build-gxt-package.mjs output)
 dist-gxt-package
+# Assembled gxt-native package (scripts/build-gxt-native-package.mjs output)
+dist-gxt-native-package
 /docs
 lib/*/tests/all.js
 lib/*/tests/qunit*
