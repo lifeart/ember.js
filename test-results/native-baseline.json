@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-11T10:41:55.292Z",
+    "capturedAt": "2026-10-11T12:04:30.231Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "5c3f83c98e",
-    "totalTests": 588,
-    "totalModules": 90,
+    "emberCommit": "232d13270d",
+    "totalTests": 645,
+    "totalModules": 95,
     "quarantinedTests": 0,
-    "totalAssertions": 1610,
-    "totalAssertionsPassing": 1610
+    "totalAssertions": 1739,
+    "totalAssertionsPassing": 1739
   },
   "modules": {
     "@cached decorator: get": {
@@ -263,6 +263,13 @@
       "assertionsPassing": 165,
       "failingTests": []
     },
+    "Helpers test: helper managers": {
+      "total": 15,
+      "passing": 15,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
     "Keys behavior with observers": {
       "total": 7,
       "passing": 7,
@@ -459,6 +466,13 @@
       "assertionsPassing": 40,
       "failingTests": []
     },
+    "gxt-native | curried components": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
     "gxt-native | debugRenderTree": {
       "total": 2,
       "passing": 2,
@@ -471,6 +485,20 @@
       "passing": 5,
       "assertionsTotal": 20,
       "assertionsPassing": 20,
+      "failingTests": []
+    },
+    "gxt-native | helpers": {
+      "total": 15,
+      "passing": 15,
+      "assertionsTotal": 53,
+      "assertionsPassing": 53,
+      "failingTests": []
+    },
+    "gxt-native | modifiers": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 29,
+      "assertionsPassing": 29,
       "failingTests": []
     },
     "gxt-native | outlet": {
@@ -499,6 +527,13 @@
       "passing": 5,
       "assertionsTotal": 9,
       "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "gxt-native | {{on}}": {
+      "total": 12,
+      "passing": 12,
+      "assertionsTotal": 30,
+      "assertionsPassing": 30,
       "failingTests": []
     },
     "inject - decorator": {

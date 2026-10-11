@@ -15,6 +15,7 @@
     "packages/@ember/runloop/tests/*_test.js",
     "packages/@ember/-internals/container/tests/*_test.js",
     "packages/@ember/service/tests/*_test.{js,ts}",
-    "packages/@ember/controller/tests/*_test.js"
+    "packages/@ember/controller/tests/*_test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/helper-manager-test.js"
   ]
 }
