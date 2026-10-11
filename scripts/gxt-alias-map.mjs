@@ -257,10 +257,14 @@ export const NATIVE_FLAGS = Object.freeze({
   EMBER_IN_ELEMENT: true,
   EMBER_TRUSTED_HTML: true,
   WITH_DYNAMIC_EVAL: false,
-  // TODO (not understood by gxt 0.0.81 — add as live keys when the gxt change
+  // gxt ember-vm-replacement ec35076 (compile-only flag, no runtime identifier):
+  // template-only templates get the `$_tpl` brand (G14, `isTemplateFn`) and
+  // block-param member taps emit the non-defining `$__tag` instead of
+  // `$__cellFor` (Inc 4a). Inc 5 also uses it for G4/G9/G15/G-kw.
+  EMBER_NATIVE: true,
+  // TODO (not understood by gxt yet — add as live keys when the gxt change
   // lands on branch ember-vm-replacement, design §2.6):
-  //   EMBER_OUTLET: true,           // G3  {{outlet}} -> $_outlet(this)        (Inc 4)
-  //   EMBER_NATIVE: true,           // G4/G9/G15/G-kw runtime switches         (Inc 5)
+  //   EMBER_OUTLET: true,           // G3  {{outlet}} -> $_outlet(this)        (Inc 4b)
   //   EMBER_SELF: true,             // G6  $_self(this) preamble               (Inc 7)
   //   EMBER_PROPERTY_TAGS: true,    // G8  $__tag(obj,'k') member taps         (Inc 7)
   //   EMBER_LOOSE_COMPONENTS: true, // G11 $_c("Name") for unknown tags        (Inc 8)

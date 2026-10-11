@@ -6,13 +6,13 @@
 // functions) and the capability builders are real: they are plain WeakMaps with
 // Glimmer's prototype-chain lookup, and classic modules call them at MODULE EVAL
 // (InternalComponent's `opaquify`, the `element`/`unique-id` internal helpers,
-// `on`, @glimmer/component's setComponentManager). What is NOT here yet is the
-// manager PROTOCOL: `Custom{Component,Helper,Modifier}Manager` only record the
-// factory. The native `$_MANAGERS` tables that drive them from gxt's
-// `_component` / `$_maybeHelper` / `$_maybeModifier` land in Inc 4 (component)
-// and Inc 5 (helper/modifier) — design §2.3.
+// `on`, @glimmer/component's setComponentManager). The manager PROTOCOLS live
+// in the native `$_MANAGERS` tables (native/managers.ts) that gxt's
+// `_component` / `$_maybeHelper` / `$_maybeModifier` consult: component (Inc
+// 4a), helper / modifier (Inc 5) — design §2.3. `Custom*Manager` here only
+// records the public manager factory.
 import { DEBUG } from '@glimmer/env';
-import { isNativeTemplateFactory } from './template-factory';
+import { isTemplateFn } from '@lifeart/gxt';
 import type { Tag } from './validator';
 
 // ---------------------------------------------------------------- internal api
@@ -49,20 +49,16 @@ export function setInternalComponentManager<T extends object>(manager: unknown, 
 export function getInternalComponentManager(definition: object, _isOptional?: boolean): any {
   return getManager(COMPONENT_MANAGERS, definition);
 }
-// A raw gxt template function (the default export of a template-only
-// `.gjs`/`.gts`, e.g. a route template) IS a component in the native build — gxt
-// renders it directly, the way Glimmer's TEMPLATE_ONLY_COMPONENT_MANAGER marks
-// `templateOnly()` definitions. route.ts (`buildRenderState`) relies on this to
-// keep such a template UNINVOKED instead of calling it as `factory(owner)`.
-// G14 fallback heuristic (design §2.6): "a function that is not a native
-// TemplateFactory". Replace with the gxt compiler's template-fn brand
-// (`isTemplateFn`) once G14 lands (Inc 4).
-function isGxtTemplateFn(definition: unknown): boolean {
-  return typeof definition === 'function' && !isNativeTemplateFactory(definition);
-}
-
+// A gxt template function (the compiled `<template>` of a template-only
+// `.gjs`/`.gts`, e.g. a route template) IS a component in the native build —
+// gxt renders it directly, the way Glimmer's TEMPLATE_ONLY_COMPONENT_MANAGER
+// marks `templateOnly()` definitions. route.ts (`buildRenderState`) relies on
+// this to keep such a template UNINVOKED instead of calling it as
+// `factory(owner)`. The gxt compiler brands template functions under
+// NATIVE_FLAGS.EMBER_NATIVE (G14, `$_tpl`), so this is an exact check — a
+// TemplateFactory or a plain function is not a template function.
 export function hasInternalComponentManager(definition: object): boolean {
-  return getManager(COMPONENT_MANAGERS, definition) !== undefined || isGxtTemplateFn(definition);
+  return getManager(COMPONENT_MANAGERS, definition) !== undefined || isTemplateFn(definition);
 }
 
 export function setInternalHelperManager<T extends object>(manager: unknown, definition: T): T {
@@ -191,6 +187,11 @@ export function setComponentTemplate<T extends object>(factory: unknown, obj: T)
   }
   TEMPLATES.set(obj, factory);
   return obj;
+}
+
+/** The template registered on `obj` itself (no prototype-chain walk). */
+export function getOwnComponentTemplate(obj: object): unknown {
+  return TEMPLATES.get(obj);
 }
 
 export function getComponentTemplate(obj: object): any {

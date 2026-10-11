@@ -10,7 +10,7 @@
 //  - documentedDrop(): a LEGACY surface that the native build deliberately does
 //    not support (design §2.5 / goal scope "LEGACY (OUT)"). Not a TODO.
 
-export function notImplemented(what: string, inc: number): never {
+export function notImplemented(what: string, inc: number | string): never {
   throw new Error(`${what}: not implemented (Inc ${inc})`);
 }
 

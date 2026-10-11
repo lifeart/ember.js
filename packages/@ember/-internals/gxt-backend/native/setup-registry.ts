@@ -19,8 +19,8 @@ import { placeholderTemplateFactory } from './template-factory';
 
 // `template:-outlet`: a TemplateFactory (`factory(owner) -> template`) — the
 // router hands it to `OutletView.create`, and route.ts invokes it for routes
-// without a template. Inc 4 replaces it with the native Outlet component.
-const nativeOutletTemplate = placeholderTemplateFactory('native outlet template', 4);
+// without a template. Inc 4b replaces it with the native Outlet component.
+const nativeOutletTemplate = placeholderTemplateFactory('native outlet template', '4b');
 
 export function setupApplicationRegistry(registry: Registry): void {
   registry.register('renderer:-dom', Renderer);

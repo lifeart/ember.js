@@ -215,6 +215,10 @@ export default defineConfig(({ mode }) => {
             ASYNC_COMPILE_TRANSFORMS: 'true',
             WITH_DYNAMIC_EVAL: 'false',
             WITH_TYPE_CHECKER_HINTS: 'false',
+            // Native-layer flag (gxt-native only; compile-time — no gxt runtime
+            // chunk references it today, defined here per design §2.6 so a
+            // future runtime use can never surface as a bare identifier).
+            EMBER_NATIVE: 'false',
           },
         }),
     build,
