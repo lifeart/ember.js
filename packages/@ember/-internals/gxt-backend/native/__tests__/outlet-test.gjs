@@ -9,6 +9,8 @@ import Route from '@ember/routing/route';
 import { captureRenderTree } from '@ember/debug';
 import { registerDestructor } from '@ember/destroyable';
 import { precompileTemplate } from '@ember/template-compilation';
+import { setComponentTemplate } from '@ember/component';
+import templateOnly from '@ember/component/template-only';
 import { ApplicationTestCase, moduleFor, runTask } from 'internal-test-helpers';
 import { textOf } from './-helpers';
 
@@ -308,17 +310,39 @@ moduleFor(
       assert.strictEqual(destructors, 1, 'route components destroyed');
     }
 
-    async ['@test a build-time precompileTemplate route template fails with the Inc 8 (G10) error'](
+    async ['@test a build-time (G10) loose precompileTemplate route template renders with this = the controller'](
       assert
     ) {
-      // (runtime-compiled loose route templates render with `this` = the
-      // controller since Inc 7 — gxt-native | ApplicationTestCase: loose route
-      // templates; a build-time `precompileTemplate` needs G10 AOT.)
-      this.add('template:index', precompileTemplate('{{this.title}}'));
+      // `precompileTemplate(…)` is compiled by gxt at build time (G10); loose by
+      // default, so `this` is the controller (G6) and free names resolve by name
+      // (G11): `<Greeting>` is `component:greeting`.
+      this.add(
+        'controller:index',
+        class extends Controller {
+          title = 'Hello';
+        }
+      );
+      this.add('template:index', precompileTemplate('<h1>{{this.title}}</h1><Greeting @who="you" />'));
+      this.add(
+        'component:greeting',
+        setComponentTemplate(precompileTemplate('<p>hi {{@who}}</p>'), templateOnly())
+      );
+
+      await this.visit('/');
+
+      assert.strictEqual(textOf(this.element.querySelector('h1')), 'Hello');
+      assert.strictEqual(textOf(this.element.querySelector('p')), 'hi you');
+    }
+
+    async ['@test a precompileTemplate string that reaches runtime fails loudly when rendered'](
+      assert
+    ) {
+      const source = '{{this.title}}'; // not a literal: gxt cannot compile it at build time
+      this.add('template:index', precompileTemplate(source));
 
       await assert.rejects(
         this.visit('/'),
-        /native route template for `index`.*needs G10.*not implemented \(Inc 8\)/s
+        /precompileTemplate: a template string reached runtime.*must be called with a static template string/s
       );
     }
   }

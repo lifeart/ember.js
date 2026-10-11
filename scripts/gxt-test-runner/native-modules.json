@@ -1,5 +1,5 @@
 {
-  "$comment": "Allow-list of test modules loaded by native.html (EMBER_RENDER_BACKEND=gxt-native dev server, port 5181). Root-relative globs expanded by vite import.meta.glob (vite.config.mjs gxtNativeTestModules). Grown per increment (design §6). Rendering tests start in Inc 4. 'legacy-tolerated' entries (computed/alias/observers/property events) are recorded for status only; failures there may be skipped with a reason in native-skip.json.",
+  "$comment": "Allow-list of test modules loaded by native.html (EMBER_RENDER_BACKEND=gxt-native dev server, port 5181). Root-relative globs expanded by vite import.meta.glob (vite.config.mjs gxtNativeTestModules). Grown per increment (design \u00a76). Rendering tests start in Inc 4. 'legacy-tolerated' entries (computed/alias/observers/property events) are recorded for status only; failures there may be skipped with a reason in native-skip.json.",
   "modules": [
     "packages/@ember/-internals/gxt-backend/native/__tests__/**/*.{js,ts,gjs,gts}",
     "packages/@glimmer/validator/test/**/*-test.ts",
@@ -28,6 +28,25 @@
     "packages/@ember/-internals/glimmer/tests/integration/syntax/if-unless-test.js",
     "packages/@ember/-internals/glimmer/tests/integration/syntax/each-test.js",
     "packages/@ember/-internals/glimmer/tests/integration/syntax/let-test.js",
-    "packages/@ember/-internals/glimmer/tests/integration/syntax/public-in-element-test.js"
+    "packages/@ember/-internals/glimmer/tests/integration/syntax/public-in-element-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/custom-helper-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/invoke-helper-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/default-helper-manager-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/modifiers/on-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/custom-modifier-manager-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/custom-component-manager-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/yield-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/tracked-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/components/angle-bracket-invocation-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/components/contextual-components-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/components/template-only-components-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/components/strict-mode-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/components/render-component-test.ts",
+    "packages/@ember/-internals/glimmer/tests/integration/components/fragment-components-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/components/tracked-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/application/rendering-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/application/debug-render-tree-test.ts",
+    "packages/@ember/-internals/glimmer/tests/integration/application/helper-registration-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/components/link-to/*-test.js"
   ]
 }
