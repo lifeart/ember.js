@@ -38,18 +38,19 @@
 //                                     # any Glimmer-VM / compat-bridge / runtime-
 //                                     # template-compiler module (see FORBIDDEN_NATIVE)
 //
-// gxt compiler seams worked around in the app (documented here because they are
-// P1 inputs, not app concerns):
-//   * @lifeart/gxt's compiler runs babel without `configFile:false`, so it inherits
-//     the host's root babel.config.mjs; that config's TypeScript plugin elides
-//     imports referenced only inside <template> before gxt sees the scope, turning
-//     lexical components into string `$_tag('Counter')` owner lookups (and
-//     tree-shaking the component away). Each .gjs therefore has a `void [X];`
-//     keep-alive line (dead code, dropped by terser: 0 shipped bytes).
-//   * the same babel call resolves `@babel/preset-typescript` by name from
-//     process.cwd(); it only works through pnpm's node_modules/.bin/vite shim, which
-//     puts node_modules/.pnpm/node_modules on NODE_PATH — so builds are spawned via
-//     that shim.
+// gxt compiler seams (P0a) — FIXED in gxt, no app workaround any more:
+//   * G1 (glimmer-next ember-vm-replacement 9c46a76): gxt's template-tag babel
+//     pass is hermetic (configFile:false, babelrc:false) and resolves
+//     @babel/preset-typescript / decorator-transforms from gxt's own location.
+//     Before it, the host babel.config.mjs's TypeScript plugin elided imports
+//     referenced only inside <template> (lexical components became string
+//     `$_tag('Counter')` owner lookups) and the presets only resolved through
+//     pnpm's .bin/vite NODE_PATH. The app's `void [X];` keep-alives are gone.
+//   * G2 (2abe1bf): a lexically bound `<LinkTo>` stays `$_c(LinkTo, …)` instead
+//     of the compat kebab mapping `$_tag('link-to', …)`.
+//   Both need the LOCAL gxt link (scripts/gxt-test-runner/zz-gxt-link-local.sh)
+//   until a gxt release ships them: with published 0.0.81 the gxt variants
+//   silently lose their template-only imports again.
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve, relative, sep } from 'node:path';
