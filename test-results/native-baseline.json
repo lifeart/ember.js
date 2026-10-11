@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-11T12:04:30.231Z",
+    "capturedAt": "2026-10-11T13:11:31.105Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "232d13270d",
-    "totalTests": 645,
-    "totalModules": 95,
+    "emberCommit": "e33adf48ea",
+    "totalTests": 667,
+    "totalModules": 100,
     "quarantinedTests": 0,
-    "totalAssertions": 1739,
-    "totalAssertionsPassing": 1739
+    "totalAssertions": 1895,
+    "totalAssertionsPassing": 1895
   },
   "modules": {
     "@cached decorator: get": {
@@ -452,11 +452,46 @@
       "assertionsPassing": 7,
       "failingTests": []
     },
-    "gxt-native | attributes": {
+    "gxt-native | LinkTo: active state": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 44,
+      "assertionsPassing": 44,
+      "failingTests": []
+    },
+    "gxt-native | LinkTo: clicks": {
       "total": 4,
       "passing": 4,
-      "assertionsTotal": 15,
-      "assertionsPassing": 15,
+      "assertionsTotal": 36,
+      "assertionsPassing": 36,
+      "failingTests": []
+    },
+    "gxt-native | LinkTo: component": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 39,
+      "assertionsPassing": 39,
+      "failingTests": []
+    },
+    "gxt-native | LinkTo: href": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 23,
+      "assertionsPassing": 23,
+      "failingTests": []
+    },
+    "gxt-native | LinkTo: without a started router; legacy drops": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "gxt-native | attributes": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 23,
+      "assertionsPassing": 23,
       "failingTests": []
     },
     "gxt-native | components": {
