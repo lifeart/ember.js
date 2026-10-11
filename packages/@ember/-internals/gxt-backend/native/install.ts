@@ -11,6 +11,7 @@ import { componentManager, resolveComponentName } from './managers';
 import { modifierManager } from './modifier-manager';
 import { Outlet } from './outlet';
 import { resolveComponentOrHelper } from './resolver';
+import { classifyContent, eachInEntries, hostAssert } from './content';
 
 let installed = false;
 
@@ -35,6 +36,13 @@ export function install(): void {
     // loose template compiles to `$_looseAppend` under
     // NATIVE_FLAGS.EMBER_LOOSE_COMPONENTS): component, else helper.
     resolveComponentOrHelper,
+    // Glimmer dynamic content (G15): `{{value}}` renders trusted HTML /
+    // components / helpers by what the value is.
+    classifyContent,
+    // `{{#each-in}}` entries (G5): Glimmer's toEachInIterator + tags.
+    eachInEntries,
+    // gxt's Glimmer-parity runtime assertions (in-element) via @ember/debug.
+    assert: hostAssert,
   });
   registerHostManagers({
     component: componentManager as never,

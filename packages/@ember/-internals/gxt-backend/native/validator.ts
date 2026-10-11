@@ -28,6 +28,7 @@ import {
   cell,
   currentRevision,
   dirtyCell,
+  entangleSubscribers,
   getTracker,
   peekTagFor,
   setTracker,
@@ -209,6 +210,13 @@ export function UPDATE_TAG(tag: Tag, subtag: Tag): void {
   const buffer = valueForTag(subtag);
   if (sub === undefined) {
     SUBTAGS.set(leaf, new Subtag(subtag, buffer, leaf._revision));
+    // gxt bindings that consumed this tag BEFORE it had a subtag (the property
+    // tag of an alias / computed read for the first time AFTER a binding
+    // consumed it — LinkTo's `href` consumes `tagFor(routing, 'currentState')`
+    // before anything read the `currentState` alias) flattened it without the
+    // subtag: subscribe them to its leaves now (Glimmer validates updatable
+    // tags lazily, so its consumers see a late subtag).
+    entangleSubscribers(leaf, leavesOf(subtag, new Set()));
   } else {
     sub.buffer = buffer;
     sub.subtag = subtag;
@@ -216,6 +224,19 @@ export function UPDATE_TAG(tag: Tag, subtag: Tag): void {
 }
 
 export { DIRTY_TAG as dirtyTag, UPDATE_TAG as updateTag };
+
+// The leaf cells a tag stands for (combinator members, subtags; cycle-safe).
+function leavesOf(tag: Tag, out: Set<Leaf>): Set<Leaf> {
+  if (tag instanceof NativeTag) {
+    if (tag instanceof Combinator) for (const member of tag.tags) leavesOf(member, out);
+    return out;
+  }
+  if (out.has(tag)) return out;
+  out.add(tag);
+  const sub = SUBTAGS.get(tag);
+  if (sub !== undefined && sub.subtag !== null) leavesOf(sub.subtag, out);
+  return out;
+}
 
 export function combine(tags: Tag[]): Tag {
   switch (tags.length) {

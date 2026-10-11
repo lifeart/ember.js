@@ -127,7 +127,9 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
 
     const factory = this.compile(templateStr, { moduleName: '-top-level' });
     owner.register('template:-top-level', factory);
-    owner.register('-test-context:-top-level', EmberObject.extend(context));
+    // Own enumerable properties only (classic RenderingTestCase copies the
+    // context with Object.assign — `renderComponentModule` passes a class).
+    owner.register('-test-context:-top-level', EmberObject.extend(Object.assign({}, context)));
     this.component = owner.lookup('-test-context:-top-level');
 
     const template = factory(owner);

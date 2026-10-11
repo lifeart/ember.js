@@ -29,6 +29,7 @@ import { _backburner, _getCurrentRunLoop } from '@ember/runloop';
 import toBool from '@ember/-internals/glimmer/lib/utils/to-bool';
 import { flushRevalidation } from '@lifeart/gxt';
 import { commitModifiers } from './modifier-manager';
+import { commitComponents, updateComponents } from './component-lifecycle';
 import { debug } from './validator';
 
 export { toBool };
@@ -75,12 +76,21 @@ function renderPass(): void {
     passesThisLoop = 0;
     throw new Error('infinite rendering invalidation detected');
   }
-  renderTransaction(flushRevalidation);
+  renderTransaction(renderPassBody);
   // Glimmer's environment commit: install / update the modifiers the pass
   // created or invalidated, now that the pass's DOM is in place (outside the
   // render transaction — a modifier writing tracked state schedules a new pass,
-  // it does not trip the backtracking assertion).
+  // it does not trip the backtracking assertion). Custom-manager component
+  // callbacks (didCreate / didUpdate) commit first, as in Glimmer.
+  commitComponents();
   commitModifiers();
+}
+
+function renderPassBody(): void {
+  // Glimmer's UpdateComponentOpcode: custom managers with `updateHook` see
+  // `updateComponent` on every pass, before the pass re-renders.
+  updateComponents();
+  flushRevalidation();
 }
 
 // ---------------------------------------------------------------- renderSettled

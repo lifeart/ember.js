@@ -43,6 +43,9 @@ import {
 import { templateOnlyComponent } from './template-only';
 
 export { NATIVE_FLAGS };
+// `@ember/template-compiler`'s RFC 1070 allowed-globals list (pure data; test
+// modules iterate it).
+export { ALLOWED_GLOBALS } from '@ember/template-compiler/lib/plugins/allowed-globals';
 
 interface CompileOptions {
   strictMode?: boolean;

@@ -41,6 +41,7 @@ import {
   $_GET_ARGS,
   $_fin,
   $PROPS_SYMBOL,
+  $SELF,
   $SLOTS_SYMBOL,
   $template,
   cId,
@@ -52,6 +53,7 @@ import {
   resolveCurried,
 } from '@lifeart/gxt';
 import { argsProxyFor, unwrapArg } from './args';
+import { trackComponent, type LifecycleDelegate } from './component-lifecycle';
 import { destroy } from './destroyable';
 import {
   CustomComponentManager,
@@ -159,6 +161,20 @@ function resolveTemplate(value: unknown, owner: object, definition: object): Gxt
 // Template context (gxt node) → its Ember component definition, and template
 // function → the templateOnly() definition it renders (resolveComponentName).
 const DEFINITION_OF_NODE = new WeakMap<object, object>();
+// Render node → the custom-manager component it renders (the Inspector's
+// `instance`; differs from the node when the node is a fresh `$SELF` node).
+const INSTANCE_OF_NODE = new WeakMap<object, object>();
+
+/**
+ * The Inspector `instance` of a render node: the custom-manager component it
+ * renders, `null` for a template-only component (Glimmer has no instance), else
+ * the node itself (a Glimmer / internal component instance).
+ */
+export function instanceOfNode(node: object): object | null {
+  const component = INSTANCE_OF_NODE.get(node);
+  if (component !== undefined) return component;
+  return isTemplateFn((node as { constructor?: unknown }).constructor) ? null : node;
+}
 const DEFINITION_OF_TEMPLATE = new WeakMap<object, object>();
 // Registry / route names (Inc 4b route templates, Inc 8 resolver lookups).
 const REGISTERED_NAMES = new WeakMap<object, string>();
@@ -372,21 +388,34 @@ function handle(
   // gxt constructs this per INVOCATION (`new NativeComponent(args, fw)`): every
   // invocation creates its own component through the manager.
   return function NativeComponent(): object {
-    const component = delegate.createComponent(definition, {
+    const captured = {
       named: args,
       positional:
         positional.length === 0
           ? EMPTY_POSITIONAL
           : argsProxyFor({ positional, named: {} }, 'component').positional,
-    });
-    // A custom manager may have NO template context (`getContext` → null;
-    // Glimmer renders with a null self): the template still needs a node.
+    };
+    const component = delegate.createComponent(definition, captured);
+    // The template's `this` is `getContext(component)` (Glimmer's self) and its
+    // `@args` are the invocation's arguments, read from the render node's
+    // `args`. A Glimmer component's context already carries exactly these
+    // arguments as `args` — it is its own render node. Any other context (an
+    // EmberObject whose `args` is the manager's `{named, positional}`, a
+    // manager-returned POJO, `null`) renders on a fresh node whose self
+    // (`$SELF`, G6) is the context, so gxt never writes onto it.
     const context = delegate.getContext(component);
-    const node = (
-      context !== null && (typeof context === 'object' || typeof context === 'function')
-        ? context
-        : {}
-    ) as ComponentNode;
+    const hasContext =
+      context !== null && (typeof context === 'object' || typeof context === 'function');
+    let node: ComponentNode;
+    if (hasContext && (context as { args?: unknown }).args === args) {
+      node = context as ComponentNode;
+    } else {
+      node = { args } as ComponentNode;
+      if (hasContext) node[$SELF] = context;
+    }
+    INSTANCE_OF_NODE.set(node, component);
+    const untrack = trackComponent(delegate as LifecycleDelegate, component, captured);
+    if (untrack !== null) gxtRegisterDestructor(node, untrack);
     // gxt tree identity BEFORE gxt adds the node to the render tree (a gxt
     // `Component` gets it as a class field; a manager-created instance does not).
     if (node[COMPONENT_ID_PROPERTY] === undefined) {

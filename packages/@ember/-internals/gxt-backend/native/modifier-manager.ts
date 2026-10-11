@@ -46,7 +46,7 @@ import {
 import { OWNER } from './managers';
 import { lookupModifier, modifierNotFound } from './resolver';
 import { type InternalModifierManager } from './runtime-helpers';
-import { untrack } from './validator';
+import { debug, untrack } from './validator';
 
 /** gxt context key: `false` on render roots whose modifiers must not run. */
 export const INTERACTIVE: unique symbol = Symbol('ember-native-interactive');
@@ -112,10 +112,36 @@ export function commitModifiers(): void {
     pending = [];
     for (const instance of queue) {
       instance.scheduled = false;
-      if (!instance.removed) run(instance);
+      if (!instance.removed) runInTransaction(instance);
     }
   }
 }
+
+/**
+ * DEV: an install / update runs in its own tracking transaction (Glimmer runs
+ * modifiers inside the render transaction), so a modifier that READS a value
+ * and then WRITES it gets the backtracking assertion. Its own transaction, not
+ * the closed render pass's: writing state the render consumed schedules a new
+ * pass, as before.
+ */
+function runInTransaction(instance: ModifierInstance): void {
+  if (!DEBUG) {
+    run(instance);
+    return;
+  }
+  let failed = true;
+  try {
+    debug.runInTrackingTransaction!(
+      () => debug.runInTrackingTransaction!(() => run(instance), MODIFIER_LABEL),
+      '- While rendering:'
+    );
+    failed = false;
+  } finally {
+    if (failed) debug.resetTrackingTransaction!();
+  }
+}
+
+const MODIFIER_LABEL = '(modifier)';
 
 function remove(instance: ModifierInstance): void {
   if (instance.removed) return;

@@ -34,9 +34,14 @@
 // else (a wire-format template from a stale pre-compiled addon) fails loudly
 // instead of rendering wrongly.
 //
-// The outlet manages its own anchor-delimited region instead of gxt `$_dc`:
-// `$_dc` leaves one anchor comment behind per swap and treats object
-// definitions (`templateOnly()`) as rendered instances.
+// The outlet manages its own region instead of gxt `$_dc` (`$_dc` leaves one
+// anchor comment behind per swap and treats object definitions
+// (`templateOnly()`) as rendered instances). Like Glimmer's, the region is
+// exactly the route's content — no anchor around it (the Inspector bounds of
+// every outlet / route-template level are the content's first / last nodes);
+// a swap inserts the incoming route where the outgoing one was. Only an EMPTY
+// level (no route, or a route that rendered no DOM) holds a placeholder
+// comment, as Glimmer leaves `<!---->`.
 import { type InternalOwner, getOwner } from '@ember/-internals/owner';
 import { assert } from '@ember/debug';
 import { schedule } from '@ember/runloop';
@@ -109,17 +114,34 @@ export const OUTLET_STATE: unique symbol = Symbol('ember-native-outlet-state');
 const TOP_LEVEL_NAME = '-top-level';
 
 // ---------------------------------------------------------------- render tree
-// Inspector: outlet nodes become `type: 'outlet'` (name `main`), nodes rendering
-// the default `{{outlet}}` route template become `type: 'route-template'` like
-// classic (native/renderer.ts debugRenderTree).
+// Inspector: outlet nodes become `type: 'outlet'` (name `main`), the node an
+// outlet renders for a route TEMPLATE becomes `type: 'route-template'` (name =
+// the route, instance = its controller) like classic (native/renderer.ts
+// debugRenderTree).
 const OUTLET_NODES = new WeakSet<object>();
-const DEFAULT_ROUTE_NODES = new WeakSet<object>();
+const ROUTE_NODES = new WeakSet<object>();
 
 export function outletNodeKind(node: unknown): 'outlet' | 'route-template' | undefined {
   if (typeof node !== 'object' || node === null) return undefined;
   if (OUTLET_NODES.has(node)) return 'outlet';
-  if (DEFAULT_ROUTE_NODES.has(node)) return 'route-template';
+  if (ROUTE_NODES.has(node)) return 'route-template';
   return undefined;
+}
+
+// The first / last DOM node a rendered gxt node (or rendered-nodes list) placed
+// at its own level, descending into nested nodes; null when it has none.
+function edgeNode(item: unknown, fromStart: boolean): Node | null {
+  if (item === null || typeof item !== 'object') return null;
+  if (typeof (item as Node).nodeType === 'number') return item as Node;
+  const list = Array.isArray(item)
+    ? item
+    : ((item as Record<PropertyKey, unknown>)[RENDERED_NODES_PROPERTY] as unknown[] | undefined);
+  if (!Array.isArray(list)) return null;
+  for (let i = 0; i < list.length; i++) {
+    const found = edgeNode(list[fromStart ? i : list.length - 1 - i], fromStart);
+    if (found !== null) return found;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------- definitions
@@ -178,16 +200,15 @@ export function Outlet(this: GxtNode): unknown {
   provideContext(outlet as never, OUTLET_STATE, ref);
 
   const api = initDOM(outlet as never);
-  const anchor = api.comment('');
+  // Holds the position of an EMPTY level (see the module comment).
+  const placeholder = api.comment('');
   let current: Definition | null = null;
   let rendered: GxtNode | null = null;
   let destroyed = false;
   registerDestructor(outlet, () => {
     destroyed = true;
   });
-  // The anchor is always rendered, so a level that starts empty can be filled
-  // in place later.
-  outlet[RENDERED_NODES_PROPERTY] = [anchor];
+  outlet[RENDERED_NODES_PROPERTY] = [placeholder];
 
   const renderRoute = (definition: Definition): GxtNode => {
     const { template, render } = definition;
@@ -215,7 +236,10 @@ export function Outlet(this: GxtNode): unknown {
     const definitionToRender = loose ? selfComponent(template, definition.controller) : template;
     const node = $_c(definitionToRender as never, args, outlet as never) as unknown as GxtNode;
     nameNode(node, definition.name);
-    if (template === OutletTemplate) DEFAULT_ROUTE_NODES.add(node);
+    // Classic: a route TEMPLATE (loose, or the default `{{outlet}}` one) renders
+    // as a `route-template` node; a route template that IS a component (a
+    // `.gjs` / `.gts` template, a component class) renders as that component.
+    if (loose || template === OutletTemplate) ROUTE_NODES.add(node);
     return node;
   };
 
@@ -223,16 +247,31 @@ export function Outlet(this: GxtNode): unknown {
     const previous = rendered;
     rendered = null;
     current = next;
+    // Where the level's content sits now (before the outlet itself is
+    // inserted — the first render — nowhere: the parent inserts our nodes).
+    const shown = (outlet[RENDERED_NODES_PROPERTY] as unknown[]) ?? [];
+    const last = edgeNode(shown, false);
+    const parent = last === null ? null : api.parent(last);
+    const before = last === null ? null : last.nextSibling;
     // Outgoing route first: its destructors run and its DOM leaves.
     if (previous !== null) destroyElementSync(previous as never, false, api);
+    if (placeholder.parentNode !== null) placeholder.parentNode.removeChild(placeholder);
     if (next !== null) {
       rendered = renderRoute(next);
-      // Before the outlet itself is inserted (first render) the parent inserts
-      // our nodes; afterwards insert in place, before the anchor.
-      const target = api.parent(anchor);
-      if (target !== null) renderElement(api, outlet as never, target, rendered as never, anchor);
+      // In place: where the outgoing content / the placeholder was.
+      if (parent !== null) renderElement(api, outlet as never, parent, rendered as never, before);
     }
-    outlet[RENDERED_NODES_PROPERTY] = rendered === null ? [anchor] : [rendered, anchor];
+    // A level without DOM keeps the placeholder so it can be filled in place.
+    // (On the first render the content is not resolved yet — pending text /
+    // thunks — so only a route that rendered nothing at all counts as empty.)
+    const empty =
+      rendered === null ||
+      (parent !== null
+        ? edgeNode(rendered, true) === null
+        : ((rendered[RENDERED_NODES_PROPERTY] as unknown[] | undefined) ?? []).length === 0);
+    if (empty && parent !== null) parent.insertBefore(placeholder, before);
+    outlet[RENDERED_NODES_PROPERTY] =
+      rendered === null ? [placeholder] : empty ? [rendered, placeholder] : [rendered];
   };
 
   // Re-runs whenever the outlet state this level reads changes (one gxt cell,

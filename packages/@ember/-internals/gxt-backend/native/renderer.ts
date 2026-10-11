@@ -42,8 +42,9 @@ import {
   resetRenderLoop,
   scheduleRevalidate,
 } from './host-hooks';
-import { OWNER } from './managers';
+import { instanceOfNode, OWNER, resolveComponentName } from './managers';
 import { commitModifiers, INTERACTIVE } from './modifier-manager';
+import { commitComponents } from './component-lifecycle';
 import { documentedDrop } from './not-implemented';
 import OutletView, { Outlet, OUTLET_STATE, outletNodeKind } from './outlet';
 
@@ -114,11 +115,16 @@ function rootsOf(owner: object): Set<NativeRenderRoot> {
 
 /**
  * Render `component` as a new root owned by `owner`, inserted into `parent`
- * before `nextSibling`. Rendering happens off-document (a fragment) inside one
- * render transaction; on failure the partial root is torn down and the error
- * re-thrown. `context` adds gxt render-context entries on the root (the outlet
- * root provides its outlet state). The building block of `renderComponent` and
- * of the app's outlet root (`Renderer#appendOutletView`).
+ * before `nextSibling`. Rendering happens straight into `parent`, in document
+ * order (Glimmer's append-as-you-go element builder), inside one render
+ * transaction — so a template can find elements it rendered earlier in the
+ * same render (`renderComponent({ into })` / `{{#in-element}}` destinations,
+ * `document.getElementById`), and an in-element appending to the render target
+ * itself lands after the content before it. On failure the partial root is
+ * torn down and the error re-thrown. `context` adds gxt render-context entries
+ * on the root (the outlet root provides its outlet state). The building block
+ * of `renderComponent` and of the app's outlet root
+ * (`Renderer#appendOutletView`).
  */
 export function renderRoot(
   component: object,
@@ -146,10 +152,14 @@ export function renderRoot(
   for (const [key, value] of context) provideContext(root as never, key, value);
   const result = new NativeRenderRoot(owner, root, parent);
   rootsOf(owner).add(result);
-  const fragment = document.createDocumentFragment();
   try {
     result.rendered = renderTransaction(() =>
-      gxtRenderComponent(component as never, { owner: root, args, element: fragment as never })
+      gxtRenderComponent(component as never, {
+        owner: root,
+        args,
+        element: parent as never,
+        nextSibling,
+      })
     ) as unknown as object;
   } catch (error) {
     try {
@@ -162,10 +172,11 @@ export function renderRoot(
     }
     throw error;
   }
-  parent.insertBefore(fragment, nextSibling);
-  // The root's elements are in place: install its modifiers (Glimmer's
-  // environment commit). A root rendered during a render pass leaves them to
-  // the pass's commit (commitModifiers is a no-op while gxt is rendering).
+  // The root's elements are in place: run custom-manager didCreate callbacks
+  // and install its modifiers (Glimmer's environment commit). A root rendered
+  // during a render pass leaves them to the pass's commit (both are no-ops
+  // while gxt is rendering).
+  commitComponents();
   commitModifiers();
   return result;
 }
@@ -173,15 +184,32 @@ export function renderRoot(
 function captureRootsOf(owner: object): CapturedRenderNode[] {
   const roots = Array.from(rootsOf(owner), (r) => r.root);
   // Each gxt Root is a container node; its children are the rendered components.
-  return captureRenderTree(roots as never).flatMap((node) => node.children.map(withOutletKinds));
+  return captureRenderTree(roots as never).flatMap((node) => emberNodes(node.children));
+}
+
+// Glimmer's render tree lists components, outlets and route templates only:
+// gxt's own block nodes (`{{#if}}` / `{{#each}}` / yield / wrapper / content
+// units — the nodes Ember has no name for) are transparent, their children
+// take their place.
+function emberNodes(nodes: CapturedRenderNode[]): CapturedRenderNode[] {
+  const out: CapturedRenderNode[] = [];
+  for (const node of nodes) {
+    const instance = node.instance;
+    const named =
+      instance !== null &&
+      typeof instance === 'object' &&
+      (outletNodeKind(instance) !== undefined || resolveComponentName(instance) !== undefined);
+    if (named) out.push(withOutletKinds(node));
+    else out.push(...emberNodes(node.children));
+  }
+  return out;
 }
 
 // gxt captures every node as `type: 'component'`; the outlet layer knows which
-// nodes are outlets and default `{{outlet}}` route templates (classic shapes:
-// an outlet node has no args / instance; a route-template node's instance is
-// its controller).
+// nodes are outlets and route templates (classic shapes: an outlet node has no
+// args / instance; a route-template node's instance is its controller).
 function withOutletKinds(node: CapturedRenderNode): CapturedRenderNode {
-  const children = node.children.map(withOutletKinds);
+  const children = emberNodes(node.children);
   switch (outletNodeKind(node.instance)) {
     case 'outlet':
       return {
@@ -193,8 +221,13 @@ function withOutletKinds(node: CapturedRenderNode): CapturedRenderNode {
       };
     case 'route-template':
       return { ...node, type: 'route-template', instance: node.args.named['controller'], children };
-    default:
-      return { ...node, children };
+    default: {
+      const instance =
+        node.instance !== null && typeof node.instance === 'object'
+          ? instanceOfNode(node.instance)
+          : node.instance;
+      return instance === node.instance ? { ...node, children } : { ...node, instance, children };
+    }
   }
 }
 
