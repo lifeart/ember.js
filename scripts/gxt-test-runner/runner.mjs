@@ -715,7 +715,9 @@ async function runModule(browser, url, moduleName, opts) {
   const { page } = await getSession(browser, opts);
   const started = Date.now();
   try {
-    const target = url + '?module=' + encodeURIComponent(moduleName);
+    // `--url` may carry its own query (e.g. `native.html?assertDestroyables`).
+    const target =
+      url + (url.includes('?') ? '&' : '?') + 'module=' + encodeURIComponent(moduleName);
 
     await page.goto(target, { timeout: 60_000, waitUntil: 'commit' });
     await page.waitForFunction(() => typeof QUnit !== 'undefined' && !!window.__gxtCollector, {
