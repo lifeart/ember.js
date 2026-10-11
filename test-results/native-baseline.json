@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-11T08:40:12.192Z",
+    "capturedAt": "2026-10-11T09:59:52.932Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "f5bfb2d6b1",
-    "totalTests": 531,
-    "totalModules": 82,
+    "emberCommit": "433f45edad",
+    "totalTests": 577,
+    "totalModules": 89,
     "quarantinedTests": 0,
-    "totalAssertions": 1450,
-    "totalAssertionsPassing": 1450
+    "totalAssertions": 1569,
+    "totalAssertionsPassing": 1569
   },
   "modules": {
     "@cached decorator: get": {
@@ -443,6 +443,55 @@
       "passing": 1,
       "assertionsTotal": 7,
       "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "gxt-native | attributes": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "gxt-native | components": {
+      "total": 16,
+      "passing": 16,
+      "assertionsTotal": 40,
+      "assertionsPassing": 40,
+      "failingTests": []
+    },
+    "gxt-native | debugRenderTree": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "gxt-native | destroy": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 20,
+      "assertionsPassing": 20,
+      "failingTests": []
+    },
+    "gxt-native | render passes": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "gxt-native | renderComponent": {
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 19,
+      "assertionsPassing": 19,
+      "failingTests": []
+    },
+    "gxt-native | renderSettled": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
       "failingTests": []
     },
     "inject - decorator": {
