@@ -14,8 +14,8 @@
 // Variant is selected by the SAME env vars the root config/rollup read:
 //   classic:    (no GXT_MODE, no EMBER_RENDER_BACKEND)
 //   gxt:        GXT_MODE=true EMBER_RENDER_BACKEND=gxt
-//   gxt-native: GXT_MODE=true EMBER_RENDER_BACKEND=gxt-native
-//                (__GXT_CLASSIC_COMPONENTS__ = false)
+//   gxt-native: EMBER_RENDER_BACKEND=gxt-native (the native layer: root config's
+//                nativeConfig() — no compat bridge, no gxtEmberWrapperRedirect)
 // and the app flavor by MODERN_APP_FLAVOR (strict .gjs = default | loose).
 // Driven by scripts/bundle-modern-app.mjs (run from the repo root: rollup.config
 // reads broccoli/ files relative to cwd).

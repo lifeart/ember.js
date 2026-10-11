@@ -9,8 +9,9 @@
 //
 //   classic     classic Glimmer VM (templateTag + wire-format precompile)
 //   gxt         GXT compat      (GXT_MODE=true EMBER_RENDER_BACKEND=gxt)
-//   gxt-native  GXT native      (GXT_MODE=true EMBER_RENDER_BACKEND=gxt-native;
-//                                __GXT_CLASSIC_COMPONENTS__=false)
+//   gxt-native  gxt NATIVE layer (EMBER_RENDER_BACKEND=gxt-native: classic source
+//                                with __GXT_MODE__=false + the GXT_NATIVE_ALIASES
+//                                boundary → gxt-backend/native/*; no compat bridge)
 //
 // and reports the shipped BOOT JS (entry chunk + transitive static imports, i.e.
 // everything the page loads before first render; dynamic-import chunks are listed
@@ -32,6 +33,10 @@
 //   node scripts/bundle-modern-app.mjs --no-build             # measure existing dists
 //   node scripts/bundle-modern-app.mjs --boot                 # + boot-check each variant
 //   node scripts/bundle-modern-app.mjs --json out.json --inventory
+//   node scripts/bundle-modern-app.mjs --variants gxt-native --assert-native
+//                                     # DoD #2: fail if the native closure ships
+//                                     # any Glimmer-VM / compat-bridge / runtime-
+//                                     # template-compiler module (see FORBIDDEN_NATIVE)
 //
 // gxt compiler seams worked around in the app (documented here because they are
 // P1 inputs, not app concerns):
@@ -59,7 +64,7 @@ const VITE_BIN = join(EMBER_ROOT, 'node_modules/.bin/vite');
 const VARIANTS = {
   classic: { GXT_MODE: undefined, EMBER_RENDER_BACKEND: undefined },
   gxt: { GXT_MODE: 'true', EMBER_RENDER_BACKEND: 'gxt' },
-  'gxt-native': { GXT_MODE: 'true', EMBER_RENDER_BACKEND: 'gxt-native' },
+  'gxt-native': { GXT_MODE: undefined, EMBER_RENDER_BACKEND: 'gxt-native' },
 };
 
 // ---------------------------------------------------------------- CLI
@@ -79,6 +84,7 @@ for (const v of variants) {
 const doBuild = !flag('--no-build');
 const doBoot = flag('--boot');
 const showInventory = flag('--inventory');
+const assertNativeFlag = flag('--assert-native');
 const jsonOut = opt('--json', null);
 const buildTimeoutMs = Number(opt('--build-timeout', '900')) * 1000;
 // strict (default): app/ — <template> .gjs, build-time compiled on every variant.
@@ -314,6 +320,11 @@ const RULES = [
   [/^npm:ember-strict-application-resolver\//, 'app code', M],
   // ---- ember gxt-backend
   [
+    /gxt-backend\/native\//,
+    'gxt-backend/native: native layer (Inc-1 skeleton: stubs + placeholders)',
+    M,
+  ],
+  [
     /gxt-backend\/compile\.ts$/,
     'gxt-backend: compile.ts (runtime render layer + runtime compile)',
     V,
@@ -344,6 +355,11 @@ const RULES = [
   [
     /^packages\/@glimmer\/(component|tracking|owner|env)\//,
     '@glimmer/component|tracking|owner|env (public API)',
+    M,
+  ],
+  [
+    /^packages\/@glimmer\/validator\/lib\/collections\//,
+    'tracked collections (@glimmer/validator/lib/collections, VM-free)',
     M,
   ],
   [/^packages\/@glimmer\/([^/]+)\//, (m) => `@glimmer/${m[1]}`, V],
@@ -427,6 +443,7 @@ function classify(path) {
 function inventory(variant, files) {
   const groups = new Map(); // group -> {cls, parts[], raw}
   const perSource = new Map(); // path -> raw
+  const shippedAbs = new Map(); // absolute source path -> minified bytes
   for (const file of files) {
     const code = readFileSync(file, 'utf8');
     const mapFile = `${file}.map`;
@@ -438,6 +455,7 @@ function inventory(variant, files) {
       const text = arr.join('');
       const raw = Buffer.byteLength(text);
       perSource.set(path, (perSource.get(path) ?? 0) + raw);
+      shippedAbs.set(src, (shippedAbs.get(src) ?? 0) + raw);
       let g = groups.get(group);
       if (!g) groups.set(group, (g = { group, cls, parts: [], raw: 0 }));
       g.parts.push(text);
@@ -459,7 +477,121 @@ function inventory(variant, files) {
     c.brSum += r.br;
   }
   const topSources = [...perSource.entries()].sort((a, b) => b[1] - a[1]).slice(0, 40);
-  return { variant, rows, byClass, topSources };
+  return { variant, rows, byClass, topSources, shippedAbs };
+}
+
+// ---------------------------------------------------------------- --assert-native
+// DoD #2 (design docs-internal-gxt-native-layer-design.md §4): the native app
+// closure must not contain the Glimmer VM, the compat bridge, the classic VM
+// renderer, or the runtime template compiler. Patterns match absolute module
+// ids (rollup) and absolute sourcemap sources.
+const FORBIDDEN_NATIVE = [
+  [
+    /packages\/@glimmer\/(runtime|opcode-compiler|program|vm|wire-format|encoder|node|global-context|reference|destroyable|manager)\//,
+    'Glimmer VM package',
+  ],
+  [
+    /packages\/@glimmer\/validator\/lib\/(tracking|validators|meta)\.ts$/,
+    'Glimmer VM tag protocol',
+  ],
+  [
+    /gxt-backend\/(compile|manager|ember-gxt-wrappers|validator|reference|destroyable|gxt-bridge|helper-manager)\.ts$/,
+    'gxt compat bridge',
+  ],
+  [
+    /-internals\/glimmer\/lib\/(renderer|component-managers\/[^/]+|templates\/(root|outlet)|component)\.ts$/,
+    'classic VM renderer',
+  ],
+  [
+    /(packages|node_modules)\/(@glimmer\/syntax|@handlebars|simple-html-tokenizer)\//,
+    'template compiler',
+  ],
+  [
+    /(glimmer-next|@lifeart\/gxt)\/dist\/(compile-|gxt\.runtime-compiler|rehydration-)/,
+    'gxt runtime compiler / rehydration',
+  ],
+];
+
+const shortId = (id) =>
+  id
+    .replace(/^\0/, '')
+    .replace(/^.*?\/(packages|smoke-tests|glimmer-next|node_modules)\//, '$1/')
+    .replace(/node_modules\/\.pnpm\/[^/]+\/node_modules\//, 'nm/');
+
+// Shortest importer chain from an app entry down to `id` (full importer graph
+// from bundle-stats.json, incl. modules tree-shaken to nothing).
+function importerChain(graph, id) {
+  const isEntry = (x) => /modern-app\/(index\.html|loose\.html|app(-loose)?\/main\.js)/.test(x);
+  const prev = new Map([[id, null]]);
+  const queue = [id];
+  let found = null;
+  while (queue.length) {
+    const x = queue.shift();
+    if (isEntry(x)) {
+      found = x;
+      break;
+    }
+    for (const imp of graph[x] ?? []) {
+      if (!prev.has(imp)) {
+        prev.set(imp, x);
+        queue.push(imp);
+      }
+    }
+  }
+  if (!found) return '(no path to the app entry in the importer graph)';
+  const path = [];
+  for (let x = found; x; x = prev.get(x)) path.push(shortId(x));
+  return path.join(' > ');
+}
+
+function assertNative(result) {
+  const stats = JSON.parse(
+    readFileSync(join(DIST_ROOT, `${result.variant}-stats`, 'bundle-stats.json'), 'utf8')
+  );
+  const rendered = new Map(); // module id -> pre-minify rendered length
+  for (const chunk of stats.chunks) {
+    for (const [id, m] of Object.entries(chunk.modules)) rendered.set(id, m.len);
+  }
+  const why = (id) => FORBIDDEN_NATIVE.find(([re]) => re.test(id))?.[1];
+  const violations = []; // shipped (minified) bytes > 0
+  const preTerserOnly = []; // rollup kept it, terser dropped every byte
+  const graphOnly = []; // in the import graph, rendered to 0 bytes by rollup
+  const seen = new Set();
+  for (const [src, bytes] of result.inventory.shippedAbs) {
+    const reason = why(src);
+    if (!reason || bytes === 0) continue;
+    seen.add(src);
+    violations.push({ id: src, reason, shipped: bytes, rendered: rendered.get(src) ?? 0 });
+  }
+  for (const id of Object.keys(stats.graph)) {
+    const reason = why(id);
+    if (!reason || seen.has(id)) continue;
+    const len = rendered.get(id) ?? 0;
+    (len > 0 ? preTerserOnly : graphOnly).push({ id, reason, shipped: 0, rendered: len });
+  }
+  const print = (title, list, withChain) => {
+    console.log(`\n${title}: ${list.length}`);
+    for (const v of list) {
+      console.log(
+        `  - ${shortId(v.id)} [${v.reason}] shipped ${fmt(v.shipped)} B (min), rendered ${fmt(v.rendered)} B (pre-minify)`
+      );
+      if (withChain) console.log(`      via: ${importerChain(stats.graph, v.id)}`);
+    }
+  };
+  console.log(`\n### --assert-native: ${result.variant}`);
+  print('FORBIDDEN modules shipped (violations)', violations, true);
+  print(
+    'forbidden modules kept by rollup but fully dropped by terser (0 shipped bytes)',
+    preTerserOnly,
+    true
+  );
+  print('forbidden modules in the import graph only (rendered to 0 bytes)', graphOnly, false);
+  console.log(
+    violations.length
+      ? `[assert-native] FAIL: ${violations.length} forbidden module(s) ship in ${result.variant}`
+      : `[assert-native] OK: no forbidden module ships in ${result.variant}`
+  );
+  return { violations, preTerserOnly, graphOnly };
 }
 
 // ---------------------------------------------------------------- main
@@ -549,7 +681,20 @@ if (showInventory) {
   }
 }
 
+if (assertNativeFlag) {
+  const native = results.filter((r) => r.variant.startsWith('gxt-native'));
+  if (native.length === 0) {
+    console.error('[assert-native] no gxt-native variant in this run (use --variants gxt-native)');
+    process.exitCode = 2;
+  }
+  for (const r of native) {
+    r.assertNative = assertNative(r);
+    if (r.assertNative.violations.length) process.exitCode = 1;
+  }
+}
+
 if (jsonOut) {
+  for (const r of results) r.inventory.shippedAbs = Object.fromEntries(r.inventory.shippedAbs);
   writeFileSync(jsonOut, JSON.stringify(results, null, 1));
   log(`wrote ${jsonOut}`);
 }
