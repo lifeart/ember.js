@@ -1,6 +1,7 @@
 // gxt NATIVE layer — the host manager tables gxt consults through
-// `registerHostManagers` (design §2.3). Inc 4a: the COMPONENT slot. Helper and
-// modifier slots are Inc 5.
+// `registerHostManagers` (design §2.3): the COMPONENT slot (Inc 4a; Ember
+// internal components such as LinkTo, Inc 6). Helper and modifier slots live in
+// helper-manager.ts / modifier-manager.ts (Inc 5).
 //
 // How gxt renders a component: `$_c(Def, args, ctx)` → `_component` asks
 // `$_MANAGERS.component.canHandle(Def)`; when true, `handle(Def, args, fw, ctx)`
@@ -25,7 +26,13 @@
 //     (Glimmer manager: willDestroy + Ember `destroy()` + isDestroying /
 //     isDestroyed on the runloop) when gxt removes the node.
 //   - handle (templateOnly definition): its registered template function.
-//   - Ember INTERNAL component managers (LinkTo's InternalComponent) are Inc 6.
+//   - handle (Ember INTERNAL component manager — LinkTo's InternalComponent):
+//     per invocation, the classic `InternalManager.create` with Glimmer's
+//     captured-arguments shape (one compute ref per named argument over gxt's
+//     lazy args), the instance itself as the template context (`getSelf`), the
+//     registered AOT template (native/templates/link-to.gts) as its
+//     `[$template]`, and a gxt destructor that runs Ember `destroy` on
+//     `getDestroyable(instance)`.
 //
 // The owner comes from the gxt render context (`OWNER`, provided on every
 // render root by native/renderer.ts) — the nearest provider up the tree.
@@ -45,6 +52,7 @@ import {
   resolveCurried,
 } from '@lifeart/gxt';
 import { argsProxyFor, unwrapArg } from './args';
+import { destroy } from './destroyable';
 import {
   CustomComponentManager,
   FROM_CAPABILITIES,
@@ -53,6 +61,7 @@ import {
   getOwnComponentTemplate,
 } from './manager-api';
 import { notImplemented } from './not-implemented';
+import { createComputeRef, createConstRef, type Reference, valueForRef } from './reference';
 import { TemplateOnlyComponentDefinition } from './template-only';
 import { templateFor, type GxtTemplate } from './template-factory';
 
@@ -67,6 +76,26 @@ interface ComponentDelegate {
   ): object;
   getContext(component: object): object;
   destroyComponent?(component: object): void;
+}
+
+// Glimmer's InternalComponentManager (`WithCreateInstance`) — the part the
+// classic `InternalManager` (components/internal.ts) implements and uses.
+interface InternalComponentManager {
+  create(
+    owner: object,
+    definition: object,
+    args: { capture(): CapturedArguments },
+    env: null,
+    dynamicScope: null,
+    caller: Reference
+  ): object;
+  getSelf(instance: object): Reference;
+  getDestroyable(instance: object): object | null;
+}
+
+interface CapturedArguments {
+  named: Record<string, Reference>;
+  positional: Reference[];
 }
 
 type ComponentNode = Record<PropertyKey, unknown> & object;
@@ -273,11 +302,7 @@ function handle(
 
   const manager = getInternalComponentManager(definition);
   if (!(manager instanceof CustomComponentManager)) {
-    // Ember's internal component manager (InternalComponent: LinkTo).
-    return notImplemented(
-      `native internal component manager (\`${nameOfDefinition(definition)}\`)`,
-      6
-    );
+    return internalComponent(manager, definition, args, ctx, owner, positional);
   }
   const delegate = delegateFor(manager, owner);
   const ownTemplate = getOwnComponentTemplate(definition);
@@ -311,6 +336,63 @@ function handle(
     }
     if (delegate.capabilities.destructor && typeof delegate.destroyComponent === 'function') {
       gxtRegisterDestructor(node, () => delegate.destroyComponent!(component));
+    }
+    DEFINITION_OF_NODE.set(node, definition);
+    return node;
+  };
+}
+
+// ---------------------------------------------------------------- internal
+// Ember's own internal components (LinkTo; Input / Textarea are documented
+// drops). Glimmer hands the InternalManager a CAPTURED argument set — one
+// Reference per argument — and renders the registered layout with `self` =
+// `getSelf(instance)`. Here every invocation captures its own refs over gxt's
+// lazy args (`createComputeRef(() => args[k])`: a native createCache, so reading
+// a ref inside a binding subscribes to exactly the argument cells it reads), so
+// two invocations are two instances with their own ids / hrefs.
+function internalComponent(
+  manager: InternalComponentManager,
+  definition: object,
+  args: object,
+  ctx: object,
+  owner: object,
+  positional: readonly unknown[]
+): unknown {
+  const registered = getComponentTemplate(definition);
+  const template =
+    registered === undefined ? EMPTY_TEMPLATE : resolveTemplate(registered, owner, definition);
+  const source = args as Record<string, unknown>;
+
+  return function NativeInternalComponent(): object {
+    const named: Record<string, Reference> = {};
+    for (const key of Object.keys(source)) {
+      named[key] = createComputeRef(() => source[key]);
+    }
+    const captured: CapturedArguments = {
+      named,
+      positional: positional.map((value) => createComputeRef(() => unwrapArg(value))),
+    };
+    const instance = manager.create(
+      owner,
+      definition,
+      { capture: () => captured },
+      null,
+      null,
+      // Glimmer's caller is the invoking template's self (a const ref).
+      createConstRef<unknown>(ctx, 'this')
+    );
+    const node = valueForRef(manager.getSelf(instance)) as ComponentNode;
+    if (node[COMPONENT_ID_PROPERTY] === undefined) {
+      node[COMPONENT_ID_PROPERTY] = cId();
+    }
+    node[$template] = template;
+    // captureRenderTree reads `_debug_args` (gxt `$_debug_args`) before `args`;
+    // an InternalComponent's own `args` field holds the captured References,
+    // so hand the Inspector the plain invocation arguments.
+    node['_debug_args'] = args;
+    const destroyable = manager.getDestroyable(instance);
+    if (destroyable !== null) {
+      gxtRegisterDestructor(node, () => destroy(destroyable));
     }
     DEFINITION_OF_NODE.set(node, definition);
     return node;

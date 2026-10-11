@@ -6,7 +6,8 @@
 //
 // `component:link-to` is the REUSED classic LinkTo class (its InternalComponent
 // base runs on native manager-api / reference / validator; its layout is the
-// native link-to template, Inc 6). `component:input` / `component:textarea` are
+// AOT native/templates/link-to.gts, rendered by the internal-component adapter
+// in native/managers.ts). `component:input` / `component:textarea` are
 // documented-drop stubs, registered so resolver lookups fail with the drop
 // message.
 import type Registry from '@ember/-internals/container/lib/registry';
