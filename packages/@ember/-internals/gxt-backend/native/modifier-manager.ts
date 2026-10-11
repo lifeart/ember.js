@@ -44,8 +44,8 @@ import {
   type ModifierDelegate,
 } from './manager-api';
 import { OWNER } from './managers';
-import { notImplemented } from './not-implemented';
-import { on, type InternalModifierManager } from './runtime-helpers';
+import { lookupModifier, modifierNotFound } from './resolver';
+import { type InternalModifierManager } from './runtime-helpers';
 import { untrack } from './validator';
 
 /** gxt context key: `false` on render roots whose modifiers must not run. */
@@ -64,7 +64,6 @@ interface ModifierInstance {
   stopTracking: (() => void) | null;
 }
 
-const KEYWORD_MODIFIERS: Readonly<Record<string, object>> = { on };
 const NO_NAMED: Readonly<Record<string, unknown>> = Object.freeze({});
 
 // ---------------------------------------------------------------- commit queue
@@ -221,19 +220,20 @@ function handle(
     if (resolved.named.length > 0) namedArgs = Object.assign({}, ...resolved.named, namedArgs);
   }
 
-  if (typeof definition === 'string') {
-    const keyword = KEYWORD_MODIFIERS[definition];
-    if (keyword === undefined) {
-      return notImplemented(`native modifier lookup by name ("${definition}", loose mode)`, 8);
-    }
-    definition = keyword;
-  }
-  if (definition === null || definition === undefined) return undefined;
-
   const owner =
     renderCtx === undefined
       ? undefined
       : (getContext<object>(renderCtx as never, OWNER, false) ?? undefined);
+
+  // A modifier NAME (`{{on}}`, a loose-mode `<div {{foo-bar}}>` — G11):
+  // classic `lookupModifier` for the render tree's owner.
+  if (typeof definition === 'string') {
+    const resolved = lookupModifier(owner as Parameters<typeof lookupModifier>[0], definition);
+    if (resolved === null) throw modifierNotFound(definition);
+    definition = resolved;
+  }
+  if (definition === null || definition === undefined) return undefined;
+
   const instance = createInstance(
     definition as object,
     element,

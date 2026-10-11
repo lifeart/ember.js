@@ -60,8 +60,10 @@ import {
   getInternalComponentManager,
   getOwnComponentTemplate,
 } from './manager-api';
-import { notImplemented } from './not-implemented';
 import { createComputeRef, createConstRef, type Reference, valueForRef } from './reference';
+import { componentNotFound, lookupComponent } from './resolver';
+import ClassicComponentStub from './stubs/component';
+import { documentedDrop } from './not-implemented';
 import { TemplateOnlyComponentDefinition } from './template-only';
 import { templateFor, type GxtTemplate } from './template-factory';
 
@@ -99,6 +101,7 @@ interface CapturedArguments {
 }
 
 type ComponentNode = Record<PropertyKey, unknown> & object;
+type InternalOwnerLike = Parameters<typeof lookupComponent>[0];
 
 const EMPTY_POSITIONAL: unknown[] = Object.freeze([]) as unknown as unknown[];
 
@@ -247,22 +250,75 @@ function mergeCurriedArgs(
 }
 
 function handleCurried(curried: object, args: object, fw: unknown, ctx: object): unknown {
-  const { definition, positional, named } = resolveCurried(curried);
-  if (typeof definition === 'string') {
-    return notImplemented(`native component lookup by name ("${definition}", loose mode)`, 8);
-  }
+  const { definition: curriedDefinition, positional, named } = resolveCurried(curried);
+  // `(component "foo-bar")` (loose mode) / a component-or-helper resolved by
+  // name with positional arguments (`$_looseAppend`): the registered component.
+  const name = typeof curriedDefinition === 'string' ? curriedDefinition : null;
+  const definition = name === null ? curriedDefinition : resolveByName(name, ctx);
   const merged = mergeCurriedArgs(named, args as Record<PropertyKey, unknown>);
   if (definition === null || definition === undefined) return EMPTY_TEMPLATE;
+  let resolved: unknown;
   if (canHandle(definition)) {
-    const resolved = handle(definition as object, merged, fw, ctx, positional);
+    resolved = handle(definition as object, merged, fw, ctx, positional);
     // A manager factory closes over `merged`; a template function is
     // constructed by gxt with the INVOCATION args — hand it the merged ones.
-    return isTemplateFn(resolved) || resolved === EMPTY_TEMPLATE
-      ? curriedTemplate(resolved as GxtTemplate, merged)
-      : resolved;
+    if (isTemplateFn(resolved) || resolved === EMPTY_TEMPLATE) {
+      resolved = curriedTemplate(resolved as GxtTemplate, merged);
+    }
+  } else {
+    // a gxt template function (template-only `.gjs` component)
+    resolved = curriedTemplate(definition as GxtTemplate, merged);
   }
-  // a gxt template function (template-only `.gjs` component)
-  return curriedTemplate(definition as GxtTemplate, merged);
+  return name === null ? resolved : namedByLookup(resolved, name);
+}
+
+// ---------------------------------------------------------------- by name
+/**
+ * Loose mode (G11): the component registered as `component:<name>` for the
+ * render tree's owner, or Glimmer's "nothing was found" error.
+ */
+function resolveByName(name: string, ctx: object): object {
+  const definition = lookupComponent(ownerFor(ctx) as InternalOwnerLike, name);
+  if (definition === null) throw componentNotFound(name);
+  if (
+    typeof definition === 'function' &&
+    (definition as { prototype?: unknown }).prototype instanceof ClassicComponentStub
+  ) {
+    // a classic `@ember/component` subclass registered by name
+    documentedDrop(
+      'Classic `@ember/component` Component',
+      'Use @glimmer/component (or a template-only component) instead.'
+    );
+  }
+  if (!canHandle(definition) && !isTemplateFn(definition)) {
+    throw new Error(
+      DEBUG
+        ? `Attempted to load a component, but there wasn't a component manager associated with the definition. The definition was: ${nameOfDefinition(definition)}`
+        : 'BUG: component manager expected'
+    );
+  }
+  return definition;
+}
+
+/**
+ * A definition rendered BY NAME: the Inspector names its node with the
+ * resolver name (classic: the name passed to `lookupComponent`, e.g. a loose
+ * `<LinkTo>` is `link-to`) — per NODE, so the same class used lexically
+ * elsewhere keeps its own name.
+ */
+function namedByLookup(resolved: unknown, name: string): unknown {
+  const inner = resolved as new (args: unknown, fw: unknown) => object;
+  return function NamedComponent(args: unknown, fw: unknown): object {
+    const node = new inner(args, fw);
+    NODE_NAMES.set(node, name);
+    return node;
+  };
+}
+
+function handleByName(name: string, args: object, fw: unknown, ctx: object): unknown {
+  const definition = resolveByName(name, ctx);
+  const resolved = canHandle(definition) ? handle(definition, args, fw, ctx) : definition;
+  return namedByLookup(resolved, name);
 }
 
 function curriedTemplate(template: GxtTemplate, merged: object): unknown {
@@ -275,6 +331,9 @@ function curriedTemplate(template: GxtTemplate, merged: object): unknown {
 function canHandle(definition: unknown): boolean {
   if (definition === null || definition === undefined) return false;
   const type = typeof definition;
+  // A component NAME: a loose-mode by-name invocation (`$_c("foo-bar")`, G11)
+  // or a dynamic component whose value is a name (`{{component this.name}}`).
+  if (type === 'string') return (definition as string).length > 0;
   if (type !== 'object' && type !== 'function') return false;
   if (definition instanceof TemplateOnlyComponentDefinition) return true;
   if (getCurried(definition) !== undefined) return true;
@@ -283,12 +342,13 @@ function canHandle(definition: unknown): boolean {
 }
 
 function handle(
-  definition: object,
+  definition: object | string,
   args: object,
   fw: unknown,
   ctx: object,
   positional: readonly unknown[] = EMPTY_POSITIONAL
 ): unknown {
+  if (typeof definition === 'string') return handleByName(definition, args, fw, ctx);
   if (getCurried(definition) !== undefined) return handleCurried(definition, args, fw, ctx);
   const owner = ownerFor(ctx);
 
@@ -319,7 +379,14 @@ function handle(
           ? EMPTY_POSITIONAL
           : argsProxyFor({ positional, named: {} }, 'component').positional,
     });
-    const node = delegate.getContext(component) as ComponentNode;
+    // A custom manager may have NO template context (`getContext` → null;
+    // Glimmer renders with a null self): the template still needs a node.
+    const context = delegate.getContext(component);
+    const node = (
+      context !== null && (typeof context === 'object' || typeof context === 'function')
+        ? context
+        : {}
+    ) as ComponentNode;
     // gxt tree identity BEFORE gxt adds the node to the render tree (a gxt
     // `Component` gets it as a class field; a manager-created instance does not).
     if (node[COMPONENT_ID_PROPERTY] === undefined) {

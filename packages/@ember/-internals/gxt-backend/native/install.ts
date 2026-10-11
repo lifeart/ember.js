@@ -10,6 +10,7 @@ import { helperManager } from './helper-manager';
 import { componentManager, resolveComponentName } from './managers';
 import { modifierManager } from './modifier-manager';
 import { Outlet } from './outlet';
+import { resolveComponentOrHelper } from './resolver';
 
 let installed = false;
 
@@ -30,6 +31,10 @@ export function install(): void {
     // `unknownProperty`, so `set()` / `notifyPropertyChange()` on untracked
     // properties re-render.
     getProp: _getProp,
+    // Loose-mode ambiguous append (G11: a content-position `{{name …}}` in a
+    // loose template compiles to `$_looseAppend` under
+    // NATIVE_FLAGS.EMBER_LOOSE_COMPONENTS): component, else helper.
+    resolveComponentOrHelper,
   });
   registerHostManagers({
     component: componentManager as never,

@@ -9,14 +9,14 @@
 //     `isTemplateFn` reads the brand. gxt renders it directly.
 //   - an Ember TEMPLATE FACTORY (`factory(owner) -> template`): produced here.
 //     `templateFactory(gxtTemplateFn)` wraps a template function (the factory
-//     returns it for every owner); wire-format input (a stale pre-compiled
-//     addon — the native build has no wire format) and the `precompileTemplate`
-//     / `template:-outlet` placeholders produce PLACEHOLDER factories whose
-//     template throws when RENDERED (the gap is owned by a later increment).
+//     returns it for every owner); a G10 build-time `precompileTemplate` maker
+//     gets a LAZY factory (template-compilation.ts); wire-format input (a stale
+//     pre-compiled addon — the native build has no wire format) and a
+//     `precompileTemplate` string that reached runtime get FAILING factories
+//     whose template throws a descriptive error when RENDERED.
 // `templateFor(value, owner)` resolves either shape (what a component's
 // `setComponentTemplate` registration holds) to a gxt template function.
 import { $SELF, $template, cId, COMPONENT_ID_PROPERTY, isTemplateFn } from '@lifeart/gxt';
-import { notImplemented } from './not-implemented';
 
 export type GxtTemplate = (...args: unknown[]) => unknown;
 export type NativeTemplateFactory = ((owner?: unknown) => GxtTemplate) & {
@@ -24,6 +24,8 @@ export type NativeTemplateFactory = ((owner?: unknown) => GxtTemplate) & {
 };
 
 const NATIVE_TEMPLATE_FACTORIES = new WeakSet<object>();
+// Loose templates (see markLooseTemplate below).
+const LOOSE_TEMPLATES = new WeakSet<object>();
 
 // Part of the `@glimmer/opcode-compiler/lib/template` surface (re-exported by
 // the opcode-compiler index and `@ember/-internals/glimmer`). The native build
@@ -46,11 +48,34 @@ export function factoryForTemplate(template: GxtTemplate): NativeTemplateFactory
   return brand(factory);
 }
 
-export function placeholderTemplateFactory(
-  what: string,
-  inc: number | string
-): NativeTemplateFactory {
-  const template: GxtTemplate = () => notImplemented(what, inc);
+/**
+ * A TemplateFactory whose template is made on first use (`factory(owner)` /
+ * `__fn`): the G10 build-time `precompileTemplate` maker runs lazily, so its
+ * `scope` values are read when the template is first needed, not when the
+ * module evaluates (Glimmer reads `scope()` lazily too).
+ */
+export function lazyFactoryForTemplate(make: () => GxtTemplate): NativeTemplateFactory {
+  let template: GxtTemplate | undefined;
+  const get = (): GxtTemplate => (template ??= make());
+  const factory = (() => get()) as NativeTemplateFactory;
+  Object.defineProperty(factory, '__fn', { get });
+  return brand(factory);
+}
+
+/**
+ * A TemplateFactory whose template throws `message` when RENDERED (module
+ * evaluation and `factory(owner)` stay clean, so the error points at the
+ * template that cannot render, not at an import).
+ */
+export function failingTemplateFactory(message: string): NativeTemplateFactory {
+  // A constructible function: gxt renders a template by constructing it.
+  const template: GxtTemplate = function FailingTemplate(): never {
+    throw new Error(message);
+  };
+  // Renderable in either role (a route template renders loose templates with
+  // the controller as self; a component renders its template): rendering it is
+  // what throws.
+  LOOSE_TEMPLATES.add(template);
   return brand((() => template) as NativeTemplateFactory);
 }
 
@@ -73,7 +98,6 @@ export function templateFor(value: unknown, owner: unknown): GxtTemplate | undef
 // `this` paths read `$_self(node)` = `node[$SELF]`, and it is rendered through
 // `selfComponent`: a fresh gxt render node carrying the self, so gxt never
 // writes args / tree ids / rendered nodes onto the controller or test context.
-const LOOSE_TEMPLATES = new WeakSet<object>();
 
 /** Mark a runtime-compiled template function as loose (`this` = a host self). */
 export function markLooseTemplate(template: GxtTemplate): void {
@@ -102,8 +126,7 @@ export function selfComponent(
 
 export default function templateFactory(serialized: unknown): NativeTemplateFactory {
   if (isTemplateFn(serialized)) return factoryForTemplate(serialized as GxtTemplate);
-  return placeholderTemplateFactory(
-    'native template factory (wire-format templates; compile with the gxt compiler, G10)',
-    8
+  return failingTemplateFactory(
+    'native template factory: a wire-format (pre-compiled Glimmer VM) template cannot render in the gxt-native build — compile the template with the gxt compiler (`.gjs`/`.gts`, or `precompileTemplate(…)`, G10)'
   );
 }

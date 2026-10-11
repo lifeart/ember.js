@@ -286,9 +286,16 @@ export const NATIVE_FLAGS = Object.freeze({
   //   `notifyPropertyChange()` on untracked properties re-render (Glimmer
   //   global-context getProp parity).
   EMBER_PROPERTY_TAGS: true,
-  // TODO (not understood by gxt yet — add as live keys when the gxt change
+  // gxt ember-vm-replacement (Inc 8, compile-only flag), G11: in a LOOSE
+  // template (`precompileTemplate(…)` with `strictMode: false` — compiled at
+  // build time by G10 under EMBER_NATIVE — or a runtime-compiled loose
+  // template) free names resolve BY NAME through the host (native/resolver.ts):
+  // `<FooBar>` / `<Foo::Bar>` / `{{#foo-bar}}` / `{{component "foo-bar"}}` →
+  // `$_c("foo-bar", …)`, a content `{{foo-bar …}}` → `$_looseAppend(…)`
+  // (component or helper). Strict templates are unaffected.
+  EMBER_LOOSE_COMPONENTS: true,
+  // TODO (not understood by gxt yet — add as a live key when the gxt change
   // lands on branch ember-vm-replacement, design §2.6):
-  //   EMBER_LOOSE_COMPONENTS: true, // G11 $_c("Name") for unknown tags        (Inc 8)
   //   EMBER_EACH_IN: true,          // G5  each-in lowering                    (Inc 9)
 });
 
@@ -396,6 +403,17 @@ export const GXT_NATIVE_ALIASES = [
     match: 'exact',
     inc: 4,
   },
+  // The BARE `@glimmer/runtime` entry (Inc 8): its public surface (`on`,
+  // `hash` / `array` / `concat` / `get` / `fn`, `invokeHelper`,
+  // `templateOnlyComponent`) is exactly native/runtime-helpers. Ember source
+  // never imports the bare entry in the native closure (`--assert-native`);
+  // classic test modules do.
+  {
+    find: '@glimmer/runtime',
+    target: nativeTarget('runtime-helpers'),
+    match: 'exact',
+    inc: 8,
+  },
   // ---- package-level ----
   { find: '@glimmer/validator', target: nativeTarget('validator'), match: 'tolerant', inc: 3 },
   { find: '@glimmer/reference', target: nativeTarget('reference'), match: 'tolerant', inc: 3 },
@@ -416,6 +434,17 @@ export const GXT_NATIVE_ALIASES = [
     target: nativeTarget('runtime-compile'),
     match: 'exact',
     inc: 7,
+  },
+  // `template()` from `@ember/template-compiler` (the explicit `<template>`
+  // form; classic test modules call it at module / test time): the same
+  // runtime `template()` (strict by default, `scope` / `eval`). Test pages
+  // only in practice — an app closure importing it would carry the runtime
+  // compiler, which `--assert-native` rejects.
+  {
+    find: '@ember/template-compiler',
+    target: nativeTarget('runtime-compile'),
+    match: 'exact',
+    inc: 8,
   },
   // internal-test-helpers (vite test pages only — rollup never builds them):
   // the runtime compile entry and the native RenderingTestCase. Relative

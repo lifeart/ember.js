@@ -223,6 +223,7 @@ export default defineConfig(({ mode }) => {
             EMBER_OUTLET: 'false',
             EMBER_PROPERTY_TAGS: 'false',
             EMBER_SELF: 'false',
+            EMBER_LOOSE_COMPONENTS: 'false',
           },
         }),
     build,

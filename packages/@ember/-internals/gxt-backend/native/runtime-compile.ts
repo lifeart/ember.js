@@ -100,11 +100,14 @@ function compileToFunction(
     moduleName,
     bindings,
     lexicalScope,
+    strictMode,
     evaluate,
   }: {
     moduleName: string;
     bindings: readonly string[];
     lexicalScope?: (name: string) => boolean;
+    /** `false`: a LOOSE template — free names resolve by name (G11). */
+    strictMode: boolean;
     evaluate: Evaluator;
   }
 ): GxtTemplate {
@@ -113,6 +116,7 @@ function compileToFunction(
     bindings: new Set(bindings),
     moduleName,
     lexicalScope,
+    strictMode,
   });
   if (result.errors.length > 0) {
     throw new Error(describeErrors(result, moduleName));
@@ -152,12 +156,14 @@ export default function compile(
   scopeValues: Record<string, unknown> = {}
 ): NativeTemplateFactory {
   const moduleName = options.moduleName ?? options.meta?.moduleName ?? '(unknown template module)';
+  const strictMode = options.strictMode === true;
   const template = compileToFunction(templateSource, {
     moduleName,
     bindings: Object.keys(scopeValues),
+    strictMode,
     evaluate: evaluateWithScope(scopeValues),
   });
-  if (options.strictMode !== true) markLooseTemplate(template);
+  if (!strictMode) markLooseTemplate(template);
   return factoryForTemplate(template);
 }
 
@@ -204,11 +210,13 @@ export function template(templateString: string, options: TemplateOptions = {}):
   const moduleName = options.moduleName ?? '(runtime template)';
   let compiled: GxtTemplate;
   let explicitThis: { value: unknown } | null = null;
+  const strictMode = options.strictMode !== false;
   if (typeof options.eval === 'function') {
     compiled = compileToFunction(templateString, {
       moduleName,
       bindings: [],
       lexicalScope: evalScope(options.eval),
+      strictMode,
       evaluate: evaluateWithEval(options.eval),
     });
   } else {
@@ -221,6 +229,7 @@ export function template(templateString: string, options: TemplateOptions = {}):
     compiled = compileToFunction(templateString, {
       moduleName,
       bindings: Object.keys(scope),
+      strictMode,
       evaluate: evaluateWithScope(scope),
     });
   }
@@ -233,7 +242,7 @@ export function template(templateString: string, options: TemplateOptions = {}):
       return inner.apply(this, arguments as unknown as unknown[]);
     }) as GxtTemplate;
   }
-  if (options.strictMode === false) markLooseTemplate(compiled);
+  if (!strictMode) markLooseTemplate(compiled);
   const component = options.component ?? templateOnlyComponent(moduleName);
   if (DEBUG && typeof component !== 'object' && typeof component !== 'function') {
     throw new Error('template(): `component` must be a component class or definition');

@@ -1,16 +1,31 @@
 // gxt NATIVE layer — alias target for `@ember/template-compilation`.
 //
 // `precompileTemplate()` is a BUILD-TIME macro. In the native build the gxt
-// compiler will consume it (G10 → Inc 8: `scope: () => ({…})` = lexical,
-// `strictMode: false` = loose). Until then a surviving call (e.g. the loose
-// modern-app flavor) returns a PLACEHOLDER factory (template-factory.ts): module
-// evaluation and `factory(owner)` stay clean, rendering the result throws — so
-// the first boot failure is the real gap rather than an import-time crash.
+// compiler compiles every call at build time (G10, under NATIVE_FLAGS
+// .EMBER_NATIVE): it replaces the template STRING with a template MAKER —
+// `(scopeValues) => $_tpl(function () {…})`, the template's lexical names bound
+// from the call's `scope: () => ({…})` — and leaves the call and its options in
+// place. At runtime this `precompileTemplate(maker, options)` returns a native
+// TemplateFactory that makes the template on first use (`scope()` read lazily,
+// like Glimmer) and marks it LOOSE unless `strictMode: true` (Ember's default
+// is loose: rendered with a host self — a route's controller — via G6).
+//
+// A call whose string survived the build (a non-static template / options, a
+// module the gxt compiler did not process) cannot be compiled without a
+// runtime compiler: it returns a PLACEHOLDER factory (template-factory.ts) that
+// throws when rendered — module evaluation and `factory(owner)` stay clean, so
+// the failure points at the real gap.
 //
 // `compileTemplate()` (runtime compilation) works once a runtime compiler has
 // been registered (`__registerTemplateCompiler`) — the native entry for that is
 // `native/runtime-compile.ts` (Inc 7, tests / @ember/template-compiler/runtime).
-import { placeholderTemplateFactory } from './template-factory';
+import {
+  lazyFactoryForTemplate,
+  failingTemplateFactory,
+  markLooseTemplate,
+  type GxtTemplate,
+  type NativeTemplateFactory,
+} from './template-factory';
 
 interface TemplateCompiler {
   compile(...args: unknown[]): unknown;
@@ -31,12 +46,33 @@ export const compileTemplate = (...args: unknown[]): unknown => {
   return __emberTemplateCompiler.compile(...args);
 };
 
+interface PrecompileOptions {
+  strictMode?: boolean;
+  scope?: () => Record<string, unknown>;
+  moduleName?: string;
+}
+
+/** The gxt G10 template maker that replaced a `precompileTemplate` string. */
+type TemplateMaker = (scopeValues: Record<string, unknown>) => GxtTemplate;
+
+const NO_SCOPE: Readonly<Record<string, unknown>> = Object.freeze({});
+
 export function precompileTemplate(
-  _templateString: string,
-  _options?: { strictMode?: boolean; scope?: () => Record<string, unknown>; moduleName?: string }
-): (owner?: unknown) => () => never {
-  return placeholderTemplateFactory(
-    'native precompileTemplate (must be compiled at build time by the gxt compiler, G10)',
-    8
+  template: string | TemplateMaker,
+  options?: PrecompileOptions
+): NativeTemplateFactory {
+  if (typeof template === 'function') {
+    const loose = options?.strictMode !== true;
+    const scope = options?.scope;
+    return lazyFactoryForTemplate(() => {
+      const compiled = template(scope === undefined ? NO_SCOPE : scope());
+      if (loose) markLooseTemplate(compiled);
+      return compiled;
+    });
+  }
+  return failingTemplateFactory(
+    `precompileTemplate: a template string reached runtime (${
+      options?.moduleName ?? 'unknown module'
+    }). The gxt-native build has no runtime template compiler: \`precompileTemplate\` must be called with a static template string and static options (\`strictMode\` literal, \`scope: () => ({ … })\`) so the gxt compiler compiles it at build time (G10).`
   );
 }

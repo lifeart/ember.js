@@ -29,9 +29,12 @@
 //     `array`, `concat`, `get`, `fn`, `and`, `or`, classic `unique-id` /
 //     `element`): one native reference per argument, the helper called once
 //     per call site;
-//   - a string: an unbound Ember keyword helper gxt does not compile natively
-//     (`neq`, `gt`, …; Ember auto-imports them in strict mode). Any other name
-//     is a loose-mode lookup (Inc 8).
+//   - a string: a loose-mode helper NAME (`(foo-bar)`, `attr={{foo-bar}}`, a
+//     `{{foo-bar}}` the host resolved to a helper — G11) or an unbound Ember
+//     keyword helper gxt does not compile natively (`neq`, `gt`, …; Ember
+//     auto-imports them in strict mode): resolved with classic `lookupHelper`
+//     (native/resolver.ts) when the call site's instance is created; a miss is
+//     Glimmer's "nothing was found" error.
 import { DEBUG } from '@glimmer/env';
 import {
   getContext,
@@ -43,9 +46,9 @@ import { argsProxyFor, unwrapArg, type ArgsSource } from './args';
 import { _hasDestroyableChildren, destroy, isDestroying } from './destroyable';
 import { getInternalHelperManager, CustomHelperManager, type HelperDelegate } from './manager-api';
 import { OWNER } from './managers';
-import { notImplemented } from './not-implemented';
 import { createComputeRef, valueForRef, type Reference } from './reference';
-import { KEYWORD_HELPERS, type InternalHelper } from './runtime-helpers';
+import { helperNotFound, lookupHelper } from './resolver';
+import { type InternalHelper } from './runtime-helpers';
 import { createCache, getValue, type Cache } from './validator';
 
 interface HelperInstance {
@@ -74,12 +77,16 @@ function describe(value: unknown): string {
 /**
  * The helper instance for one call site. `source` holds the call site's
  * current arguments; it is updated on every evaluation of the call site.
+ * `key` is what the call site evaluates (a definition or a helper NAME) — a
+ * name resolves here, once per instance (Glimmer resolves a free name once
+ * per template + owner).
  */
 function createInstance(
-  definition: object,
+  key: object | string,
   owner: object | undefined,
   source: ArgsSource
 ): HelperInstance {
+  const definition = typeof key === 'string' ? resolveHelperName(key, owner) : key;
   const manager = getInternalHelperManager(definition) as
     | CustomHelperManager
     | InternalHelper
@@ -98,7 +105,7 @@ function createInstance(
     }
     const ref = manager({ positional, named }, owner);
     return {
-      definition,
+      definition: key,
       source,
       cache: createCache(() => valueForRef(ref)),
       destroyable: _hasDestroyableChildren(ref) ? ref : null,
@@ -115,7 +122,7 @@ function createInstance(
     const destroyable = delegate.capabilities.hasDestroyable
       ? (delegate.getDestroyable!(bucket) ?? null)
       : null;
-    return { definition, source, cache, destroyable };
+    return { definition: key, source, cache, destroyable };
   }
 
   throw new Error(
@@ -123,6 +130,12 @@ function createInstance(
       ? `Attempted to use a value as a helper, but it was not an object or function. Helper definitions must be objects or functions with an associated helper manager. The value was: ${describe(definition)}`
       : 'BUG: helper manager expected'
   );
+}
+
+function resolveHelperName(name: string, owner: object | undefined): object {
+  const definition = lookupHelper(owner as Parameters<typeof lookupHelper>[0], name);
+  if (definition === null) throw helperNotFound(name);
+  return definition;
 }
 
 // ---------------------------------------------------------------- call sites
@@ -136,7 +149,7 @@ function destroyInstance(instance: HelperInstance): void {
 function instanceFor(
   ctx: object,
   site: number,
-  definition: object,
+  definition: object | string,
   positional: readonly unknown[],
   named: Readonly<Record<string, unknown>>
 ): HelperInstance {
@@ -192,21 +205,15 @@ function handle(
     if (resolved.named.length > 0) namedArgs = Object.assign({}, ...resolved.named, namedArgs);
   }
 
-  if (typeof definition === 'string') {
-    const keyword = KEYWORD_HELPERS[definition];
-    if (keyword === undefined) {
-      return notImplemented(`native helper lookup by name ("${definition}", loose mode)`, 8);
-    }
-    definition = keyword;
-  }
-
-  if (definition === null || definition === undefined) return undefined;
+  if (definition === null || definition === undefined || definition === '') return undefined;
 
   if (ctx !== null && typeof ctx === 'object' && typeof site === 'number') {
-    return getValue(instanceFor(ctx, site, definition as object, positional, namedArgs).cache);
+    return getValue(
+      instanceFor(ctx, site, definition as object | string, positional, namedArgs).cache
+    );
   }
   // No call site to own it (not compiler-emitted): a one-shot invocation.
-  const instance = createInstance(definition as object, ownerOf(ctx), {
+  const instance = createInstance(definition as object | string, ownerOf(ctx), {
     positional,
     named: namedArgs,
   });

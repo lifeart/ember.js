@@ -28,11 +28,11 @@
 //
 // Route templates are COMPONENTS (`hasInternalComponentManager`: a strict
 // `.gjs`/`.gts` template (gxt template function), a component class, a
-// `templateOnly()` definition) or LOOSE runtime-compiled templates (`this` =
-// the controller, rendered through `selfComponent` — G6 EMBER_SELF, Inc 7). A
-// build-time loose template (`.hbs` / `precompileTemplate` / wire format) needs
-// G10 AOT and fails with an explicit `not implemented (Inc 8)` error instead of
-// rendering wrongly.
+// `templateOnly()` definition) or LOOSE templates (`this` = the controller,
+// rendered through `selfComponent` — G6 EMBER_SELF): runtime-compiled (Inc 7)
+// or a build-time `precompileTemplate(…)` compiled by gxt (G10, Inc 8). Anything
+// else (a wire-format template from a stale pre-compiled addon) fails loudly
+// instead of rendering wrongly.
 //
 // The outlet manages its own anchor-delimited region instead of gxt `$_dc`:
 // `$_dc` leaves one anchor comment behind per swap and treats object
@@ -63,7 +63,6 @@ import {
 } from '@lifeart/gxt';
 import { hasInternalComponentManager } from './manager-api';
 import { nameNode, OWNER } from './managers';
-import { notImplemented } from './not-implemented';
 import type { NativeRenderRoot, Renderer } from './renderer';
 import {
   factoryForTemplate,
@@ -196,9 +195,8 @@ export function Outlet(this: GxtNode): unknown {
     // rendered on a fresh gxt node whose self is the controller.
     const loose = isLooseTemplate(template);
     if (!loose && !hasInternalComponentManager(template)) {
-      return notImplemented(
-        `native route template for \`${definition.name}\`: a build-time loose template (\`.hbs\` / \`precompileTemplate\` / wire format) needs G10 AOT compilation (runtime-compiled loose templates already render with \`this\` = the controller) — use a strict \`.gjs\`/\`.gts\` route template (a component receiving @model / @controller)`,
-        8
+      throw new Error(
+        `native route template for \`${definition.name}\` is neither a component nor a gxt-compiled template (a wire-format template from a pre-compiled addon?): compile it with the gxt compiler — a \`.gjs\`/\`.gts\` route template, or a \`precompileTemplate(…)\` call (G10)`
       );
     }
     // Routable engines render with their own owner (classic outletOwner).

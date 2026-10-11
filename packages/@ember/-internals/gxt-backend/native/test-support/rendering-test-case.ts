@@ -24,6 +24,7 @@ import { helper, Helper } from '@ember/-internals/glimmer';
 import type EngineInstance from '@ember/engine/instance';
 import type { BootOptions, EngineInstanceOptions } from '@ember/engine/instance';
 import EmberObject from '@ember/object';
+import { registerDestructor } from '@ember/destroyable';
 import { run } from '@ember/runloop';
 import buildOwner from 'internal-test-helpers/lib/build-owner';
 import { define } from 'internal-test-helpers/lib/module-for';
@@ -132,10 +133,20 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
     const template = factory(owner);
     const bootOptions = this.getBootOptions();
     run(() => {
-      this.#root = renderRoot(selfComponent(template, this.component), {
+      const root = renderRoot(selfComponent(template, this.component), {
         owner,
         parent: this.element,
         interactive: bootOptions?.isInteractive !== false,
+      });
+      this.#root = root;
+      // classic: the context IS the `-top-level` component that owns the
+      // render — destroying it (`runDestroy(this.component)`) tears the
+      // rendered tree down (helpers / modifiers / components destroyed).
+      registerDestructor(this.component, () => {
+        if (this.#root === root) {
+          this.#root = null;
+          root.destroy();
+        }
       });
     });
   }
