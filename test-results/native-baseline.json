@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-11T13:11:31.105Z",
+    "capturedAt": "2026-10-11T14:02:47.217Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "e33adf48ea",
-    "totalTests": 667,
-    "totalModules": 100,
+    "emberCommit": "dd2ca582f4",
+    "totalTests": 2277,
+    "totalModules": 141,
     "quarantinedTests": 0,
-    "totalAssertions": 1895,
-    "totalAssertionsPassing": 1895
+    "totalAssertions": 10835,
+    "totalAssertionsPassing": 10786
   },
   "modules": {
     "@cached decorator: get": {
@@ -270,6 +270,227 @@
       "assertionsPassing": 4,
       "failingTests": []
     },
+    "Helpers test: inline {{if}} and {{unless}} without the inverse argument": {
+      "total": 100,
+      "passing": 99,
+      "assertionsTotal": 495,
+      "assertionsPassing": 494,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: nested {{if}} helpers (returning falsy values)": {
+      "total": 100,
+      "passing": 99,
+      "assertionsTotal": 495,
+      "assertionsPassing": 494,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: nested {{if}} helpers (returning truthy values)": {
+      "total": 100,
+      "passing": 99,
+      "assertionsTotal": 495,
+      "assertionsPassing": 494,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: nested {{unless}} helpers (returning falsy values)": {
+      "total": 100,
+      "passing": 99,
+      "assertionsTotal": 495,
+      "assertionsPassing": 494,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: nested {{unless}} helpers (returning truthy values)": {
+      "total": 100,
+      "passing": 99,
+      "assertionsTotal": 495,
+      "assertionsPassing": 494,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: {{array}}": {
+      "total": 14,
+      "passing": 12,
+      "assertionsTotal": 38,
+      "assertionsPassing": 36,
+      "failingTests": [
+        {
+          "name": " the array helper can be shadowed",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " capture array values in JS to assert deep equal",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: {{concat}}": {
+      "total": 4,
+      "passing": 3,
+      "assertionsTotal": 12,
+      "assertionsPassing": 11,
+      "failingTests": [
+        {
+          "name": " it can be used as input for other helpers",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: {{fn}}": {
+      "total": 10,
+      "passing": 3,
+      "assertionsTotal": 9,
+      "assertionsPassing": 2,
+      "failingTests": [
+        {
+          "name": " fn can be shadowed",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " updates when arguments change",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " updates when the function changes",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " a stashed fn result update arguments when invoked",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " a stashed fn result invokes the correct function when the bound function changes",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " can use `this` if bound prior to passing to fn",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " partially applies each layer when nested [GH#17959]",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: {{get}}": {
+      "total": 21,
+      "passing": 19,
+      "assertionsTotal": 74,
+      "assertionsPassing": 70,
+      "failingTests": [
+        {
+          "name": " can be shadowed",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " should be able to get an object value with a path from this.args in a glimmer component",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: {{hash}}": {
+      "total": 12,
+      "passing": 11,
+      "assertionsTotal": 20,
+      "assertionsPassing": 19,
+      "failingTests": [
+        {
+          "name": " can be shadowed",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: {{if}} used in attribute position": {
+      "total": 100,
+      "passing": 99,
+      "assertionsTotal": 495,
+      "assertionsPassing": 494,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: {{if}} used with another helper": {
+      "total": 100,
+      "passing": 99,
+      "assertionsTotal": 495,
+      "assertionsPassing": 494,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: {{log}}": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "Helpers test: {{unique-id}}": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 1035,
+      "assertionsPassing": 1035,
+      "failingTests": []
+    },
+    "Helpers test: {{unique-id}} JS": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Helpers test: {{unless}} used in attribute position": {
+      "total": 100,
+      "passing": 99,
+      "assertionsTotal": 495,
+      "assertionsPassing": 494,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: {{unless}} used with another helper": {
+      "total": 100,
+      "passing": 99,
+      "assertionsTotal": 495,
+      "assertionsPassing": 494,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
     "Keys behavior with observers": {
       "total": 7,
       "passing": 7,
@@ -297,6 +518,230 @@
       "assertionsTotal": 4,
       "assertionsPassing": 4,
       "failingTests": []
+    },
+    "Syntax test: Multiple {{#let as}} helpers": {
+      "total": 5,
+      "passing": 3,
+      "assertionsTotal": 14,
+      "assertionsPassing": 12,
+      "failingTests": [
+        {
+          "name": " the scoped variable is not available outside the {{#let}} block",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " nested {{#let}} blocks should have access to root context",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: toggling {{#each as}}": {
+      "total": 39,
+      "passing": 38,
+      "assertionsTotal": 189,
+      "assertionsPassing": 187,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: toggling {{#each}}": {
+      "total": 39,
+      "passing": 38,
+      "assertionsTotal": 189,
+      "assertionsPassing": 187,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: {{#each as}} DOM mutation test": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "Syntax test: {{#each as}} undefined path": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "Syntax test: {{#each}} with array proxies, arrangedContent depends on external content": {
+      "total": 23,
+      "passing": 23,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "Syntax test: {{#each}} with array proxies, content is updated after init": {
+      "total": 23,
+      "passing": 23,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "Syntax test: {{#each}} with array proxies, modifying itself": {
+      "total": 23,
+      "passing": 23,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "Syntax test: {{#each}} with array proxies, replacing its content": {
+      "total": 23,
+      "passing": 23,
+      "assertionsTotal": 160,
+      "assertionsPassing": 160,
+      "failingTests": []
+    },
+    "Syntax test: {{#each}} with array-like objects implementing Symbol.iterator": {
+      "total": 23,
+      "passing": 21,
+      "assertionsTotal": 162,
+      "assertionsPassing": 160,
+      "failingTests": [
+        {
+          "name": " the scoped variable is not available outside the {{#each}} block.",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " the scoped variable is not available outside the {{#each}} block",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: {{#each}} with array-like objects implementing forEach": {
+      "total": 23,
+      "passing": 21,
+      "assertionsTotal": 162,
+      "assertionsPassing": 160,
+      "failingTests": [
+        {
+          "name": " the scoped variable is not available outside the {{#each}} block.",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " the scoped variable is not available outside the {{#each}} block",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: {{#each}} with emberA-wrapped arrays": {
+      "total": 23,
+      "passing": 21,
+      "assertionsTotal": 162,
+      "assertionsPassing": 160,
+      "failingTests": [
+        {
+          "name": " the scoped variable is not available outside the {{#each}} block.",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " the scoped variable is not available outside the {{#each}} block",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: {{#each}} with native Set": {
+      "total": 23,
+      "passing": 21,
+      "assertionsTotal": 147,
+      "assertionsPassing": 145,
+      "failingTests": [
+        {
+          "name": " the scoped variable is not available outside the {{#each}} block.",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " the scoped variable is not available outside the {{#each}} block",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: {{#each}} with native arrays": {
+      "total": 23,
+      "passing": 21,
+      "assertionsTotal": 162,
+      "assertionsPassing": 160,
+      "failingTests": [
+        {
+          "name": " the scoped variable is not available outside the {{#each}} block.",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " the scoped variable is not available outside the {{#each}} block",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: {{#each}} with sparse arrays": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 25,
+      "assertionsPassing": 25,
+      "failingTests": []
+    },
+    "Syntax test: {{#if}}": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "Syntax test: {{#if}} and {{#unless}} without inverse": {
+      "total": 104,
+      "passing": 103,
+      "assertionsTotal": 582,
+      "assertionsPassing": 581,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: {{#if}} with inverse": {
+      "total": 104,
+      "passing": 103,
+      "assertionsTotal": 582,
+      "assertionsPassing": 581,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: {{#let as}}": {
+      "total": 8,
+      "passing": 7,
+      "assertionsTotal": 30,
+      "assertionsPassing": 29,
+      "failingTests": [
+        {
+          "name": " the scoped variable is not available outside the {{#let}} block.",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: {{#unless}} with inverse": {
+      "total": 104,
+      "passing": 103,
+      "assertionsTotal": 582,
+      "assertionsPassing": 581,
+      "failingTests": [
+        {
+          "name": " evaluation should be lazy",
+          "category": "gxt:triage"
+        }
+      ]
     },
     "addObserver": {
       "total": 12,
@@ -452,6 +897,13 @@
       "assertionsPassing": 7,
       "failingTests": []
     },
+    "gxt-native | ApplicationTestCase: loose route templates (this = controller)": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
     "gxt-native | LinkTo: active state": {
       "total": 5,
       "passing": 5,
@@ -485,6 +937,13 @@
       "passing": 3,
       "assertionsTotal": 6,
       "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "gxt-native | RenderingTestCase": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 28,
+      "assertionsPassing": 28,
       "failingTests": []
     },
     "gxt-native | attributes": {
@@ -562,6 +1021,13 @@
       "passing": 5,
       "assertionsTotal": 9,
       "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "gxt-native | runtime template()": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
       "failingTests": []
     },
     "gxt-native | {{on}}": {
@@ -710,7 +1176,33 @@
       "assertionsTotal": 4,
       "assertionsPassing": 4,
       "failingTests": []
+    },
+    "{{in-element}}": {
+      "total": 8,
+      "passing": 4,
+      "assertionsTotal": 30,
+      "assertionsPassing": 25,
+      "failingTests": [
+        {
+          "name": " does not allow insertBefore=non-null-value",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " does not allow null as a destination element",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " does not undefined as a destination element",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " appending to the root element should not cause double clearing",
+          "category": "gxt:triage"
+        }
+      ]
     }
   },
-  "categories": {}
+  "categories": {
+    "gxt:triage": 44
+  }
 }

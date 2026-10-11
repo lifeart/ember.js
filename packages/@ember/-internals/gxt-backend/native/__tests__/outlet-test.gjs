@@ -308,10 +308,18 @@ moduleFor(
       assert.strictEqual(destructors, 1, 'route components destroyed');
     }
 
-    async ['@test a loose route template (this = controller) fails with the Inc 8 error'](assert) {
+    async ['@test a build-time precompileTemplate route template fails with the Inc 8 (G10) error'](
+      assert
+    ) {
+      // (runtime-compiled loose route templates render with `this` = the
+      // controller since Inc 7 — gxt-native | ApplicationTestCase: loose route
+      // templates; a build-time `precompileTemplate` needs G10 AOT.)
       this.add('template:index', precompileTemplate('{{this.title}}'));
 
-      await assert.rejects(this.visit('/'), /native route template for `index`.*not implemented \(Inc 8\)/s);
+      await assert.rejects(
+        this.visit('/'),
+        /native route template for `index`.*needs G10.*not implemented \(Inc 8\)/s
+      );
     }
   }
 );

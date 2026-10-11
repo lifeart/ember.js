@@ -16,6 +16,18 @@
     "packages/@ember/-internals/container/tests/*_test.js",
     "packages/@ember/service/tests/*_test.{js,ts}",
     "packages/@ember/controller/tests/*_test.js",
-    "packages/@ember/-internals/glimmer/tests/integration/helpers/helper-manager-test.js"
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/helper-manager-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/concat-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/hash-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/array-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/get-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/fn-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/if-unless-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/log-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/unique-id-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/syntax/if-unless-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/syntax/each-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/syntax/let-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/syntax/public-in-element-test.js"
   ]
 }
