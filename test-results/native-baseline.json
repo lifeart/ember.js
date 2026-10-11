@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-11T17:51:39.409Z",
+    "capturedAt": "2026-10-11T20:59:30.305Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "ae2532ee41",
-    "totalTests": 3042,
+    "emberCommit": "77d4dcf500",
+    "totalTests": 3049,
     "totalModules": 213,
     "quarantinedTests": 0,
-    "totalAssertions": 13926,
-    "totalAssertionsPassing": 13910
+    "totalAssertions": 13945,
+    "totalAssertionsPassing": 13936
   },
   "modules": {
     "<LinkTo /> component (rendering tests)": {
@@ -472,15 +472,10 @@
     },
     "Helpers test: custom helpers": {
       "total": 35,
-      "passing": 34,
+      "passing": 35,
       "assertionsTotal": 91,
-      "assertionsPassing": 90,
-      "failingTests": [
-        {
-          "name": " it cannot override built-in syntax",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 91,
+      "failingTests": []
     },
     "Helpers test: default helper manager": {
       "total": 9,
@@ -575,15 +570,10 @@
     },
     "Helpers test: {{element}}": {
       "total": 14,
-      "passing": 13,
-      "assertionsTotal": 30,
-      "assertionsPassing": 29,
-      "failingTests": [
-        {
-          "name": " it can be passed as argument and works with ...attributes",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 14,
+      "assertionsTotal": 32,
+      "assertionsPassing": 32,
+      "failingTests": []
     },
     "Helpers test: {{fn}}": {
       "total": 10,
@@ -776,23 +766,10 @@
     },
     "Strict Mode - renderComponent": {
       "total": 27,
-      "passing": 24,
-      "assertionsTotal": 142,
-      "assertionsPassing": 137,
-      "failingTests": [
-        {
-          "name": " renderComponent is eager, so it tracks with its parent",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " multiple calls to render in to the same element appear as siblings",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " multiple calls to render in to the same element appear as siblings and can be updated",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 27,
+      "assertionsTotal": 143,
+      "assertionsPassing": 143,
+      "failingTests": []
     },
     "Strict Mode - renderComponent (direct)": {
       "total": 2,
@@ -1278,17 +1255,17 @@
       "failingTests": []
     },
     "gxt-native | helpers": {
-      "total": 15,
-      "passing": 15,
-      "assertionsTotal": 53,
-      "assertionsPassing": 53,
+      "total": 16,
+      "passing": 16,
+      "assertionsTotal": 54,
+      "assertionsPassing": 54,
       "failingTests": []
     },
     "gxt-native | loose-mode resolution": {
-      "total": 17,
-      "passing": 17,
-      "assertionsTotal": 52,
-      "assertionsPassing": 52,
+      "total": 20,
+      "passing": 20,
+      "assertionsTotal": 55,
+      "assertionsPassing": 55,
       "failingTests": []
     },
     "gxt-native | modifiers": {
@@ -1313,10 +1290,10 @@
       "failingTests": []
     },
     "gxt-native | renderComponent": {
-      "total": 10,
-      "passing": 10,
-      "assertionsTotal": 21,
-      "assertionsPassing": 21,
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 33,
+      "assertionsPassing": 33,
       "failingTests": []
     },
     "gxt-native | renderSettled": {
@@ -1545,6 +1522,6 @@
     }
   },
   "categories": {
-    "gxt:triage": 9
+    "gxt:triage": 4
   }
 }
