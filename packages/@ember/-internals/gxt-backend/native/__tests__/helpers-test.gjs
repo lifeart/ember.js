@@ -274,7 +274,8 @@ module('gxt-native | helpers', function (hooks) {
     }
     this.render(Root);
     const parts = () => [
-      textOf(this.element).split('x')[0],
+      // (the whitespace between <Show> and <i> renders, as in Glimmer)
+      textOf(this.element).split('x')[0].trim(),
       this.element.querySelector('i').textContent,
       this.element.querySelector('b').textContent,
     ];

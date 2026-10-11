@@ -47,6 +47,10 @@
     "packages/@ember/-internals/glimmer/tests/integration/application/rendering-test.js",
     "packages/@ember/-internals/glimmer/tests/integration/application/debug-render-tree-test.ts",
     "packages/@ember/-internals/glimmer/tests/integration/application/helper-registration-test.js",
-    "packages/@ember/-internals/glimmer/tests/integration/components/link-to/*-test.js"
+    "packages/@ember/-internals/glimmer/tests/integration/components/link-to/*-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/syntax/each-in-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/helpers/element-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/components/runtime-template-compiler-explicit-test.ts",
+    "packages/@ember/-internals/glimmer/tests/integration/components/runtime-template-compiler-implicit-test.ts"
   ]
 }

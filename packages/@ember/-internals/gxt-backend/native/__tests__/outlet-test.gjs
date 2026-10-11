@@ -290,6 +290,33 @@ moduleFor(
       );
     }
 
+    async ['@test debugRenderTree: a loose route template is one route-template node holding its components'](
+      assert
+    ) {
+      this.add(
+        'template:application',
+        precompileTemplate('<HelloWorld @name="first" />')
+      );
+      this.add(
+        'component:hello-world',
+        setComponentTemplate(precompileTemplate('{{@name}}'), templateOnly())
+      );
+      await this.visit('/');
+      const [top] = shape(captureRenderTree(this.applicationInstance));
+      const inner = top.children[0].children[0];
+      assert.deepEqual(inner, {
+        type: 'outlet',
+        name: 'main',
+        children: [
+          {
+            type: 'route-template',
+            name: 'application',
+            children: [{ type: 'component', name: 'hello-world', children: [] }],
+          },
+        ],
+      });
+    }
+
     async ['@test destroying the application instance tears the outlet tree down'](assert) {
       let destructors = 0;
       class Widget extends Component {
