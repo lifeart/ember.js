@@ -26,12 +26,13 @@
 //     outgoing route never sees the incoming route's model);
 //   - the route renders with the outlet state's owner (`render.owner`).
 //
-// Route templates must be COMPONENTS (`hasInternalComponentManager`): a strict
+// Route templates are COMPONENTS (`hasInternalComponentManager`: a strict
 // `.gjs`/`.gts` template (gxt template function), a component class, a
-// `templateOnly()` definition. A route template where `this` is the controller
-// (loose `.hbs` / `precompileTemplate` / wire format) needs G6 EMBER_SELF + G10:
-// it fails with an explicit `not implemented (Inc 8)` error instead of rendering
-// wrongly.
+// `templateOnly()` definition) or LOOSE runtime-compiled templates (`this` =
+// the controller, rendered through `selfComponent` — G6 EMBER_SELF, Inc 7). A
+// build-time loose template (`.hbs` / `precompileTemplate` / wire format) needs
+// G10 AOT and fails with an explicit `not implemented (Inc 8)` error instead of
+// rendering wrongly.
 //
 // The outlet manages its own anchor-delimited region instead of gxt `$_dc`:
 // `$_dc` leaves one anchor comment behind per swap and treats object
@@ -64,7 +65,12 @@ import { hasInternalComponentManager } from './manager-api';
 import { nameNode, OWNER } from './managers';
 import { notImplemented } from './not-implemented';
 import type { NativeRenderRoot, Renderer } from './renderer';
-import { factoryForTemplate, templateFor } from './template-factory';
+import {
+  factoryForTemplate,
+  isLooseTemplate,
+  selfComponent,
+  templateFor,
+} from './template-factory';
 
 export interface BootEnvironment {
   hasDOM: boolean;
@@ -186,9 +192,12 @@ export function Outlet(this: GxtNode): unknown {
 
   const renderRoute = (definition: Definition): GxtNode => {
     const { template, render } = definition;
-    if (!hasInternalComponentManager(template)) {
+    // A LOOSE route template (runtime-compiled, `this` = the controller; G6):
+    // rendered on a fresh gxt node whose self is the controller.
+    const loose = isLooseTemplate(template);
+    if (!loose && !hasInternalComponentManager(template)) {
       return notImplemented(
-        `native route template for \`${definition.name}\`: a template where \`this\` is the controller (loose \`.hbs\` / \`precompileTemplate\` / wire format) needs G6 EMBER_SELF + G10 — use a strict \`.gjs\`/\`.gts\` route template (a component receiving @model / @controller)`,
+        `native route template for \`${definition.name}\`: a build-time loose template (\`.hbs\` / \`precompileTemplate\` / wire format) needs G10 AOT compilation (runtime-compiled loose templates already render with \`this\` = the controller) — use a strict \`.gjs\`/\`.gts\` route template (a component receiving @model / @controller)`,
         8
       );
     }
@@ -205,7 +214,8 @@ export function Outlet(this: GxtNode): unknown {
       false,
       $_edp as never
     );
-    const node = $_c(template as never, args, outlet as never) as unknown as GxtNode;
+    const definitionToRender = loose ? selfComponent(template, definition.controller) : template;
+    const node = $_c(definitionToRender as never, args, outlet as never) as unknown as GxtNode;
     nameNode(node, definition.name);
     if (template === OutletTemplate) DEFAULT_ROUTE_NODES.add(node);
     return node;

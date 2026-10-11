@@ -15,7 +15,7 @@
 //     template throws when RENDERED (the gap is owned by a later increment).
 // `templateFor(value, owner)` resolves either shape (what a component's
 // `setComponentTemplate` registration holds) to a gxt template function.
-import { isTemplateFn } from '@lifeart/gxt';
+import { $SELF, $template, cId, COMPONENT_ID_PROPERTY, isTemplateFn } from '@lifeart/gxt';
 import { notImplemented } from './not-implemented';
 
 export type GxtTemplate = (...args: unknown[]) => unknown;
@@ -63,6 +63,41 @@ export function templateFor(value: unknown, owner: unknown): GxtTemplate | undef
   if (isTemplateFn(value)) return value as GxtTemplate;
   if (isNativeTemplateFactory(value)) return value(owner);
   return undefined;
+}
+
+// ---------------------------------------------------------------- loose / self
+// A LOOSE template (runtime-compiled with `strictMode: false`: a test's
+// `this.render('…')`, an ApplicationTestCase / `.hbs` route template) is not a
+// component: `this` is an object the host supplies — the route's controller,
+// the test context. It is compiled with NATIVE_FLAGS.EMBER_SELF (G6), so its
+// `this` paths read `$_self(node)` = `node[$SELF]`, and it is rendered through
+// `selfComponent`: a fresh gxt render node carrying the self, so gxt never
+// writes args / tree ids / rendered nodes onto the controller or test context.
+const LOOSE_TEMPLATES = new WeakSet<object>();
+
+/** Mark a runtime-compiled template function as loose (`this` = a host self). */
+export function markLooseTemplate(template: GxtTemplate): void {
+  LOOSE_TEMPLATES.add(template);
+}
+
+/** True for a loose template function (see markLooseTemplate). */
+export function isLooseTemplate(value: unknown): value is GxtTemplate {
+  return typeof value === 'function' && LOOSE_TEMPLATES.has(value);
+}
+
+/**
+ * A gxt-constructible definition that renders `template` with `self` as the
+ * self of its `this` paths (G6). gxt constructs it per invocation (`new
+ * SelfComponent(args)`), adds the returned node to the render tree and calls
+ * `node[$template](args)` with `this` = the node.
+ */
+export function selfComponent(
+  template: GxtTemplate,
+  self: unknown
+): (...args: unknown[]) => object {
+  return function SelfComponent(): object {
+    return { [COMPONENT_ID_PROPERTY]: cId(), [$SELF]: self, [$template]: template };
+  };
 }
 
 export default function templateFactory(serialized: unknown): NativeTemplateFactory {

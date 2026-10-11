@@ -221,6 +221,8 @@ export default defineConfig(({ mode }) => {
             // here, like the WITH_* flags above (design §2.6).
             EMBER_NATIVE: 'false',
             EMBER_OUTLET: 'false',
+            EMBER_PROPERTY_TAGS: 'false',
+            EMBER_SELF: 'false',
           },
         }),
     build,
@@ -394,7 +396,14 @@ function gxtEmberWrapperRedirect() {
 function nativeConfig(mode) {
   return {
     plugins: [
-      replaceGxtModeFlag(false),
+      // `__GXT_MODE__` is false for Ember source, but TRUE for the test harness
+      // in packages/internal-test-helpers: there it only selects the gxt
+      // rendering-artifact normalization (gxt anchor comments are markers;
+      // equalTokens / equalInnerHTML strip them), which applies to the native
+      // renderer exactly as to the compat one. Its other two `__GXT_MODE__`
+      // branches (lib/compile.ts, lib/test-cases/rendering.ts) are replaced
+      // wholesale by native aliases (runtime-compile, test-support).
+      replaceGxtModeFlag(false, (id) => id.includes('/packages/internal-test-helpers/')),
       // Irrelevant in native (only the compat manager.ts reads it, and that file
       // is never loaded) — kept so a stray reference still const-folds.
       replaceGxtClassicComponentsFlag(),
@@ -572,7 +581,7 @@ function gxtNativeTestModules() {
 // is handled separately (TRY_CATCH_ERROR_HANDLING is left as a runtime
 // identifier, falsy at runtime). The `__GXT_MODE__` identifier is unique to
 // ember-source files; @lifeart/gxt dist chunks don't reference it.
-function replaceGxtModeFlag(useGxt) {
+function replaceGxtModeFlag(useGxt, gxtTrueFor = null) {
   const literal = useGxt ? 'true' : 'false';
   const GXT_MODE_RE = /\b__GXT_MODE__\b/g;
   return {
@@ -582,7 +591,8 @@ function replaceGxtModeFlag(useGxt) {
       const cleanId = id.split('?')[0].split('#')[0];
       if (cleanId.includes('/node_modules/')) return null;
       if (!code.includes('__GXT_MODE__')) return null;
-      const replaced = code.replace(GXT_MODE_RE, literal);
+      const value = gxtTrueFor !== null && gxtTrueFor(cleanId) ? 'true' : literal;
+      const replaced = code.replace(GXT_MODE_RE, value);
       if (replaced === code) return null;
       return { code: replaced, map: null };
     },

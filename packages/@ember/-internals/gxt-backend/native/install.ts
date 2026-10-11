@@ -3,6 +3,7 @@
 // (the module every Ember render path and the application registry load, the
 // edge classic uses for its VM global context). Registers once; named imports
 // only, so nothing else of gxt is retained.
+import { _getProp } from '@ember/-internals/metal';
 import { registerHostHooks, registerHostManagers } from '@lifeart/gxt';
 import { installRenderLoop, normalizeAttrValue, scheduleRevalidate, toBool } from './host-hooks';
 import { helperManager } from './helper-manager';
@@ -22,6 +23,13 @@ export function install(): void {
     resolveComponentName,
     // `{{outlet}}` (G3: compiled to `$_outlet(ctx)` under NATIVE_FLAGS.EMBER_OUTLET)
     outletComponent: Outlet,
+    // Template property reads (G8: every member segment of a `this.*` /
+    // `@arg.*` / block-param path compiles to `$__tag(obj, "key")` under
+    // NATIVE_FLAGS.EMBER_PROPERTY_TAGS): Glimmer's global-context getProp —
+    // consumes tagFor(obj, key) (+ the `[]` tag of an array value) and honours
+    // `unknownProperty`, so `set()` / `notifyPropertyChange()` on untracked
+    // properties re-render.
+    getProp: _getProp,
   });
   registerHostManagers({
     component: componentManager as never,

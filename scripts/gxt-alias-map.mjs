@@ -274,10 +274,20 @@ export const NATIVE_FLAGS = Object.freeze({
   // (native/outlet.ts, registered as the gxt `outletComponent` host hook). A
   // block param / lexical binding named `outlet` shadows the keyword.
   EMBER_OUTLET: true,
+  // gxt ember-vm-replacement (Inc 7, compile-only flags):
+  //   G6: `this` path heads read the template SELF (`const $s = $_self(this)`)
+  //   while `this` stays the gxt render node — a loose route template renders
+  //   with self = its controller, a RenderingTestCase template with self = the
+  //   test context, and gxt never writes args / tree ids onto either.
+  EMBER_SELF: true,
+  //   G8: every member segment of a `this.*` / `@arg.*` / block-param /
+  //   let-binding path reads through `$__tag(obj, "key")` = the host `getProp`
+  //   hook (metal `_getProp`, native/install.ts): `set()` /
+  //   `notifyPropertyChange()` on untracked properties re-render (Glimmer
+  //   global-context getProp parity).
+  EMBER_PROPERTY_TAGS: true,
   // TODO (not understood by gxt yet — add as live keys when the gxt change
   // lands on branch ember-vm-replacement, design §2.6):
-  //   EMBER_SELF: true,             // G6  $_self(this) preamble               (Inc 7)
-  //   EMBER_PROPERTY_TAGS: true,    // G8  $__tag(obj,'k') member taps         (Inc 7)
   //   EMBER_LOOSE_COMPONENTS: true, // G11 $_c("Name") for unknown tags        (Inc 8)
   //   EMBER_EACH_IN: true,          // G5  each-in lowering                    (Inc 9)
 });
@@ -396,6 +406,32 @@ export const GXT_NATIVE_ALIASES = [
     target: nativeTarget('template-compilation'),
     match: 'exact',
     inc: 8,
+  },
+  // The RUNTIME template compiler (Inc 7): the gxt runtime compiler under the
+  // SAME NATIVE_FLAGS as the AOT vite plugin. Only tests and explicit runtime
+  // compilation reach it — never an app closure (`--assert-native` forbids the
+  // gxt compiler chunks, @glimmer/syntax, @handlebars, simple-html-tokenizer).
+  {
+    find: '@ember/template-compiler/runtime',
+    target: nativeTarget('runtime-compile'),
+    match: 'exact',
+    inc: 7,
+  },
+  // internal-test-helpers (vite test pages only — rollup never builds them):
+  // the runtime compile entry and the native RenderingTestCase. Relative
+  // imports inside internal-test-helpers (`../compile`, `./test-cases/rendering`)
+  // reach these through the resolved-path guard (gxtNativeRelativeRedirect).
+  {
+    find: 'internal-test-helpers/lib/compile',
+    target: nativeTarget('runtime-compile'),
+    match: 'exact',
+    inc: 7,
+  },
+  {
+    find: 'internal-test-helpers/lib/test-cases/rendering',
+    target: nativeTarget('test-support/rendering-test-case'),
+    match: 'exact',
+    inc: 7,
   },
   // Native barrel: cuts @glimmer/component -> @ember/component -> classic
   // Component/CoreView/curly (L8) without editing shared source.
