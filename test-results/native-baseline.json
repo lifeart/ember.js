@@ -1,15 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-11T16:00:36.508Z",
+    "capturedAt": "2026-10-11T17:51:39.409Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "5eb54e22f6",
-    "totalTests": 2840,
-    "totalModules": 198,
+    "emberCommit": "ae2532ee41",
+    "totalTests": 3042,
+    "totalModules": 213,
     "quarantinedTests": 0,
-    "totalAssertions": 13000,
-    "totalAssertionsPassing": 12859,
-    "mergedNote": "Inc 8: final run (ember 5eb54e22f6) + the module 'Syntax test: {{#if}} and {{#unless}} without inverse' from run 5 (same code; the final run hit a page-load harness timeout on it during a slow run)"
+    "totalAssertions": 13926,
+    "totalAssertionsPassing": 13910
   },
   "modules": {
     "<LinkTo /> component (rendering tests)": {
@@ -49,15 +48,10 @@
     },
     "<LinkTo /> component with query params (routing)": {
       "total": 19,
-      "passing": 18,
+      "passing": 19,
       "assertionsTotal": 91,
-      "assertionsPassing": 89,
-      "failingTests": [
-        {
-          "name": " href updates when unsupplied controller QP props change",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 91,
+      "failingTests": []
     },
     "<LinkTo /> component with query-params (rendering)": {
       "total": 3,
@@ -299,14 +293,10 @@
     },
     "Application test: debug render tree": {
       "total": 10,
-      "passing": 6,
-      "assertionsTotal": 421,
-      "assertionsPassing": 332,
+      "passing": 7,
+      "assertionsTotal": 563,
+      "assertionsPassing": 556,
       "failingTests": [
-        {
-          "name": " routes",
-          "category": "gxt:triage"
-        },
         {
           "name": " template-only components",
           "category": "gxt:triage"
@@ -330,47 +320,24 @@
     },
     "Basic Custom Modifier Manager: 3.22": {
       "total": 14,
-      "passing": 12,
+      "passing": 14,
       "assertionsTotal": 49,
-      "assertionsPassing": 47,
-      "failingTests": [
-        {
-          "name": " Cannot dynamically resolve a modifier",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " provides a helpful assertion when mutating a value that was consumed already",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 49,
+      "failingTests": []
     },
     "Component Manager - Angle Invocation": {
       "total": 8,
-      "passing": 6,
-      "assertionsTotal": 26,
-      "assertionsPassing": 22,
-      "failingTests": [
-        {
-          "name": " updating attributes triggers updateComponent and didUpdateComponent",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " updateComponent fires consistently with or without args",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 8,
+      "assertionsTotal": 32,
+      "assertionsPassing": 32,
+      "failingTests": []
     },
     "Component Manager - Curly Invocation": {
       "total": 15,
-      "passing": 14,
-      "assertionsTotal": 25,
-      "assertionsPassing": 21,
-      "failingTests": [
-        {
-          "name": " it can opt-in to running async lifecycle hooks",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 15,
+      "assertionsTotal": 28,
+      "assertionsPassing": 28,
+      "failingTests": []
     },
     "Component Tracked Properties": {
       "total": 17,
@@ -381,16 +348,12 @@
     },
     "Component Tracked Properties w/ Args Proxy": {
       "total": 7,
-      "passing": 5,
+      "passing": 6,
       "assertionsTotal": 18,
-      "assertionsPassing": 11,
+      "assertionsPassing": 16,
       "failingTests": [
         {
           "name": " downstream property changes do not invalidate upstream component getters/arguments",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " each-in works with args",
           "category": "gxt:triage"
         }
       ]
@@ -509,16 +472,12 @@
     },
     "Helpers test: custom helpers": {
       "total": 35,
-      "passing": 33,
+      "passing": 34,
       "assertionsTotal": 91,
-      "assertionsPassing": 89,
+      "assertionsPassing": 90,
       "failingTests": [
         {
           "name": " it cannot override built-in syntax",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " Cannot dynamically resolve a helper",
           "category": "gxt:triage"
         }
       ]
@@ -613,6 +572,18 @@
       "assertionsTotal": 15,
       "assertionsPassing": 15,
       "failingTests": []
+    },
+    "Helpers test: {{element}}": {
+      "total": 14,
+      "passing": 13,
+      "assertionsTotal": 30,
+      "assertionsPassing": 29,
+      "failingTests": [
+        {
+          "name": " it can be passed as argument and works with ...attributes",
+          "category": "gxt:triage"
+        }
+      ]
     },
     "Helpers test: {{fn}}": {
       "total": 10,
@@ -735,15 +706,10 @@
     },
     "Strict Mode": {
       "total": 12,
-      "passing": 11,
-      "assertionsTotal": 36,
-      "assertionsPassing": 35,
-      "failingTests": [
-        {
-          "name": " Can use a dynamic component definition (curly)",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 12,
+      "assertionsTotal": 37,
+      "assertionsPassing": 37,
+      "failingTests": []
     },
     "Strict Mode - LinkTo": {
       "total": 1,
@@ -759,50 +725,63 @@
       "assertionsPassing": 8,
       "failingTests": []
     },
+    "Strict Mode - Runtime Template Compiler (explicit)": {
+      "total": 12,
+      "passing": 12,
+      "assertionsTotal": 37,
+      "assertionsPassing": 37,
+      "failingTests": []
+    },
+    "Strict Mode - Runtime Template Compiler (explicit) - allowed globals from RFC#1070": {
+      "total": 28,
+      "passing": 28,
+      "assertionsTotal": 53,
+      "assertionsPassing": 53,
+      "failingTests": []
+    },
+    "Strict Mode - Runtime Template Compiler (explicit) - built ins": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 31,
+      "assertionsPassing": 31,
+      "failingTests": []
+    },
+    "Strict Mode - Runtime Template Compiler (implicit)": {
+      "total": 12,
+      "passing": 12,
+      "assertionsTotal": 37,
+      "assertionsPassing": 37,
+      "failingTests": []
+    },
+    "Strict Mode - Runtime Template Compiler (implicit) - allowed globals from RFC#1070": {
+      "total": 28,
+      "passing": 28,
+      "assertionsTotal": 53,
+      "assertionsPassing": 53,
+      "failingTests": []
+    },
+    "Strict Mode - Runtime Template Compiler (implicit) - built ins": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 31,
+      "assertionsPassing": 31,
+      "failingTests": []
+    },
     "Strict Mode - built ins": {
       "total": 9,
-      "passing": 5,
-      "assertionsTotal": 11,
-      "assertionsPassing": 7,
-      "failingTests": [
-        {
-          "name": " Can use hash",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " Can use get",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " Can use each-in",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " Can use in-element",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 9,
+      "assertionsTotal": 32,
+      "assertionsPassing": 32,
+      "failingTests": []
     },
     "Strict Mode - renderComponent": {
       "total": 27,
-      "passing": 21,
-      "assertionsTotal": 110,
-      "assertionsPassing": 100,
+      "passing": 24,
+      "assertionsTotal": 142,
+      "assertionsPassing": 137,
       "failingTests": [
         {
-          "name": " Can use a dynamic component definition (curly)",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " can render in to a detached element",
-          "category": "gxt:triage"
-        },
-        {
           "name": " renderComponent is eager, so it tracks with its parent",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " rendering multiple times to adjacent elements",
           "category": "gxt:triage"
         },
         {
@@ -824,43 +803,17 @@
     },
     "Strict Mode - renderComponent - built ins": {
       "total": 9,
-      "passing": 5,
-      "assertionsTotal": 16,
-      "assertionsPassing": 12,
-      "failingTests": [
-        {
-          "name": " Can use hash",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " Can use get",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " Can use each-in",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " Can use in-element",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 9,
+      "assertionsTotal": 37,
+      "assertionsPassing": 37,
+      "failingTests": []
     },
     "Strict Mode <-> Loose Mode - renderComponent": {
       "total": 3,
-      "passing": 1,
-      "assertionsTotal": 10,
-      "assertionsPassing": 7,
-      "failingTests": [
-        {
-          "name": " strict-mode components cannot lookup things in the registry",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " rendering multiple times to adjacent elements",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 3,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
     },
     "Syntax test: Multiple {{#let as}} helpers": {
       "total": 5,
@@ -895,6 +848,55 @@
       "passing": 1,
       "assertionsTotal": 4,
       "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "Syntax test: {{#each-in}}": {
+      "total": 26,
+      "passing": 26,
+      "assertionsTotal": 115,
+      "assertionsPassing": 115,
+      "failingTests": []
+    },
+    "Syntax test: {{#each-in}} with ES6 Maps": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 37,
+      "assertionsPassing": 37,
+      "failingTests": []
+    },
+    "Syntax test: {{#each-in}} with EmberObjects": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 36,
+      "assertionsPassing": 36,
+      "failingTests": []
+    },
+    "Syntax test: {{#each-in}} with POJOs": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 65,
+      "assertionsPassing": 65,
+      "failingTests": []
+    },
+    "Syntax test: {{#each-in}} with `ObjectProxy`": {
+      "total": 16,
+      "passing": 16,
+      "assertionsTotal": 75,
+      "assertionsPassing": 75,
+      "failingTests": []
+    },
+    "Syntax test: {{#each-in}} with custom iterables": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 33,
+      "assertionsPassing": 33,
+      "failingTests": []
+    },
+    "Syntax test: {{#each-in}} with object proxies": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 42,
+      "assertionsPassing": 42,
       "failingTests": []
     },
     "Syntax test: {{#each}} with array proxies, arrangedContent depends on external content": {
@@ -1011,15 +1013,10 @@
     },
     "The <LinkTo /> component - nested routes and link-to arguments": {
       "total": 30,
-      "passing": 29,
+      "passing": 30,
       "assertionsTotal": 96,
-      "assertionsPassing": 95,
-      "failingTests": [
-        {
-          "name": " it updates when route changes with only query-params and a block",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 96,
+      "failingTests": []
     },
     "The {{link-to}} component - loading states and warnings": {
       "total": 1,
@@ -1030,15 +1027,10 @@
     },
     "The {{link-to}} component - nested routes and link-to arguments": {
       "total": 24,
-      "passing": 23,
+      "passing": 24,
       "assertionsTotal": 85,
-      "assertionsPassing": 84,
-      "failingTests": [
-        {
-          "name": " it updates when route changes with only query-params and a block",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 85,
+      "failingTests": []
     },
     "addObserver": {
       "total": 12,
@@ -1257,6 +1249,13 @@
       "assertionsPassing": 40,
       "failingTests": []
     },
+    "gxt-native | content": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 17,
+      "assertionsPassing": 17,
+      "failingTests": []
+    },
     "gxt-native | curried components": {
       "total": 6,
       "passing": 6,
@@ -1300,10 +1299,10 @@
       "failingTests": []
     },
     "gxt-native | outlet": {
-      "total": 12,
-      "passing": 12,
-      "assertionsTotal": 43,
-      "assertionsPassing": 43,
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 44,
+      "assertionsPassing": 44,
       "failingTests": []
     },
     "gxt-native | render passes": {
@@ -1316,8 +1315,8 @@
     "gxt-native | renderComponent": {
       "total": 10,
       "passing": 10,
-      "assertionsTotal": 19,
-      "assertionsPassing": 19,
+      "assertionsTotal": 21,
+      "assertionsPassing": 21,
       "failingTests": []
     },
     "gxt-native | renderSettled": {
@@ -1483,27 +1482,10 @@
     },
     "{{in-element}}": {
       "total": 8,
-      "passing": 4,
+      "passing": 8,
       "assertionsTotal": 30,
-      "assertionsPassing": 25,
-      "failingTests": [
-        {
-          "name": " does not allow insertBefore=non-null-value",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " does not allow null as a destination element",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " does not undefined as a destination element",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " appending to the root element should not cause double clearing",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 30,
+      "failingTests": []
     },
     "{{link-to}} component (rendering tests)": {
       "total": 5,
@@ -1535,15 +1517,10 @@
     },
     "{{link-to}} component with query params (routing)": {
       "total": 18,
-      "passing": 17,
+      "passing": 18,
       "assertionsTotal": 84,
-      "assertionsPassing": 82,
-      "failingTests": [
-        {
-          "name": " href updates when unsupplied controller QP props change",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 84,
+      "failingTests": []
     },
     "{{link-to}} component with query-params (rendering)": {
       "total": 3,
@@ -1568,6 +1545,6 @@
     }
   },
   "categories": {
-    "gxt:triage": 38
+    "gxt:triage": 9
   }
 }
