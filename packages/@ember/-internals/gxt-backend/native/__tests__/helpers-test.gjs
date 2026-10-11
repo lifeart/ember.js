@@ -10,6 +10,7 @@ import {
   array,
   capabilities as helperCapabilities,
   concat,
+  element,
   fn,
   get,
   hash,
@@ -429,5 +430,22 @@ module('gxt-native | helpers', function (hooks) {
     );
     run(() => (root.x = 'x2'));
     assert.strictEqual(this.element.querySelector('b').textContent, '1|a=curried,b=x2');
+  });
+
+  test('(element) passed as an argument renders its tag with the invocation\'s ...attributes', function (assert) {
+    const Inner = <template>{{#let @tag as |Tag|}}<Tag id="content" ...attributes>{{yield}}</Tag>{{/let}}</template>;
+    class Root extends Component {
+      p = 'p';
+      none = '';
+      <template>
+        <Inner @tag={{element this.p}} class="extra">Test</Inner>|<Inner @tag={{element this.none}} class="x">bare</Inner>
+      </template>
+    }
+    this.render(Root);
+    assert.strictEqual(
+      htmlOf(this.element).trim(),
+      '<p id="content" class="extra">Test</p>|bare',
+      '"" renders the block without an element'
+    );
   });
 });

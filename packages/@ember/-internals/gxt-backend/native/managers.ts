@@ -39,7 +39,11 @@
 import { DEBUG } from '@glimmer/env';
 import {
   $_GET_ARGS,
+  $_GET_FW,
+  $_GET_SLOTS,
   $_fin,
+  $_slot,
+  $_tag,
   $PROPS_SYMBOL,
   $SELF,
   $SLOTS_SYMBOL,
@@ -97,6 +101,13 @@ interface InternalComponentManager {
   getDestroyable(instance: object): object | null;
 }
 
+// A `wrapped` internal manager (Glimmer's WrappedCapability) renders its layout
+// inside an element whose tag name it chooses per instance.
+interface WrappedComponentManager extends InternalComponentManager {
+  getCapabilities(): { wrapped?: boolean };
+  getTagName(instance: unknown): string | null;
+}
+
 interface CapturedArguments {
   named: Record<string, Reference>;
   positional: Reference[];
@@ -142,7 +153,6 @@ function ownerFor(ctx: object): object {
 
 // A component without any template renders nothing (Glimmer parity).
 function EMPTY_TEMPLATE(this: object): unknown {
-  // eslint-disable-next-line prefer-rest-params
   $_GET_ARGS(this as never, arguments);
   return $_fin([], this as never);
 }
@@ -378,6 +388,9 @@ function handle(
 
   const manager = getInternalComponentManager(definition);
   if (!(manager instanceof CustomComponentManager)) {
+    if (isWrappedWithoutLayout(manager, definition)) {
+      return wrappedComponent(manager, definition, args, ctx, owner, positional);
+    }
     return internalComponent(manager, definition, args, ctx, owner, positional);
   }
   const delegate = delegateFor(manager, owner);
@@ -460,23 +473,7 @@ function internalComponent(
   const source = args as Record<string, unknown>;
 
   return function NativeInternalComponent(): object {
-    const named: Record<string, Reference> = {};
-    for (const key of Object.keys(source)) {
-      named[key] = createComputeRef(() => source[key]);
-    }
-    const captured: CapturedArguments = {
-      named,
-      positional: positional.map((value) => createComputeRef(() => unwrapArg(value))),
-    };
-    const instance = manager.create(
-      owner,
-      definition,
-      { capture: () => captured },
-      null,
-      null,
-      // Glimmer's caller is the invoking template's self (a const ref).
-      createConstRef<unknown>(ctx, 'this')
-    );
+    const instance = createInternal(manager, definition, source, ctx, owner, positional);
     const node = valueForRef(manager.getSelf(instance)) as ComponentNode;
     if (node[COMPONENT_ID_PROPERTY] === undefined) {
       node[COMPONENT_ID_PROPERTY] = cId();
@@ -492,6 +489,77 @@ function internalComponent(
     }
     DEFINITION_OF_NODE.set(node, definition);
     return node;
+  };
+}
+
+// `manager.create` with Glimmer's captured-arguments shape: one compute ref per
+// argument over gxt's lazy args.
+function createInternal(
+  manager: InternalComponentManager,
+  definition: object,
+  source: Record<string, unknown>,
+  ctx: object,
+  owner: object,
+  positional: readonly unknown[]
+): object {
+  const named: Record<string, Reference> = {};
+  for (const key of Object.keys(source)) {
+    named[key] = createComputeRef(() => source[key]);
+  }
+  const captured: CapturedArguments = {
+    named,
+    positional: positional.map((value) => createComputeRef(() => unwrapArg(value))),
+  };
+  return manager.create(
+    owner,
+    definition,
+    { capture: () => captured },
+    null,
+    null,
+    // Glimmer's caller is the invoking template's self (a const ref).
+    createConstRef<unknown>(ctx, 'this')
+  );
+}
+
+// ---------------------------------------------------------------- wrapped
+// A `wrapped` internal component with no layout — the `element` helper's
+// definition (`<Inner @tag={{element "p"}}>` → `<@tag ...attributes>`): Glimmer
+// renders its default `{{yield}}` layout inside an element named by
+// `getTagName(instance)` (no element for `null` / `""`) carrying the
+// invocation's `...attributes`. The same gxt template function the compiler
+// emits for a `{{#let (element "p") as |Tag|}}<Tag>` invocation.
+function isWrappedWithoutLayout(
+  manager: InternalComponentManager,
+  definition: object
+): manager is WrappedComponentManager {
+  const wrapped = manager as Partial<WrappedComponentManager>;
+  return (
+    typeof wrapped.getTagName === 'function' &&
+    typeof wrapped.getCapabilities === 'function' &&
+    wrapped.getCapabilities().wrapped === true &&
+    getComponentTemplate(definition) === undefined
+  );
+}
+
+function wrappedComponent(
+  manager: WrappedComponentManager,
+  definition: object,
+  args: object,
+  ctx: object,
+  owner: object,
+  positional: readonly unknown[]
+): unknown {
+  const source = args as Record<string, unknown>;
+  return function WrappedComponent(this: ComponentNode): object {
+    $_GET_ARGS(this as never, arguments);
+    const fw = $_GET_FW(this, arguments);
+    const slots = $_GET_SLOTS(this, arguments);
+    const instance = createInternal(manager, definition, source, ctx, owner, positional);
+    const tagName = manager.getTagName(instance) ?? '';
+    return $_fin(
+      [$_tag(tagName, fw, this as never, [() => $_slot('default', () => [], slots, this)])],
+      this as never
+    );
   };
 }
 
