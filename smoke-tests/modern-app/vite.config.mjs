@@ -10,6 +10,9 @@
 // consumer cannot apply gxtEmberWrapperRedirect — the documented GXT consumer
 // contract (docs-internal-gxt-packaging-design.md). Building every variant from
 // source through the same pipeline keeps the comparison apples-to-apples.
+// The classic and gxt-native flavors are ALSO measured from the rollup dist, the
+// way apps consume ember-source: vite.dist.config.mjs
+// (`scripts/bundle-modern-app.mjs --from-dist`).
 //
 // Variant is selected by the SAME env vars the root config/rollup read:
 //   classic:    (no GXT_MODE, no EMBER_RENDER_BACKEND)
@@ -19,66 +22,19 @@
 // and the app flavor by MODERN_APP_FLAVOR (strict .gjs = default | loose).
 // Driven by scripts/bundle-modern-app.mjs (run from the repo root: rollup.config
 // reads broccoli/ files relative to cwd).
-import { resolve, dirname, join } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-import { writeFileSync, mkdirSync } from 'node:fs';
 import rootConfig from '../../vite.config.mjs';
 import { resolvePackages, exposedDependencies, hiddenDependencies } from '../../rollup.config.mjs';
+import { bundleStats, strictResolverEntry } from './harness-shared.mjs';
 
 const APP_DIR = dirname(fileURLToPath(import.meta.url));
-const EMBER_ROOT = resolve(APP_DIR, '..', '..');
 
 function variantName() {
   const backend = process.env.EMBER_RENDER_BACKEND;
   if (backend === 'gxt-native') return 'gxt-native';
   if (backend === 'gxt' || process.env.GXT_MODE === 'true') return 'gxt';
   return 'classic';
-}
-
-// ember-strict-application-resolver is an app dependency that does not live in
-// packages/, so root resolvePackages() would throw "missing in resolvePackages".
-// Alias it to the copy the other smoke-test apps already install.
-function strictResolverEntry() {
-  const req = createRequire(join(EMBER_ROOT, 'smoke-tests/v2-app-gxt-template/package.json'));
-  return req.resolve('ember-strict-application-resolver');
-}
-
-// Emits bundle-stats.json: the chunk graph (entry / static imports / dynamic
-// imports) plus per-module rendered (pre-minify) lengths — the boot-set walk and
-// a cross-check for the sourcemap-based byte inventory.
-function bundleStats(outDir) {
-  return {
-    name: 'modern-app-bundle-stats',
-    generateBundle(_options, bundle) {
-      const chunks = [];
-      for (const item of Object.values(bundle)) {
-        if (item.type !== 'chunk') continue;
-        chunks.push({
-          fileName: item.fileName,
-          isEntry: item.isEntry,
-          isDynamicEntry: item.isDynamicEntry,
-          imports: item.imports,
-          dynamicImports: item.dynamicImports,
-          modules: Object.fromEntries(
-            Object.entries(item.modules).map(([id, m]) => [
-              id,
-              {
-                len: m.renderedLength,
-                importers: (this.getModuleInfo(id)?.importers ?? []).slice(0, 5),
-              },
-            ])
-          ),
-        });
-      }
-      // Full importer graph (incl. modules tree-shaken to nothing, e.g. pure
-      // re-export barrels) so "why is X in the bundle" walks reach the entry.
-      const graph = {};
-      for (const id of this.getModuleIds()) graph[id] = this.getModuleInfo(id)?.importers ?? [];
-      mkdirSync(outDir, { recursive: true });
-      writeFileSync(join(outDir, 'bundle-stats.json'), JSON.stringify({ chunks, graph }, null, 1));
-    },
-  };
 }
 
 // Fidelity with the PUBLISHED prod dist (rollup.config.mjs esmProdConfig): the

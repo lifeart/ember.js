@@ -38,6 +38,26 @@
 //                                     # any Glimmer-VM / compat-bridge / runtime-
 //                                     # template-compiler module (see FORBIDDEN_NATIVE)
 //
+// FROM-DIST variants (`--from-dist`; DoD #1 is measured from DIST): the same app
+// built against a ROLLUP dist snapshot of ember-source — how apps consume ember —
+// through smoke-tests/modern-app/vite.dist.config.mjs:
+//
+//   classic-dist     classic `npx rollup --config` dist; templates via content-tag
+//                    + babel-plugin-ember-template-compilation (the dist's
+//                    ember-template-compiler entry), i.e. wire format
+//   gxt-native-dist  `EMBER_RENDER_BACKEND=gxt-native npx rollup --config` dist;
+//                    templates via the gxt vite plugin under NATIVE_FLAGS;
+//                    @lifeart/gxt from node_modules
+//
+//   node scripts/bundle-modern-app.mjs --from-dist --build-dists --boot [--flavor loose]
+//     --build-dists: rm -rf dist + rollup per flavor (gxt-native first, classic
+//       LAST so dist/ is left holding the classic build), each snapshotted to
+//       smoke-tests/modern-app/dist/ember-dist/<flavor>/ (+ the @glimmer/component
+//       package dist); package.json is restored if rollup's packageMeta rewrote it.
+//     --assert-native on gxt-native-dist: scripts/assert-native-dist.mjs on the
+//       snapshot, plus "every dist chunk the app's bundle pulled is inside the
+//       asserted app closure".
+//
 // gxt compiler seams (P0a) — FIXED in gxt, no app workaround any more:
 //   * G1 (glimmer-next ember-vm-replacement 9c46a76): gxt's template-tag babel
 //     pass is hermetic (configFile:false, babelrc:false) and resolves
@@ -52,21 +72,47 @@
 //   until a gxt release ships them: with published 0.0.81 the gxt variants
 //   silently lose their template-only imports again.
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync, brotliCompressSync } from 'node:zlib';
+import { GXT_NATIVE_FORBIDDEN } from './gxt-alias-map.mjs';
 
 const EMBER_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const APP_DIR = join(EMBER_ROOT, 'smoke-tests/modern-app');
 const DIST_ROOT = join(APP_DIR, 'dist');
 const VITE_BIN = join(EMBER_ROOT, 'node_modules/.bin/vite');
 
+const SNAPSHOT_ROOT = join(DIST_ROOT, 'ember-dist');
+const ROLLUP_BIN = join(EMBER_ROOT, 'node_modules/.bin/rollup');
 const VARIANTS = {
   classic: { GXT_MODE: undefined, EMBER_RENDER_BACKEND: undefined },
   gxt: { GXT_MODE: 'true', EMBER_RENDER_BACKEND: 'gxt' },
   'gxt-native': { GXT_MODE: undefined, EMBER_RENDER_BACKEND: 'gxt-native' },
+  'classic-dist': {
+    GXT_MODE: undefined,
+    EMBER_RENDER_BACKEND: undefined,
+    MODERN_APP_DIST_FLAVOR: 'classic',
+    MODERN_APP_EMBER_DIST: join(SNAPSHOT_ROOT, 'classic'),
+  },
+  'gxt-native-dist': {
+    GXT_MODE: undefined,
+    EMBER_RENDER_BACKEND: undefined,
+    MODERN_APP_DIST_FLAVOR: 'gxt-native',
+    MODERN_APP_EMBER_DIST: join(SNAPSHOT_ROOT, 'gxt-native'),
+  },
 };
+const isDistVariant = (variant) => variant.endsWith('-dist');
+// rollup env per dist flavor (EMBER_RENDER_BACKEND; unset = classic)
+const ROLLUP_FLAVORS = { classic: undefined, 'gxt-native': 'gxt-native' };
 
 // ---------------------------------------------------------------- CLI
 const argv = process.argv.slice(2);
@@ -75,7 +121,11 @@ const opt = (name, dflt) => {
   const i = argv.indexOf(name);
   return i >= 0 ? argv[i + 1] : dflt;
 };
-const variants = opt('--variants', Object.keys(VARIANTS).join(',')).split(',');
+const fromDist = flag('--from-dist');
+const variants = opt(
+  '--variants',
+  fromDist ? 'classic-dist,gxt-native-dist' : 'classic,gxt,gxt-native'
+).split(',');
 for (const v of variants) {
   if (!VARIANTS[v]) {
     console.error(`unknown variant ${v}; expected one of ${Object.keys(VARIANTS).join(', ')}`);
@@ -83,6 +133,7 @@ for (const v of variants) {
   }
 }
 const doBuild = !flag('--no-build');
+const doBuildDists = flag('--build-dists');
 const doBoot = flag('--boot');
 const showInventory = flag('--inventory');
 const assertNativeFlag = flag('--assert-native');
@@ -113,10 +164,17 @@ function buildVariant(variant) {
     `building ${tagOf(variant)} (timeout ${buildTimeoutMs / 1000}s, log ${relative(EMBER_ROOT, logFile)})`
   );
   const t0 = Date.now();
+  const config = isDistVariant(variant) ? 'vite.dist.config.mjs' : 'vite.config.mjs';
   const r = spawnSync(
     VITE_BIN,
-    ['build', '--config', join(APP_DIR, 'vite.config.mjs'), '--mode', 'production'],
-    { cwd: EMBER_ROOT, env, encoding: 'utf8', timeout: buildTimeoutMs, maxBuffer: 256 << 20 }
+    ['build', '--config', join(APP_DIR, config), '--mode', 'production'],
+    {
+      cwd: EMBER_ROOT,
+      env,
+      encoding: 'utf8',
+      timeout: buildTimeoutMs,
+      maxBuffer: 256 << 20,
+    }
   );
   writeFileSync(logFile, `${r.stdout ?? ''}\n${r.stderr ?? ''}`);
   if (r.error || r.status !== 0) {
@@ -125,6 +183,66 @@ function buildVariant(variant) {
     );
   }
   log(`built ${variant} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+}
+
+// Recursive directory copy (fs.cpSync is experimental before Node 22.3).
+function copyDir(from, to) {
+  mkdirSync(to, { recursive: true });
+  for (const entry of readdirSync(from, { withFileTypes: true })) {
+    const src = join(from, entry.name);
+    const dst = join(to, entry.name);
+    if (entry.isDirectory()) copyDir(src, dst);
+    else copyFileSync(src, dst);
+  }
+}
+
+// rm -rf dist + `npx rollup --config` per flavor, snapshotted for the from-dist
+// variants. gxt-native first, classic LAST (dist/ is left holding the classic
+// build). Rollup's packageMeta rewrites package.json `renamed-modules` for
+// non-classic entry maps: restore the original bytes afterwards.
+function buildDists(requested) {
+  const order = [...requested.filter((f) => f !== 'classic'), 'classic'];
+  const pkgPath = join(EMBER_ROOT, 'package.json');
+  const pkgBefore = readFileSync(pkgPath);
+  try {
+    for (const flavor of order) {
+      const env = { ...process.env };
+      delete env.GXT_MODE;
+      if (ROLLUP_FLAVORS[flavor]) env.EMBER_RENDER_BACKEND = ROLLUP_FLAVORS[flavor];
+      else delete env.EMBER_RENDER_BACKEND;
+      rmSync(join(EMBER_ROOT, 'dist'), { recursive: true, force: true });
+      mkdirSync(DIST_ROOT, { recursive: true });
+      const logFile = join(DIST_ROOT, `rollup-${flavor}.log`);
+      log(`rollup ${flavor} dist (log ${relative(EMBER_ROOT, logFile)})`);
+      const t0 = Date.now();
+      const r = spawnSync(ROLLUP_BIN, ['--config'], {
+        cwd: EMBER_ROOT,
+        env,
+        encoding: 'utf8',
+        timeout: buildTimeoutMs,
+        maxBuffer: 256 << 20,
+      });
+      writeFileSync(logFile, `${r.stdout ?? ''}\n${r.stderr ?? ''}`);
+      if (r.error || r.status !== 0) {
+        throw new Error(`rollup ${flavor} failed (status ${r.status}); see ${logFile}`);
+      }
+      const snapshot = join(SNAPSHOT_ROOT, flavor);
+      rmSync(snapshot, { recursive: true, force: true });
+      copyDir(join(EMBER_ROOT, 'dist'), snapshot);
+      copyDir(
+        join(EMBER_ROOT, 'packages/@glimmer/component/dist'),
+        join(snapshot, 'glimmer-component')
+      );
+      log(
+        `built ${flavor} dist in ${((Date.now() - t0) / 1000).toFixed(1)}s → ${relative(EMBER_ROOT, snapshot)}`
+      );
+    }
+  } finally {
+    if (!readFileSync(pkgPath).equals(pkgBefore)) {
+      writeFileSync(pkgPath, pkgBefore);
+      log('restored package.json (rollup packageMeta rewrote renamed-modules)');
+    }
+  }
 }
 
 function bootCheck(variant) {
@@ -266,6 +384,11 @@ function attribute(code, map, mapDir) {
 const GXT_REPO_HINT = /(^|\/)glimmer-next\/|\/@lifeart\/gxt\//;
 function normalize(abs) {
   if (abs === '(unmapped)') return abs;
+  // from-dist variants: the shipped bytes map to the ember DIST files
+  let d = abs.match(/\/ember-dist\/[^/]+\/(?:prod|dev)\/(.*)$/);
+  if (d) return `ember-dist:${d[1]}`;
+  d = abs.match(/\/ember-dist\/[^/]+\/glimmer-component\/(.*)$/);
+  if (d) return `ember-dist:@glimmer/component/${d[1]}`;
   let m = abs.match(/(?:glimmer-next|@lifeart\/gxt)\/(dist\/.*)$/);
   if (m && GXT_REPO_HINT.test(abs)) return `gxt:${m[1]}`;
   m = abs.match(/node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?((?:@[^/]+\/)?[^/]+)\/(.*)$/);
@@ -279,6 +402,10 @@ const V = 'VM-TO-REPLACE';
 // Ordered rules: first match wins. [regex over normalized path, group, class, note]
 const RULES = [
   [/^\(unmapped\)$/, 'unmapped (bundle glue / newlines)', M],
+  // from-dist variants: dist-chunk granularity (the dist ships no sourcemaps)
+  [/^ember-dist:packages\/shared-chunks\//, 'ember dist: shared chunks', M],
+  [/^ember-dist:@glimmer\/component\//, 'ember dist: @glimmer/component package', M],
+  [/^ember-dist:packages\/((?:@[^/]+\/)?[^/]+)/, (m) => `ember dist: ${m[1]}`, M],
   [/^smoke-tests\/modern-app\//, 'app code', M],
   // ---- @lifeart/gxt runtime (dist chunks; gxt ships no sourcemaps -> chunk granularity)
   [/^gxt:dist\/dom-/, 'gxt: dom chunk (render core, $_tag/$_c/$_if/$_each, list)', M],
@@ -484,34 +611,10 @@ function inventory(variant, files) {
 // ---------------------------------------------------------------- --assert-native
 // DoD #2 (design docs-internal-gxt-native-layer-design.md §4): the native app
 // closure must not contain the Glimmer VM, the compat bridge, the classic VM
-// renderer, or the runtime template compiler. Patterns match absolute module
-// ids (rollup) and absolute sourcemap sources.
-const FORBIDDEN_NATIVE = [
-  [
-    /packages\/@glimmer\/(runtime|opcode-compiler|program|vm|wire-format|encoder|node|global-context|reference|destroyable|manager)\//,
-    'Glimmer VM package',
-  ],
-  [
-    /packages\/@glimmer\/validator\/lib\/(tracking|validators|meta)\.ts$/,
-    'Glimmer VM tag protocol',
-  ],
-  [
-    /gxt-backend\/(compile|manager|ember-gxt-wrappers|validator|reference|destroyable|gxt-bridge|helper-manager)\.ts$/,
-    'gxt compat bridge',
-  ],
-  [
-    /-internals\/glimmer\/lib\/(renderer|component-managers\/[^/]+|templates\/(root|outlet)|component)\.ts$/,
-    'classic VM renderer',
-  ],
-  [
-    /(packages|node_modules)\/(@glimmer\/syntax|@handlebars|simple-html-tokenizer)\//,
-    'template compiler',
-  ],
-  [
-    /(glimmer-next|@lifeart\/gxt)\/dist\/(compile-|gxt\.runtime-compiler|rehydration-)/,
-    'gxt runtime compiler / rehydration',
-  ],
-];
+// renderer, or the runtime template compiler. Patterns (shared with the rollup
+// dist assertion, scripts/assert-native-dist.mjs) match absolute module ids
+// (rollup) and absolute sourcemap sources.
+const FORBIDDEN_NATIVE = GXT_NATIVE_FORBIDDEN;
 
 const shortId = (id) =>
   id
@@ -553,7 +656,16 @@ function assertNative(result) {
   for (const chunk of stats.chunks) {
     for (const [id, m] of Object.entries(chunk.modules)) rendered.set(id, m.len);
   }
-  const why = (id) => FORBIDDEN_NATIVE.find(([re]) => re.test(id))?.[1];
+  // from-dist: ember DIST files are checked against the dist manifest below
+  // (a re-pointed entry like `packages/@glimmer/destroyable/index.js` IS the
+  // native module, so source-path patterns must not judge dist file names).
+  const distPrefix = result.variant.startsWith('gxt-native-dist')
+    ? join(SNAPSHOT_ROOT, 'gxt-native') + sep
+    : null;
+  const why = (id) =>
+    distPrefix && id.startsWith(distPrefix)
+      ? undefined
+      : FORBIDDEN_NATIVE.find(([re]) => re.test(id))?.[1];
   const violations = []; // shipped (minified) bytes > 0
   const preTerserOnly = []; // rollup kept it, terser dropped every byte
   const graphOnly = []; // in the import graph, rendered to 0 bytes by rollup
@@ -587,6 +699,53 @@ function assertNative(result) {
     true
   );
   print('forbidden modules in the import graph only (rendered to 0 bytes)', graphOnly, false);
+  if (distPrefix) {
+    // The dist-level assertion on the snapshot this app consumed …
+    const out = join(DIST_ROOT, `${result.variant}-assert-dist.json`);
+    const r = spawnSync(
+      process.execPath,
+      [
+        join(EMBER_ROOT, 'scripts/assert-native-dist.mjs'),
+        '--dist',
+        join(SNAPSHOT_ROOT, 'gxt-native'),
+        '--modes',
+        'prod',
+        '--json',
+        out,
+      ],
+      { cwd: EMBER_ROOT, encoding: 'utf8', timeout: 300_000 }
+    );
+    process.stdout.write(r.stdout ?? '');
+    const dist = existsSync(out) ? JSON.parse(readFileSync(out, 'utf8'))[0] : null;
+    if (r.status !== 0 || !dist?.app?.fileList) {
+      violations.push({
+        id: 'scripts/assert-native-dist.mjs',
+        reason: `dist assertion failed (status ${r.status})`,
+        shipped: 0,
+        rendered: 0,
+      });
+    } else {
+      // … and every dist chunk this app's bundle actually pulled is inside the
+      // closure that assertion proved VM-free.
+      const prodDir = join(distPrefix, 'prod') + sep;
+      const closure = new Set(dist.app.fileList);
+      const pulled = Object.keys(stats.graph)
+        .filter((id) => id.startsWith(prodDir))
+        .map((id) => id.slice(prodDir.length).split(sep).join('/'));
+      const outside = pulled.filter((f) => !closure.has(f));
+      console.log(
+        `\n[assert-native] ${result.variant}: the app bundle pulled ${pulled.length} dist chunk(s); outside the asserted dist app closure: ${outside.length}`
+      );
+      for (const f of outside) {
+        violations.push({
+          id: f,
+          reason: 'dist chunk outside the asserted closure',
+          shipped: 0,
+          rendered: 0,
+        });
+      }
+    }
+  }
   console.log(
     violations.length
       ? `[assert-native] FAIL: ${violations.length} forbidden module(s) ship in ${result.variant}`
@@ -598,6 +757,14 @@ function assertNative(result) {
 // ---------------------------------------------------------------- main
 const fmt = (n) => n.toLocaleString('en-US');
 const results = [];
+if (doBuildDists) {
+  const flavors = variants.filter(isDistVariant).map((v) => VARIANTS[v].MODERN_APP_DIST_FLAVOR);
+  if (flavors.length === 0) {
+    console.error('[bundle-modern-app] --build-dists needs a *-dist variant (use --from-dist)');
+    process.exit(2);
+  }
+  buildDists(flavors);
+}
 for (const variant of variants) {
   if (doBuild) buildVariant(variant);
   const { dir, boot, lazy } = bootFiles(variant);
