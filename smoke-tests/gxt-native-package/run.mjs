@@ -10,7 +10,13 @@
 //   node smoke-tests/gxt-native-package/run.mjs --app <dir outside the repo> \
 //     --package <tarballs>/ember-source-gxt-native-<v>.tgz \
 //     --gxt <tarballs>/lifeart-gxt-<v>.tgz [--dev] [--no-install]
+//     [--no-typescript]
 //     [--compare-bundle smoke-tests/modern-app/dist/gxt-native-dist]
+//
+// --no-typescript: the consumer does not list `typescript` (a gxt whose
+// compiler declares it as an optional peer and loads it lazily needs no
+// typescript in the app); the install checks then also require that no
+// typescript was installed.
 //
 // The app is the modern reference app (smoke-tests/modern-app/app, strict
 // .gjs) with this directory's consumer/ files (vite.config.mjs = the package's
@@ -52,9 +58,11 @@ const COMPARE = resolve(
   opt('--compare-bundle', 'smoke-tests/modern-app/dist/gxt-native-dist')
 );
 const INSTALL = !flag('--no-install');
+const WITH_TYPESCRIPT = !flag('--no-typescript');
 
 const log = (msg) => process.stdout.write(`[gxt-native-consumer] ${msg}\n`);
 const checks = [];
+const timings = {};
 function check(name, ok, detail = '') {
   checks.push({ name, ok, detail });
   log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`);
@@ -76,9 +84,8 @@ function run(cmd, args, { cwd = APP, env = {}, timeoutSec = 600, logName }) {
   });
   const logFile = join(APP, `${logName}.log`);
   writeFileSync(logFile, `$ ${cmd} ${args.join(' ')}\n${r.stdout ?? ''}\n${r.stderr ?? ''}`);
-  log(
-    `${logName}: exit ${r.status ?? r.signal} in ${((Date.now() - t0) / 1000).toFixed(1)}s (log ${logFile})`
-  );
+  timings[logName] = Number(((Date.now() - t0) / 1000).toFixed(1));
+  log(`${logName}: exit ${r.status ?? r.signal} in ${timings[logName]}s (log ${logFile})`);
   if (r.error || r.status !== 0) die(`${cmd} ${args.join(' ')} failed; see ${logFile}`);
   return r.stdout;
 }
@@ -156,9 +163,10 @@ if (INSTALL) {
       '@glimmer/component': '2.1.1',
       '@rollup/plugin-babel': repoVersion('@rollup/plugin-babel'),
       terser: repoVersion('terser'),
-      // @lifeart/gxt/compiler imports `typescript` without declaring it (gxt
-      // packaging bug, also in the published 0.0.81) — the app must provide it.
-      typescript: repoVersion('typescript'),
+      // @lifeart/gxt <= 0.0.81 (incl. the published 0.0.81) statically imports
+      // `typescript` from @lifeart/gxt/compiler without declaring it — with
+      // such a gxt the app must provide it. --no-typescript leaves it out.
+      ...(WITH_TYPESCRIPT ? { typescript: repoVersion('typescript') } : {}),
       vite: repoVersion('vite'),
     },
     overrides: {
@@ -195,6 +203,57 @@ const glimmerComponentCopies = findPackages(nm, '@glimmer/component').map((d) =>
 log(
   `installed @glimmer/component copies (none may reach the bundle): ${glimmerComponentCopies.join(', ')}`
 );
+
+// Every package in node_modules (nested copies included), and its size on disk.
+const installedPackages = listPackages(nm);
+writeFileSync(
+  join(APP, 'installed-packages.txt'),
+  installedPackages.map((p) => `${p.name}@${p.version}  ${relative(APP, p.dir)}`).join('\n') + '\n'
+);
+const du = spawnSync('du', ['-sk', nm], { encoding: 'utf8' });
+const nodeModulesKB = du.status === 0 ? Number(du.stdout.split(/\s/)[0]) : null;
+log(
+  `node_modules: ${installedPackages.length} packages, ${nodeModulesKB === null ? '? (du failed)' : `${(nodeModulesKB / 1024).toFixed(1)} MB`}` +
+    `${timings['npm-install'] === undefined ? '' : `, npm install ${timings['npm-install']}s`} (list ${join(APP, 'installed-packages.txt')})`
+);
+// gxt's renderer demos (three / jspdf / yoga-layout) are not reachable from any
+// published gxt entry: a consumer must not install them.
+const HEAVY = ['three', '@types/three', 'jspdf', 'yoga-layout'];
+const heavy = installedPackages.filter((p) => HEAVY.includes(p.name));
+check(
+  `install: no ${HEAVY.join(' / ')} (unused by every published gxt entry)`,
+  heavy.length === 0,
+  heavy.map((p) => `${p.name}@${p.version}`).join(', ') || 'none installed'
+);
+if (!WITH_TYPESCRIPT) {
+  const typescript = installedPackages.filter((p) => p.name === 'typescript');
+  check(
+    'install: no typescript anywhere in node_modules (--no-typescript)',
+    typescript.length === 0,
+    typescript.map((p) => `${relative(APP, p.dir)}@${p.version}`).join(', ') || 'none installed'
+  );
+}
+
+function listPackages(dir, acc = []) {
+  if (!existsSync(dir)) return acc;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    const pkgDirs = entry.name.startsWith('@')
+      ? readdirSync(join(dir, entry.name), { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => join(dir, entry.name, e.name))
+      : [join(dir, entry.name)];
+    for (const pkgDir of pkgDirs) {
+      const manifest = join(pkgDir, 'package.json');
+      if (existsSync(manifest)) {
+        const { name, version } = JSON.parse(readFileSync(manifest, 'utf8'));
+        acc.push({ name, version, dir: pkgDir });
+      }
+      listPackages(join(pkgDir, 'node_modules'), acc);
+    }
+  }
+  return acc;
+}
 
 function findPackages(dir, name, acc = []) {
   if (!existsSync(dir)) return acc;
@@ -426,7 +485,19 @@ const failed = checks.filter((c) => !c.ok);
 writeFileSync(
   join(APP, 'acceptance.json'),
   JSON.stringify(
-    { package: installed.name, version: installed.version, total, boot, checks },
+    {
+      package: installed.name,
+      version: installed.version,
+      install: {
+        withTypescript: WITH_TYPESCRIPT,
+        packages: installedPackages.length,
+        nodeModulesKB,
+        npmInstallSec: timings['npm-install'] ?? null,
+      },
+      total,
+      boot,
+      checks,
+    },
     null,
     2
   )
