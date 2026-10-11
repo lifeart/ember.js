@@ -16,7 +16,14 @@ import { fileURLToPath } from 'node:url';
 // `EMBER_RENDER_BACKEND=gxt` publish build, by contrast, intentionally keeps the
 // classic precompile pass — so this must not also flip on EMBER_RENDER_BACKEND.
 // See gxt-alias-map.mjs `isGxtEnabled` for the full asymmetry rationale.
-const useGxt = process.env.GXT_MODE === 'true';
+//
+// The gxt NATIVE layer (`EMBER_RENDER_BACKEND=gxt-native`, vite only) also skips
+// it: native has no wire-format templates — `precompileTemplate` is left for the
+// gxt compiler (G10, Inc 8) and the native `@ember/template-compilation`
+// (docs-internal-gxt-native-layer-design.md §2.2/§4). The rollup gxt-native build
+// refuses to run (rollup.config.mjs nativeDistNotImplemented), so this cannot
+// change a published dist.
+const useGxt = process.env.GXT_MODE === 'true' || process.env.EMBER_RENDER_BACKEND === 'gxt-native';
 
 export default {
   plugins: [

@@ -17,8 +17,13 @@ import {
   GXT_SHIM_DIR,
   GXT_SHIM_ALIASES,
   GXT_SUBPATH_REDIRECTS,
+  GXT_NATIVE_ALIASES,
+  NATIVE_FLAGS,
+  gxtNativeAliasMatcher,
   gxtSubpathRegExp,
   isGxtEnabled,
+  isGxtNative,
+  matchGxtNativeAlias,
 } from './scripts/gxt-alias-map.mjs';
 import { templateTag } from '@embroider/vite';
 
@@ -43,6 +48,15 @@ export default defineConfig(({ mode }) => {
   // GXT_MODE in CI, but the benchmark vite configs set both, and this keeps a
   // bare `EMBER_RENDER_BACKEND=gxt npx vite` working). See scripts/gxt-alias-map.mjs
   // for why rollup's USE_GXT_BACKEND must NOT symmetrically honor GXT_MODE.
+  //
+  // EMBER_RENDER_BACKEND=gxt-native selects the gxt NATIVE layer instead
+  // (design: docs-internal-gxt-native-layer-design.md §2.1/§4): classic Ember
+  // source with `__GXT_MODE__ = false`, the GXT_NATIVE_ALIASES boundary swapping
+  // only the VM-touching modules for gxt-backend/native/*, the gxt compiler with
+  // NATIVE_FLAGS, NO gxtEmberWrapperRedirect, and a separate prebundle cacheDir.
+  // It wins over GXT_MODE. Classic and compat configs are untouched by it.
+  const useNative = isGxtNative();
+  if (useNative) return nativeConfig(mode);
   const useGxt = isGxtEnabled();
 
   // GXT builds: single-chunk output. preserveModules' ~1000 module files blew
@@ -89,7 +103,7 @@ export default defineConfig(({ mode }) => {
       replaceGxtModeFlag(useGxt),
       // Inline the build-time `__GXT_CLASSIC_COMPONENTS__` flag (default true).
       // Mirrors the rollup `replaceGxtClassicComponentsFlag` plugin so the test
-      // harness keeps full classic-component support unless a native run sets
+      // harness keeps full classic-component support unless a run sets
       // GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0. See types/gxt-ambient.d.ts.
       replaceGxtClassicComponentsFlag(),
       // Deduplicate GXT internal modules so they share one reactive core.
@@ -365,6 +379,141 @@ function gxtEmberWrapperRedirect() {
   };
 }
 
+/**
+ * Vite config for `EMBER_RENDER_BACKEND=gxt-native` (the gxt NATIVE layer).
+ * Kept as a separate function so the classic / compat configs above stay
+ * byte-for-byte what they were. Shares the gxt-alias-map table with rollup
+ * (Inc 10) and the native runtime compiler (Inc 7).
+ */
+function nativeConfig(mode) {
+  return {
+    plugins: [
+      replaceGxtModeFlag(false),
+      // Irrelevant in native (only the compat manager.ts reads it, and that file
+      // is never loaded) — kept so a stray reference still const-folds.
+      replaceGxtClassicComponentsFlag(),
+      gxtStalenessCheck(),
+      gxtModuleDedup(),
+      gxtPatchVmMemoryLeaks(),
+      gxtNativeRelativeRedirect(),
+      compiler(mode, { flags: { ...NATIVE_FLAGS } }),
+      // NO gxtEmberWrapperRedirect: AOT templates import the gxt runtime directly.
+      babel({
+        babelHelpers: 'bundled',
+        extensions: ['.js', '.ts', '.gjs', '.gts'],
+        configFile: resolve(dirname(fileURLToPath(import.meta.url)), './babel.test.config.mjs'),
+      }),
+      resolvePackages(
+        {
+          ...exposedDependencies(),
+          ...hiddenDependencies(),
+          '@lifeart/gxt/glimmer-compatibility': '@lifeart/gxt',
+          '@lifeart/gxt/runtime-compiler': '@lifeart/gxt',
+          '@babel/core': '@lifeart/gxt',
+          typescript: '@lifeart/gxt',
+          'content-tag': '@lifeart/gxt',
+        },
+        { enableLocalDebug: true, viteDevFallthrough: true }
+      ),
+      viteResolverBug(),
+      version(),
+    ],
+    // Separate prebundle cache so compat (.vite) and native prebundles can never
+    // cross-contaminate (design §4).
+    cacheDir: 'node_modules/.vite-native',
+    optimizeDeps: {
+      noDiscovery: true,
+      include: ['expect-type'],
+      exclude: [
+        '@lifeart/gxt',
+        '@lifeart/gxt/runtime-compiler',
+        '@lifeart/gxt/glimmer-compatibility',
+      ],
+    },
+    publicDir: 'tests/public',
+    server: { hmr: { overlay: false } },
+    // The gxt compiler plugin inlines NATIVE_FLAGS (+ IS_DEV_MODE) via its own
+    // `define`, so no classic `define:` block here.
+    build: { minify: mode === 'production' },
+    esbuild: false,
+    envPrefix: 'VM_',
+    resolve: {
+      dedupe: [
+        '@lifeart/gxt',
+        '@lifeart/gxt/glimmer-compatibility',
+        '@lifeart/gxt/runtime-compiler',
+      ],
+      alias: [
+        // The native boundary (scripts/gxt-alias-map.mjs), deep paths first.
+        ...GXT_NATIVE_ALIASES.map((entry) => ({
+          find: gxtNativeAliasMatcher(entry),
+          replacement: fileURLToPath(new URL(`./${entry.target}`, owerrideRoot)),
+        })),
+        {
+          find: '@lifeart/gxt/runtime-compiler',
+          replacement: resolveGxtPath(
+            `./packages/demo/node_modules/@lifeart/gxt/dist/gxt.runtime-compiler.es.js`
+          ),
+        },
+        {
+          find: 'decorator-transforms/runtime',
+          replacement: fileURLToPath(
+            new URL(`./node_modules/decorator-transforms/dist/runtime.js`, owerrideRoot)
+          ),
+        },
+        {
+          find: '@lifeart/gxt/glimmer-compatibility',
+          replacement: resolveGxtPath(
+            `./packages/demo/node_modules/@lifeart/gxt/dist/gxt.glimmer-compat.es.js`
+          ),
+        },
+        {
+          find: '@lifeart/gxt',
+          replacement: resolveGxtPath(
+            `./packages/demo/node_modules/@lifeart/gxt/dist/gxt.index.es.js`
+          ),
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * Native-build resolved-path guard. Vite aliases only see the import
+ * SPECIFIER, so a RELATIVE edge inside `packages/` (the vendored collections'
+ * `../tracking`, LinkTo's `../templates/link-to`, …) would bypass the native
+ * boundary and pull the real VM module back in. This maps such an edge back to
+ * its package specifier and applies the SAME GXT_NATIVE_ALIASES table.
+ */
+function gxtNativeRelativeRedirect() {
+  const packagesDir = resolve(projectRoot, 'packages') + '/';
+  const EXTENSIONS = ['.ts', '.gts', '.js', '.gjs', '/index.ts', '/index.js'];
+  return {
+    name: 'gxt-native-relative-redirect',
+    enforce: 'pre',
+    resolveId(source, importer) {
+      if (!importer || !source.startsWith('.')) return null;
+      const importerPath = importer.split('?')[0].split('#')[0];
+      if (!importerPath.startsWith(packagesDir)) return null;
+      const abs = resolve(dirname(importerPath), source);
+      if (!abs.startsWith(packagesDir)) return null;
+      const specifier = abs
+        .slice(packagesDir.length)
+        .replace(/\.(ts|js|gts|gjs)$/, '')
+        .replace(/\/index$/, '');
+      const hit = matchGxtNativeAlias(specifier);
+      if (!hit || hit.entry.match === 'prefix') return null;
+      const base = resolve(projectRoot, hit.target);
+      for (const ext of EXTENSIONS) {
+        if (existsSync(base + ext)) return base + ext;
+      }
+      throw new Error(
+        `[gxt-native] ${source} (from ${importerPath}) maps to ${hit.target}, which does not exist`
+      );
+    },
+  };
+}
+
 // Replace the bare `__GXT_MODE__` identifier with the boolean literal so
 // source code that writes `if (__GXT_MODE__) { ... }` const-folds at bundle
 // time. Mirrors the same-named helper in rollup.config.mjs (which always
@@ -397,15 +546,12 @@ function replaceGxtModeFlag(useGxt) {
 }
 
 // Mirror of rollup's `replaceGxtClassicComponentsFlag`. Default true; flipped
-// false by `EMBER_RENDER_BACKEND=gxt-native` (single canonical var) — or the
-// legacy GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0 aliases — to exercise the native (no
-// classic-component emulation) path under the vite test harness.
+// false by GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0 to exercise the compat build with
+// the classic-component emulation DCE'd (the pre-Inc-1 meaning of "gxt-native";
+// `EMBER_RENDER_BACKEND=gxt-native` now selects the native layer, see
+// nativeConfig(), where only the never-loaded manager.ts would read this flag).
 function replaceGxtClassicComponentsFlag() {
-  const classic = !(
-    process.env.EMBER_RENDER_BACKEND === 'gxt-native' ||
-    process.env.GXT_NATIVE === '1' ||
-    process.env.EMBER_GXT_CLASSIC === '0'
-  );
+  const classic = !(process.env.GXT_NATIVE === '1' || process.env.EMBER_GXT_CLASSIC === '0');
   const literal = classic ? 'true' : 'false';
   const RE = /\b__GXT_CLASSIC_COMPONENTS__\b/g;
   return {

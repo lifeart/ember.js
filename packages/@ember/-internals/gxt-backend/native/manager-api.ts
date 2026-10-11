@@ -1,0 +1,216 @@
+// gxt NATIVE layer — alias target for `@glimmer/manager` and every deep path
+// (`lib/internal/api`, `lib/public/{api,component,helper,modifier,template}`,
+// `lib/util/args-proxy`).
+//
+// The registries (internal + public managers, component templates, custom tag
+// functions) and the capability builders are real: they are plain WeakMaps with
+// Glimmer's prototype-chain lookup, and classic modules call them at MODULE EVAL
+// (InternalComponent's `opaquify`, the `element`/`unique-id` internal helpers,
+// `on`, @glimmer/component's setComponentManager). What is NOT here yet is the
+// manager PROTOCOL: `Custom{Component,Helper,Modifier}Manager` only record the
+// factory. The native `$_MANAGERS` tables that drive them from gxt's
+// `_component` / `$_maybeHelper` / `$_maybeModifier` land in Inc 4 (component)
+// and Inc 5 (helper/modifier) — design §2.3.
+import { DEBUG } from '@glimmer/env';
+import { isNativeTemplateFactory } from './template-factory';
+import type { Tag } from './validator';
+
+// ---------------------------------------------------------------- internal api
+const COMPONENT_MANAGERS = new WeakMap<object, unknown>();
+const HELPER_MANAGERS = new WeakMap<object, unknown>();
+const MODIFIER_MANAGERS = new WeakMap<object, unknown>();
+
+const getPrototypeOf = Object.getPrototypeOf;
+
+function setManager<T extends object>(map: WeakMap<object, unknown>, manager: unknown, obj: T): T {
+  if (DEBUG && !(obj !== null && (typeof obj === 'object' || typeof obj === 'function'))) {
+    throw new Error(`Attempted to set a manager on a non-object value: ${String(obj)}`);
+  }
+  if (DEBUG && map.has(obj)) {
+    throw new Error(`Attempted to set the same type of manager multiple times on a value`);
+  }
+  map.set(obj, manager);
+  return obj;
+}
+
+function getManager(map: WeakMap<object, unknown>, obj: object): unknown {
+  let pointer: object | null = obj;
+  while (pointer !== undefined && pointer !== null) {
+    const manager = map.get(pointer);
+    if (manager !== undefined) return manager;
+    pointer = getPrototypeOf(pointer) as object | null;
+  }
+  return undefined;
+}
+
+export function setInternalComponentManager<T extends object>(manager: unknown, definition: T): T {
+  return setManager(COMPONENT_MANAGERS, manager, definition);
+}
+export function getInternalComponentManager(definition: object, _isOptional?: boolean): any {
+  return getManager(COMPONENT_MANAGERS, definition);
+}
+// A raw gxt template function (the default export of a template-only
+// `.gjs`/`.gts`, e.g. a route template) IS a component in the native build — gxt
+// renders it directly, the way Glimmer's TEMPLATE_ONLY_COMPONENT_MANAGER marks
+// `templateOnly()` definitions. route.ts (`buildRenderState`) relies on this to
+// keep such a template UNINVOKED instead of calling it as `factory(owner)`.
+// G14 fallback heuristic (design §2.6): "a function that is not a native
+// TemplateFactory". Replace with the gxt compiler's template-fn brand
+// (`isTemplateFn`) once G14 lands (Inc 4).
+function isGxtTemplateFn(definition: unknown): boolean {
+  return typeof definition === 'function' && !isNativeTemplateFactory(definition);
+}
+
+export function hasInternalComponentManager(definition: object): boolean {
+  return getManager(COMPONENT_MANAGERS, definition) !== undefined || isGxtTemplateFn(definition);
+}
+
+export function setInternalHelperManager<T extends object>(manager: unknown, definition: T): T {
+  return setManager(HELPER_MANAGERS, manager, definition);
+}
+export function getInternalHelperManager(definition: object, _isOptional?: boolean): any {
+  return getManager(HELPER_MANAGERS, definition);
+}
+export function hasInternalHelperManager(definition: object): boolean {
+  return getManager(HELPER_MANAGERS, definition) !== undefined;
+}
+
+export function setInternalModifierManager<T extends object>(manager: unknown, definition: T): T {
+  return setManager(MODIFIER_MANAGERS, manager, definition);
+}
+export function getInternalModifierManager(definition: object, _isOptional?: boolean): any {
+  return getManager(MODIFIER_MANAGERS, definition);
+}
+export function hasInternalModifierManager(definition: object): boolean {
+  return getManager(MODIFIER_MANAGERS, definition) !== undefined;
+}
+
+// ---------------------------------------------------------------- public api
+type ManagerFactory = (owner: object) => unknown;
+
+// Protocol-less records of a public custom manager registration. The native
+// `$_MANAGERS` tables (Inc 4/5) instantiate `factory(owner)` per owner and
+// drive the 3.13 / 3.23 / 3.22 protocols.
+export class CustomComponentManager {
+  constructor(readonly factory: ManagerFactory) {}
+}
+export class CustomHelperManager {
+  constructor(readonly factory: ManagerFactory) {}
+}
+export class CustomModifierManager {
+  constructor(readonly factory: ManagerFactory) {}
+}
+
+export function setComponentManager<T extends object>(factory: ManagerFactory, obj: T): T {
+  return setInternalComponentManager(new CustomComponentManager(factory), obj);
+}
+export function setHelperManager<T extends object>(factory: ManagerFactory, obj: T): T {
+  return setInternalHelperManager(new CustomHelperManager(factory), obj);
+}
+export function setModifierManager<T extends object>(factory: ManagerFactory, obj: T): T {
+  return setInternalModifierManager(new CustomModifierManager(factory), obj);
+}
+
+// ---------------------------------------------------------------- capabilities
+export const FROM_CAPABILITIES: WeakSet<object> | undefined = DEBUG ? new WeakSet() : undefined;
+
+export function buildCapabilities<T extends object>(capabilities: T): T {
+  if (DEBUG) {
+    (FROM_CAPABILITIES as WeakSet<object>).add(capabilities);
+    Object.freeze(capabilities);
+  }
+  return capabilities;
+}
+
+export function componentCapabilities(
+  managerAPI: string,
+  options: { asyncLifecycleCallbacks?: boolean; destructor?: boolean; updateHook?: boolean } = {}
+) {
+  if (DEBUG && managerAPI !== '3.13') {
+    throw new Error('Invalid component manager compatibility specified');
+  }
+  return buildCapabilities({
+    asyncLifeCycleCallbacks: Boolean(options.asyncLifecycleCallbacks),
+    destructor: Boolean(options.destructor),
+    updateHook: Boolean(options.updateHook),
+  });
+}
+
+export function helperCapabilities(
+  managerAPI: string,
+  options: { hasValue?: boolean; hasDestroyable?: boolean; hasScheduledEffect?: boolean } = {}
+) {
+  if (DEBUG && managerAPI !== '3.23') {
+    throw new Error('Invalid helper manager compatibility specified');
+  }
+  if (DEBUG && !(options.hasValue || options.hasScheduledEffect)) {
+    throw new Error(
+      'You must pass either the `hasValue` OR the `hasScheduledEffect` capability when defining a helper manager. Passing neither, or both, is not permitted.'
+    );
+  }
+  if (DEBUG && options.hasScheduledEffect) {
+    throw new Error(
+      'The `hasScheduledEffect` capability has not yet been implemented for helper managers. Please pass `hasValue` instead'
+    );
+  }
+  return buildCapabilities({
+    hasValue: Boolean(options.hasValue),
+    hasDestroyable: Boolean(options.hasDestroyable),
+    hasScheduledEffect: Boolean(options.hasScheduledEffect),
+  });
+}
+
+export function hasValue(manager: { capabilities: { hasValue: boolean } }): boolean {
+  return manager.capabilities.hasValue;
+}
+export function hasDestroyable(manager: { capabilities: { hasDestroyable: boolean } }): boolean {
+  return manager.capabilities.hasDestroyable;
+}
+
+export function modifierCapabilities(
+  managerAPI: string,
+  optionalFeatures: { disableAutoTracking?: boolean } = {}
+) {
+  if (DEBUG && managerAPI !== '3.22') {
+    throw new Error('Invalid modifier manager compatibility specified');
+  }
+  return buildCapabilities({ disableAutoTracking: Boolean(optionalFeatures.disableAutoTracking) });
+}
+
+// ---------------------------------------------------------------- templates
+const TEMPLATES = new WeakMap<object, unknown>();
+
+export function setComponentTemplate<T extends object>(factory: unknown, obj: T): T {
+  if (DEBUG && !(obj !== null && (typeof obj === 'object' || typeof obj === 'function'))) {
+    throw new Error(`Cannot call \`setComponentTemplate\` on \`${String(obj)}\``);
+  }
+  if (DEBUG && TEMPLATES.has(obj)) {
+    throw new Error(
+      `Cannot call \`setComponentTemplate\` multiple times on the same class (\`${String(obj)}\`)`
+    );
+  }
+  TEMPLATES.set(obj, factory);
+  return obj;
+}
+
+export function getComponentTemplate(obj: object): any {
+  let pointer: object | null = obj;
+  while (pointer !== null) {
+    const template = TEMPLATES.get(pointer);
+    if (template !== undefined) return template;
+    pointer = getPrototypeOf(pointer) as object | null;
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------- custom tags
+// Proxy objects (ArrayProxy / ObjectProxy) register a per-key tag function that
+// metal's tagForProperty consults.
+const CUSTOM_TAG_FOR = new WeakMap<object, (obj: object, key: string) => Tag>();
+
+export function getCustomTagFor(obj: object): ((obj: object, key: string) => Tag) | undefined {
+  return CUSTOM_TAG_FOR.get(obj);
+}
+export function setCustomTagFor(obj: object, customTagFn: (obj: object, key: string) => Tag): void {
+  CUSTOM_TAG_FOR.set(obj, customTagFn);
+}

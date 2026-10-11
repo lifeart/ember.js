@@ -180,10 +180,16 @@ export function gxtSubpathRegExp(find) {
 }
 
 /**
- * The single "is the GXT backend enabled" predicate. Honors BOTH historical
- * flags so either spelling turns GXT on for the readers that can safely accept
- * both: `GXT_MODE=true` (the vite dev/test harness) and `EMBER_RENDER_BACKEND=gxt`
- * (the rollup production build).
+ * The single "is the GXT COMPAT backend enabled" predicate. Honors BOTH
+ * historical flags so either spelling turns GXT on for the readers that can
+ * safely accept both: `GXT_MODE=true` (the vite dev/test harness) and
+ * `EMBER_RENDER_BACKEND=gxt` (the rollup production build).
+ *
+ * `EMBER_RENDER_BACKEND=gxt-native` is NOT the compat backend any more: it
+ * selects the native layer (see `isGxtNative` / GXT_NATIVE_ALIASES below), which
+ * compiles classic Ember source with `__GXT_MODE__ = false` and never loads the
+ * compat bridge. Readers must test `isGxtNative()` FIRST (native wins even when
+ * `GXT_MODE=true` is also set).
  *
  * NOTE on the deliberate asymmetry: `rollup.config.mjs` intentionally keys its
  * `USE_GXT_BACKEND` off `EMBER_RENDER_BACKEND` ALONE and must NOT use this OR
@@ -196,9 +202,218 @@ export function gxtSubpathRegExp(find) {
  * in CI, so honoring both there is purely additive.
  */
 export function isGxtEnabled(env = process.env) {
-  return (
-    env.GXT_MODE === 'true' ||
-    env.EMBER_RENDER_BACKEND === 'gxt' ||
-    env.EMBER_RENDER_BACKEND === 'gxt-native'
-  );
+  return env.GXT_MODE === 'true' || env.EMBER_RENDER_BACKEND === 'gxt';
+}
+
+// ---------------------------------------------------------------------------
+// gxt NATIVE layer (P1 design: docs-internal-gxt-native-layer-design.md §2/§4)
+// ---------------------------------------------------------------------------
+//
+// `EMBER_RENDER_BACKEND=gxt-native` builds CLASSIC Ember source with
+// `__GXT_MODE__ = false` (so every `if (__GXT_MODE__)` bridge branch is dead)
+// and swaps ONLY the modules where classic Ember touches the Glimmer VM for
+// `packages/@ember/-internals/gxt-backend/native/*`. The compat bridge
+// (compile.ts / manager.ts / ember-gxt-wrappers.ts / validator.ts / reference.ts
+// / destroyable.ts / gxt-bridge.ts) is never loaded. AOT templates import the gxt
+// runtime directly (no gxtEmberWrapperRedirect).
+//
+// History: until Inc 1 `gxt-native` meant "compat + __GXT_CLASSIC_COMPONENTS__ =
+// false". That old build never booted and nothing in CI used it; it is still
+// reachable as `GXT_MODE=true GXT_NATIVE=1` (vite) / `EMBER_RENDER_BACKEND=gxt
+// GXT_NATIVE=1` (rollup) for comparison until P3 deletes the classic-component
+// gating.
+
+// Directory (repo-relative) holding the native layer.
+export const GXT_NATIVE_DIR = 'packages/@ember/-internals/gxt-backend/native';
+
+/**
+ * The single "is the gxt NATIVE layer selected" predicate. Readers check this
+ * BEFORE `isGxtEnabled()`.
+ */
+export function isGxtNative(env = process.env) {
+  return env.EMBER_RENDER_BACKEND === 'gxt-native';
+}
+
+/**
+ * gxt compiler flags for the native build. ONE constant shared by the vite
+ * plugin (AOT) and — from Inc 7 — `native/runtime-compile.ts`, so AOT and
+ * runtime-compiled templates cannot drift (design §7 risk 11).
+ *
+ * Only flags that the pinned gxt (0.0.81, `plugins/flags.ts` defaultFlags())
+ * understands are live keys. A key gxt does not know would be inlined by the
+ * compiler plugin's `define` as a dead identifier at best and silently ignored at
+ * worst, so the planned native flags stay commented until their gxt change lands
+ * (each must ALSO be added to gxt `defaultFlags()` and to the classic `define:`
+ * block in vite.config.mjs — design §7 risk 10).
+ */
+export const NATIVE_FLAGS = Object.freeze({
+  WITH_EMBER_INTEGRATION: true,
+  WITH_HELPER_MANAGER: true,
+  WITH_MODIFIER_MANAGER: true,
+  TRY_CATCH_ERROR_HANDLING: false,
+  ASYNC_COMPILE_TRANSFORMS: false,
+  FORCE_SYNC_LIST: true,
+  EMBER_ATTR_CONCAT: true,
+  EMBER_IN_ELEMENT: true,
+  EMBER_TRUSTED_HTML: true,
+  WITH_DYNAMIC_EVAL: false,
+  // TODO (not understood by gxt 0.0.81 — add as live keys when the gxt change
+  // lands on branch ember-vm-replacement, design §2.6):
+  //   EMBER_OUTLET: true,           // G3  {{outlet}} -> $_outlet(this)        (Inc 4)
+  //   EMBER_NATIVE: true,           // G4/G9/G15/G-kw runtime switches         (Inc 5)
+  //   EMBER_SELF: true,             // G6  $_self(this) preamble               (Inc 7)
+  //   EMBER_PROPERTY_TAGS: true,    // G8  $__tag(obj,'k') member taps         (Inc 7)
+  //   EMBER_LOOSE_COMPONENTS: true, // G11 $_c("Name") for unknown tags        (Inc 8)
+  //   EMBER_EACH_IN: true,          // G5  each-in lowering                    (Inc 9)
+});
+
+const nativeTarget = (name) => `${GXT_NATIVE_DIR}/${name}`;
+
+/**
+ * The native alias boundary: specifier → native module (repo-relative path,
+ * no extension). ORDERED, first match wins — deep-path redirects come FIRST.
+ *
+ * `match`:
+ *   - 'exact'    only the bare specifier (e.g. `@ember/component` must NOT
+ *                swallow `@ember/component/helper`);
+ *   - 'tolerant' the specifier AND every deep path below it collapse onto the
+ *                single target file (the native module re-exports the full
+ *                surface those deep paths provide);
+ *   - 'prefix'   directory remap (`find/x` → `target/x`): used to keep a VM-free
+ *                vendored subtree REAL while its package is otherwise aliased.
+ *
+ * The same table also drives the resolved-path guard in vite.config.mjs
+ * (`gxtNativeRelativeRedirect`): a RELATIVE import inside `packages/` whose
+ * resolved path spells one of these specifiers (e.g. the vendored collections'
+ * `../tracking`, LinkTo's `../templates/link-to`) is redirected identically, so
+ * intra-package edges cannot bypass the boundary.
+ *
+ * `inc` = the increment that replaces the Inc-1 stub/placeholder with the real
+ * implementation (design §5).
+ */
+export const GXT_NATIVE_ALIASES = [
+  // ---- deep-path redirects (more specific; must precede package aliases) ----
+  // VM-free vendored tracked collections stay REAL (design §2.2); their
+  // relative `../tracking` / `../validators` edges reach native/validator via
+  // the resolved-path guard.
+  {
+    find: '@glimmer/validator/lib/collections',
+    target: 'packages/@glimmer/validator/lib/collections',
+    match: 'prefix',
+  },
+  // @ember/-internals/glimmer: the VM-touching modules only.
+  {
+    find: '@ember/-internals/glimmer/lib/renderer',
+    target: nativeTarget('renderer'),
+    match: 'exact',
+    inc: 4,
+  },
+  {
+    find: '@ember/-internals/glimmer/lib/setup-registry',
+    target: nativeTarget('setup-registry'),
+    match: 'exact',
+    inc: 4,
+  },
+  {
+    find: '@ember/-internals/glimmer/lib/views/outlet',
+    target: nativeTarget('outlet'),
+    match: 'exact',
+    inc: 4,
+  },
+  {
+    find: '@ember/-internals/glimmer/lib/component',
+    target: nativeTarget('stubs/component'),
+    match: 'exact',
+  },
+  {
+    find: '@ember/-internals/glimmer/lib/components/input',
+    target: nativeTarget('stubs/input'),
+    match: 'exact',
+  },
+  {
+    find: '@ember/-internals/glimmer/lib/components/textarea',
+    target: nativeTarget('stubs/textarea'),
+    match: 'exact',
+  },
+  {
+    find: '@ember/-internals/glimmer/lib/templates/link-to',
+    target: nativeTarget('templates/link-to'),
+    match: 'exact',
+    inc: 6,
+  },
+  {
+    find: '@ember/-internals/views/lib/system/event_dispatcher',
+    target: nativeTarget('stubs/event-dispatcher'),
+    match: 'exact',
+  },
+  // @glimmer/runtime deep imports used by @ember/{helper,modifier,component}.
+  {
+    find: '@glimmer/runtime/lib/helpers',
+    target: nativeTarget('runtime-helpers'),
+    match: 'tolerant',
+    inc: 5,
+  },
+  {
+    find: '@glimmer/runtime/lib/modifiers/on',
+    target: nativeTarget('runtime-helpers'),
+    match: 'exact',
+    inc: 5,
+  },
+  {
+    find: '@glimmer/runtime/lib/component/template-only',
+    target: nativeTarget('runtime-helpers'),
+    match: 'exact',
+    inc: 4,
+  },
+  {
+    find: '@glimmer/opcode-compiler/lib/template',
+    target: nativeTarget('template-factory'),
+    match: 'exact',
+    inc: 4,
+  },
+  // ---- package-level ----
+  { find: '@glimmer/validator', target: nativeTarget('validator'), match: 'tolerant', inc: 3 },
+  { find: '@glimmer/reference', target: nativeTarget('reference'), match: 'tolerant', inc: 3 },
+  { find: '@glimmer/destroyable', target: nativeTarget('destroyable'), match: 'tolerant', inc: 3 },
+  { find: '@glimmer/manager', target: nativeTarget('manager-api'), match: 'tolerant', inc: 4 },
+  {
+    find: '@ember/template-compilation',
+    target: nativeTarget('template-compilation'),
+    match: 'exact',
+    inc: 8,
+  },
+  // Native barrel: cuts @glimmer/component -> @ember/component -> classic
+  // Component/CoreView/curly (L8) without editing shared source.
+  { find: '@ember/component', target: nativeTarget('component'), match: 'exact' },
+];
+
+/**
+ * Anchored matcher for one GXT_NATIVE_ALIASES entry (vite alias `find`).
+ * 'prefix' entries return the plain string (vite string aliases already match
+ * `find` exactly or as a `find + '/'` prefix and remap the prefix).
+ */
+export function gxtNativeAliasMatcher({ find, match }) {
+  if (match === 'prefix') return find;
+  if (match === 'tolerant') return gxtSubpathRegExp(find);
+  const escaped = find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('^' + escaped + '$');
+}
+
+/**
+ * Resolve a bare specifier against GXT_NATIVE_ALIASES (first match wins).
+ * Returns `{ entry, target }` with `target` repo-relative (no extension), or
+ * null. Used by the resolved-path guard for relative edges.
+ */
+export function matchGxtNativeAlias(specifier) {
+  for (const entry of GXT_NATIVE_ALIASES) {
+    if (entry.match === 'prefix') {
+      if (specifier === entry.find) return { entry, target: entry.target };
+      if (specifier.startsWith(entry.find + '/')) {
+        return { entry, target: entry.target + specifier.slice(entry.find.length) };
+      }
+      continue;
+    }
+    if (gxtNativeAliasMatcher(entry).test(specifier)) return { entry, target: entry.target };
+  }
+  return null;
 }

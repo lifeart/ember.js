@@ -45,24 +45,32 @@ const testDependencies = [
 // When unset (or "classic"), exposedDependencies() returns the exact same
 // result — the classic build is unchanged.
 const RENDER_BACKEND = process.env.EMBER_RENDER_BACKEND || 'classic';
-// `gxt-native` is the GXT backend with classic @ember/component emulation gated
-// OFF — it is a sub-mode of GXT, so a single var selects it (no second flag
-// needed). Both `gxt` (compat) and `gxt-native` turn the GXT backend on.
-const USE_GXT_BACKEND = RENDER_BACKEND === 'gxt' || RENDER_BACKEND === 'gxt-native';
+// `gxt` = the GXT COMPAT backend (gxt-backend shims + bridge).
+//
+// `gxt-native` is the gxt NATIVE layer (scripts/gxt-alias-map.mjs
+// GXT_NATIVE_ALIASES; design docs-internal-gxt-native-layer-design.md). It is
+// built by vite only for now; the rollup native dist flavor is Inc 10, so a
+// rollup `gxt-native` build FAILS LOUDLY (nativeDistNotImplemented below) rather
+// than silently emitting a classic or compat dist under the native label. This
+// module must still IMPORT cleanly under gxt-native because the native vite
+// config reuses resolvePackages()/exposedDependencies() from here — with
+// USE_GXT_BACKEND false, i.e. the classic dependency map (the native boundary is
+// applied by vite's alias array on top of it).
+const USE_GXT_BACKEND = RENDER_BACKEND === 'gxt';
+const USE_GXT_NATIVE = RENDER_BACKEND === 'gxt-native';
 
 // Build-time toggle for the CLASSIC @ember/component emulation inside the
 // gxt-backend manager. Default TRUE: the compat GXT build (and the classic
-// build, which never imports manager.ts) is byte-unchanged. A NATIVE/Polaris
-// GXT build (`EMBER_RENDER_BACKEND=gxt-native`) flips it FALSE, so the
-// `if (__GXT_CLASSIC_COMPONENTS__)` / `if (!__GXT_CLASSIC_COMPONENTS__)` guards
-// in manager.ts const-fold and terser/DCE strips the classic curly +
-// custom-manager + LinkTo + custom-element subtrees. Mirrors the __GXT_MODE__
-// flag mechanism (replaceGxtClassicComponentsFlag below). The legacy
-// GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0 vars still work as aliases.
+// build, which never imports manager.ts) is byte-unchanged. GXT_NATIVE=1 /
+// EMBER_GXT_CLASSIC=0 flip it FALSE, so the `if (__GXT_CLASSIC_COMPONENTS__)` /
+// `if (!__GXT_CLASSIC_COMPONENTS__)` guards in manager.ts const-fold and
+// terser/DCE strips the classic curly + custom-manager + LinkTo +
+// custom-element subtrees (the pre-Inc-1 meaning of "gxt-native", kept for
+// comparison as `EMBER_RENDER_BACKEND=gxt GXT_NATIVE=1` until P3 deletes it).
+// Mirrors the __GXT_MODE__ flag mechanism (replaceGxtClassicComponentsFlag
+// below).
 const GXT_CLASSIC_COMPONENTS = !(
-  RENDER_BACKEND === 'gxt-native' ||
-  process.env.GXT_NATIVE === '1' ||
-  process.env.EMBER_GXT_CLASSIC === '0'
+  process.env.GXT_NATIVE === '1' || process.env.EMBER_GXT_CLASSIC === '0'
 );
 
 // Bundle visualizer (gated by BUNDLE_VISUALIZER=1). Loaded here
@@ -89,6 +97,13 @@ let configs = [
   glimmerSyntaxESM(),
   glimmerSyntaxCJS(),
 ];
+
+if (USE_GXT_NATIVE) {
+  configs = configs.map((config) => ({
+    ...config,
+    plugins: [nativeDistNotImplemented(), ...config.plugins],
+  }));
+}
 
 if (process.env.DEBUG_SINGLE_CONFIG) {
   configs = configs.slice(
@@ -913,6 +928,24 @@ function replaceGxtModeFlag() {
       const replaced = code.replace(GXT_MODE_RE, literal);
       if (replaced === code) return null;
       return { code: replaced, map: null };
+    },
+  };
+}
+
+// `EMBER_RENDER_BACKEND=gxt-native` rollup builds: refuse at build start (the
+// native dist flavor — gxt compiler over native/**/*.gts, GXT_NATIVE_ALIASES as
+// an exact-key map, `--assert-native` on the dist — is Inc 10). Erroring in a
+// hook (not at module scope) keeps this module importable by vite.config.mjs.
+function nativeDistNotImplemented() {
+  return {
+    name: 'gxt-native-dist-not-implemented',
+    buildStart() {
+      this.error(
+        'EMBER_RENDER_BACKEND=gxt-native: the rollup native dist is not implemented yet (Inc 10). ' +
+          'Build the native layer with vite (scripts/bundle-modern-app.mjs --variants gxt-native). ' +
+          'The pre-Inc-1 "compat with classic components DCE-stripped" dist is ' +
+          'EMBER_RENDER_BACKEND=gxt GXT_NATIVE=1.'
+      );
     },
   };
 }
