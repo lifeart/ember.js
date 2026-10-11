@@ -1,0 +1,8 @@
+{
+  "$comment": "Tests turned into QUnit.skip on native.html. Key: '<full QUnit module name at definition time, nested modules joined by ' > '> :: <test name>'. Every entry is a documented drop (legacy), a Glimmer-VM-internal test with no native meaning, or work owned by a later increment (named). Value: the reason.",
+  "skips": {
+    "@glimmer/validator: validators > DirtyableTag :: it calls scheduleRevalidate": "VM-internal: asserts the @glimmer/global-context scheduleRevalidate hook (testOverrideGlobalContext). Native dirties go through gxt dirtyCell -> gxt scheduleRevalidate -> the native host hook (native/host-hooks.ts); covered by gxt tags.test.ts 'still signals the host'.",
+    "Controller model ::  model is tracked": "Renders (ApplicationTestCase visit + template) — native renderer is Inc 4.",
+    "Controller model ::  model can be observed with sync observers": "Renders (ApplicationTestCase visit + template) — native renderer is Inc 4."
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "$comment": "Allow-list of test modules loaded by native.html (EMBER_RENDER_BACKEND=gxt-native dev server, port 5181). Root-relative globs expanded by vite import.meta.glob (vite.config.mjs gxtNativeTestModules). Grown per increment (design §6). Rendering tests start in Inc 4. 'legacy-tolerated' entries (computed/alias/observers/property events) are recorded for status only; failures there may be skipped with a reason in native-skip.json.",
+  "modules": [
+    "packages/@ember/-internals/gxt-backend/native/__tests__/**/*.{js,ts,gjs,gts}",
+    "packages/@glimmer/validator/test/**/*-test.ts",
+    "packages/@glimmer/destroyable/test/**/*-test.ts",
+    "packages/@ember/-internals/metal/tests/tracked/*_test.js",
+    "packages/@ember/-internals/metal/tests/cached/*_test.js",
+    "packages/@ember/-internals/metal/tests/accessors/*_test.js",
+    "packages/@ember/-internals/metal/tests/alias_test.js",
+    "packages/@ember/-internals/metal/tests/computed_test.js",
+    "packages/@ember/-internals/metal/tests/computed_decorator_test.js",
+    "packages/@ember/-internals/metal/tests/observer_test.js",
+    "packages/@ember/-internals/metal/tests/property_events_test.js",
+    "packages/@ember/runloop/tests/*_test.js",
+    "packages/@ember/-internals/container/tests/*_test.js",
+    "packages/@ember/service/tests/*_test.{js,ts}",
+    "packages/@ember/controller/tests/*_test.js"
+  ]
+}

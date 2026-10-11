@@ -396,6 +396,7 @@ function nativeConfig(mode) {
       gxtModuleDedup(),
       gxtPatchVmMemoryLeaks(),
       gxtNativeRelativeRedirect(),
+      gxtNativeTestModules(),
       compiler(mode, { flags: { ...NATIVE_FLAGS } }),
       // NO gxtEmberWrapperRedirect: AOT templates import the gxt runtime directly.
       babel({
@@ -501,6 +502,9 @@ function gxtNativeRelativeRedirect() {
         .slice(packagesDir.length)
         .replace(/\.(ts|js|gts|gjs)$/, '')
         .replace(/\/index$/, '');
+      // A package's own test tree (`@glimmer/validator/test/-utils`) is not a
+      // runtime deep path of the aliased package: never collapse it.
+      if (/\/(test|tests|__tests__)\//.test(specifier + '/')) return null;
       const hit = matchGxtNativeAlias(specifier);
       if (!hit || hit.entry.match === 'prefix') return null;
       const base = resolve(projectRoot, hit.target);
@@ -509,6 +513,40 @@ function gxtNativeRelativeRedirect() {
       }
       throw new Error(
         `[gxt-native] ${source} (from ${importerPath}) maps to ${hit.target}, which does not exist`
+      );
+    },
+  };
+}
+
+/**
+ * Native test page support (`native.html`, design §6). Serves
+ * `virtual:gxt-native-tests`: the test-module loaders selected by the allow-list
+ * `scripts/gxt-test-runner/native-modules.json` (root-relative globs, expanded
+ * by vite's own `import.meta.glob`) and the skip map `native-skip.json`
+ * ("module :: test" → reason). Both JSON files are the single source of truth;
+ * they are re-read on every load so an edit + reload is enough.
+ */
+function gxtNativeTestModules() {
+  const ID = 'virtual:gxt-native-tests';
+  const RESOLVED = '\0' + ID;
+  const listPath = resolve(projectRoot, 'scripts/gxt-test-runner/native-modules.json');
+  const skipPath = resolve(projectRoot, 'scripts/gxt-test-runner/native-skip.json');
+  return {
+    name: 'gxt-native-test-modules',
+    // Before resolvePackages, which rejects every specifier it does not know.
+    enforce: 'pre',
+    resolveId(source) {
+      return source === ID ? RESOLVED : null;
+    },
+    load(id) {
+      if (id !== RESOLVED) return null;
+      this.addWatchFile(listPath);
+      this.addWatchFile(skipPath);
+      const globs = JSON.parse(readFileSync(listPath, 'utf8')).modules.map((g) => '/' + g);
+      const skips = JSON.parse(readFileSync(skipPath, 'utf8')).skips;
+      return (
+        `export const modules = import.meta.glob(${JSON.stringify(globs)});\n` +
+        `export const skips = ${JSON.stringify(skips)};\n`
       );
     },
   };

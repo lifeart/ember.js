@@ -246,6 +246,9 @@ function parseArgs(argv) {
     gcInterval: 50,
     retries: 2,
     url: process.env.GXT_URL || 'http://localhost:5180/',
+    // Discovery waits until more than this many QUnit modules registered. The
+    // full compat page has ~900; the native page (native.html) a few dozen.
+    minModules: 50,
     autoServe: false,
     headful: false,
     verbose: false,
@@ -298,6 +301,9 @@ function parseArgs(argv) {
       case '--url':
         args.url = next();
         break;
+      case '--min-modules':
+        args.minModules = Number(next());
+        break;
       case '--auto-serve':
         args.autoServe = true;
         break;
@@ -338,7 +344,9 @@ function printHelp() {
   --per-test-timeout <ms> Abort module if no QUnit progress for this long (default 30000)
   --gc-interval <n>       Call window.gc() every Nth test (default 50). Requires --expose-gc.
   --retries <n>           QUnit-level retries per failing test (default 2)
-  --url <url>             Dev server URL (default http://localhost:5180/)
+  --url <url>             Dev server URL (default http://localhost:5180/;
+                          gxt native page: http://localhost:5181/native.html)
+  --min-modules <n>       Discovery waits for more than n modules (default 50)
   --auto-serve            Spawn "pnpm vite --port 5180" and wait for it
   --headful               Show the browser
   --list                  Only list modules that would run
@@ -470,7 +478,7 @@ async function clearPageStorage(page) {
   } catch {}
 }
 
-async function discoverModules(browser, url) {
+async function discoverModules(browser, url, minModules = 50) {
   // Reuses the shared single-page session; it stays open for the module loop.
   const { page } = await getSession(browser, _sessionOpts);
   {
@@ -499,8 +507,8 @@ async function discoverModules(browser, url) {
         // the full suite (900+ modules registering asynchronously under the
         // vite dev server). Pass `undefined` as the arg so the timeout applies.
         await page.waitForFunction(
-          () => typeof QUnit !== 'undefined' && QUnit.config.modules?.length > 50,
-          undefined,
+          (min) => typeof QUnit !== 'undefined' && QUnit.config.modules?.length > min,
+          minModules,
           { timeout: 120_000 }
         );
         // Modules register asynchronously (one ESM request each) for many
@@ -521,7 +529,7 @@ async function discoverModules(browser, url) {
         const modules = await page.evaluate(() => [
           ...new Set((QUnit.config.modules || []).map((m) => m.name).filter(Boolean)),
         ]);
-        if (modules.length > 50) {
+        if (modules.length > minModules) {
           return modules.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
         }
         lastErr = new Error(`discovery returned ${modules.length} modules`);
@@ -953,7 +961,7 @@ async function main() {
     await getSession(browser, args);
     // Discover all modules once (for full / filter / shard modes).
     process.stdout.write('[runner] discovering modules...\n');
-    let modules = await discoverModules(browser, args.url);
+    let modules = await discoverModules(browser, args.url, args.minModules);
     process.stdout.write(`[runner] discovered ${modules.length} modules\n`);
 
     if (explicitModules) {

@@ -1,0 +1,590 @@
+{
+  "meta": {
+    "runner": "scripts/gxt-test-runner/runner.mjs@v1",
+    "capturedAt": "2026-10-11T08:40:12.192Z",
+    "gxtVersion": "0.0.81",
+    "emberCommit": "f5bfb2d6b1",
+    "totalTests": 531,
+    "totalModules": 82,
+    "quarantinedTests": 0,
+    "totalAssertions": 1450,
+    "totalAssertionsPassing": 1450
+  },
+  "modules": {
+    "@cached decorator: get": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 39,
+      "assertionsPassing": 39,
+      "failingTests": []
+    },
+    "@ember/-internals/metal/alias": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "@glimmer/validator: meta": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "@glimmer/validator: trackedArray()": {
+      "total": 37,
+      "passing": 37,
+      "assertionsTotal": 66,
+      "assertionsPassing": 66,
+      "failingTests": []
+    },
+    "@glimmer/validator: trackedArray() > methods": {
+      "total": 32,
+      "passing": 32,
+      "assertionsTotal": 60,
+      "assertionsPassing": 60,
+      "failingTests": []
+    },
+    "@glimmer/validator: trackedMap": {
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 43,
+      "assertionsPassing": 43,
+      "failingTests": []
+    },
+    "@glimmer/validator: trackedObject": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "@glimmer/validator: trackedSet": {
+      "total": 17,
+      "passing": 17,
+      "assertionsTotal": 79,
+      "assertionsPassing": 79,
+      "failingTests": []
+    },
+    "@glimmer/validator: trackedWeakMap()": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "@glimmer/validator: trackedWeakSet()": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "@glimmer/validator: tracking": {
+      "total": 30,
+      "passing": 30,
+      "assertionsTotal": 73,
+      "assertionsPassing": 73,
+      "failingTests": []
+    },
+    "@glimmer/validator: tracking > debug": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "@glimmer/validator: tracking > manual track frames": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "@glimmer/validator: tracking > track": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 23,
+      "assertionsPassing": 23,
+      "failingTests": []
+    },
+    "@glimmer/validator: tracking > trackedData": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "@glimmer/validator: tracking > tracking cache": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 29,
+      "assertionsPassing": 29,
+      "failingTests": []
+    },
+    "@glimmer/validator: validators": {
+      "total": 22,
+      "passing": 22,
+      "assertionsTotal": 32,
+      "assertionsPassing": 32,
+      "failingTests": []
+    },
+    "@glimmer/validator: validators > CombinatorTag": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "@glimmer/validator: validators > ConstantTag": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "@glimmer/validator: validators > CurrentTag": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "@glimmer/validator: validators > DirtyableTag": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "@glimmer/validator: validators > UpdatableTag": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
+    "@glimmer/validator: validators > VolatileTag": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "@tracked decorator - classic classes": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "@tracked decorator - native decorator behavior": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "@tracked decorator: get": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "@tracked get validation": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 74,
+      "assertionsPassing": 74,
+      "failingTests": []
+    },
+    "@tracked set": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "Container": {
+      "total": 30,
+      "passing": 30,
+      "assertionsTotal": 46,
+      "assertionsPassing": 46,
+      "failingTests": []
+    },
+    "Container.lookup": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 30,
+      "assertionsPassing": 30,
+      "failingTests": []
+    },
+    "Controller Injections": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Controller deprecations -> Controller Content -> Model Alias": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "Controller deprecations -> Controller injected properties": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "Controller event handling": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "Controller model": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "Destroyables": {
+      "total": 24,
+      "passing": 24,
+      "assertionsTotal": 165,
+      "assertionsPassing": 165,
+      "failingTests": []
+    },
+    "Keys behavior with observers": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "Owner": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Registry": {
+      "total": 26,
+      "passing": 26,
+      "assertionsTotal": 45,
+      "assertionsPassing": 45,
+      "failingTests": []
+    },
+    "Registry privatize": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "addObserver": {
+      "total": 12,
+      "passing": 12,
+      "assertionsTotal": 38,
+      "assertionsPassing": 38,
+      "failingTests": []
+    },
+    "addObserver - dependentkey with chained properties": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 28,
+      "assertionsPassing": 28,
+      "failingTests": []
+    },
+    "changeProperties - sync observers": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "computed": {
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 18,
+      "assertionsPassing": 18,
+      "failingTests": []
+    },
+    "computed - cacheable": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 21,
+      "assertionsPassing": 21,
+      "failingTests": []
+    },
+    "computed - decorator - compatibility": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "computed - decorator - usage tests": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 18,
+      "assertionsPassing": 18,
+      "failingTests": []
+    },
+    "computed - default setter": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "computed - dependentkey": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "computed - dependentkey with chained properties": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 19,
+      "assertionsPassing": 19,
+      "failingTests": []
+    },
+    "computed - improved cp syntax": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
+    "computed - lazy dependencies": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "computed - metadata": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "computed - observer interop": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "computed - readOnly": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "computed - setter": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "computed edge cases": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "computed should inherit through prototype": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "debounce": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "get": {
+      "total": 18,
+      "passing": 18,
+      "assertionsTotal": 34,
+      "assertionsPassing": 34,
+      "failingTests": []
+    },
+    "get with path": {
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
+    "getProperties": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "inject - decorator": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "inject - decorator (TS)": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "notifyPropertyChange": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "props/observer_test - setting identical values": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "redefining computed property to another property": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "redefining computed property to normal": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "removeObserver": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "runloop `later`": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 18,
+      "assertionsPassing": 18,
+      "failingTests": []
+    },
+    "runloop `next`": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "service - decorator": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "service - decorator (TS)": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "set": {
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 44,
+      "assertionsPassing": 44,
+      "failingTests": []
+    },
+    "set with path": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "set with path - deprecated": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "system/run_loop/once_test": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "system/run_loop/onerror_test": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "system/run_loop/run_bind_test": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
+    "system/run_loop/run_test": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "system/run_loop/schedule_test": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "system/run_loop/unwind_test": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    }
+  },
+  "categories": {}
+}
