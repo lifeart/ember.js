@@ -79,12 +79,21 @@ function emberDistResolver(distDir, mode) {
 
 const pkgDir = (name) => realpathSync(join(EMBER_ROOT, 'node_modules', name));
 
-export default ({ mode }) => {
-  const flavor = process.env.MODERN_APP_DIST_FLAVOR;
+/**
+ * The from-dist vite config for one app dir — shared by the modern app (default
+ * export below) and the krausest benchmark app (smoke-tests/krausest-app).
+ *
+ *   appDir     the app root (vite `root`; its `app*` source dirs go through babel)
+ *   input      the HTML entry
+ *   outDir     build output
+ *   statsDir   where bundle-stats.json lands (the boot-set walk)
+ *   flavor     classic | gxt-native
+ *   distDir    a rollup dist snapshot (`<dir>/prod/packages/**`, `<dir>/glimmer-component/`)
+ */
+export function distAppConfig({ mode, appDir, input, outDir, statsDir, flavor, distDir, include }) {
   if (!FLAVORS.has(flavor)) {
     throw new Error(`MODERN_APP_DIST_FLAVOR must be classic | gxt-native, got ${flavor}`);
   }
-  const distDir = process.env.MODERN_APP_EMBER_DIST;
   if (!distDir || !existsSync(join(distDir, 'prod/packages'))) {
     throw new Error(`MODERN_APP_EMBER_DIST (${distDir}) is not a rollup dist snapshot`);
   }
@@ -95,18 +104,14 @@ export default ({ mode }) => {
     );
   }
   const distMode = mode === 'production' ? 'prod' : 'dev';
-  const loose = process.env.MODERN_APP_FLAVOR === 'loose';
-  const tag = `${flavor}-dist${loose ? '-loose' : ''}`;
-  const outDir = process.env.MODERN_APP_OUT_DIR || resolve(APP_DIR, 'dist', tag);
-  const statsDir = resolve(outDir, '..', `${tag}-stats`);
   const targets = require('./config/targets.cjs');
   const decoratorTransforms = pkgDir('decorator-transforms');
 
   const appBabel = babel({
     babelHelpers: 'bundled',
     extensions: ['.js', '.gjs'],
-    // App sources only: the ember dist snapshot lives under APP_DIR/dist.
-    include: [`${APP_DIR}/app/**`, `${APP_DIR}/app-loose/**`],
+    // App sources only: the ember dist snapshot lives under <appDir>/dist.
+    include,
     configFile: false,
     babelrc: false,
     cwd: EMBER_ROOT,
@@ -130,7 +135,7 @@ export default ({ mode }) => {
   });
 
   return {
-    root: APP_DIR,
+    root: appDir,
     publicDir: false,
     base: './',
     logLevel: 'warn',
@@ -161,9 +166,24 @@ export default ({ mode }) => {
       sourcemap: 'hidden',
       modulePreload: { polyfill: false },
       reportCompressedSize: false,
-      rollupOptions: {
-        input: resolve(APP_DIR, loose ? 'loose.html' : 'index.html'),
-      },
+      rollupOptions: { input },
     },
   };
+}
+
+export default ({ mode }) => {
+  const flavor = process.env.MODERN_APP_DIST_FLAVOR;
+  const loose = process.env.MODERN_APP_FLAVOR === 'loose';
+  const tag = `${flavor}-dist${loose ? '-loose' : ''}`;
+  const outDir = process.env.MODERN_APP_OUT_DIR || resolve(APP_DIR, 'dist', tag);
+  return distAppConfig({
+    mode,
+    appDir: APP_DIR,
+    input: resolve(APP_DIR, loose ? 'loose.html' : 'index.html'),
+    outDir,
+    statsDir: resolve(outDir, '..', `${tag}-stats`),
+    flavor,
+    distDir: process.env.MODERN_APP_EMBER_DIST,
+    include: [`${APP_DIR}/app/**`, `${APP_DIR}/app-loose/**`],
+  });
 };
