@@ -215,9 +215,10 @@ export default defineConfig(({ mode }) => {
             ASYNC_COMPILE_TRANSFORMS: 'true',
             WITH_DYNAMIC_EVAL: 'false',
             WITH_TYPE_CHECKER_HINTS: 'false',
-            // Native-layer flags (gxt-native only; compile-time — no gxt runtime
-            // chunk references them today, defined here per design §2.6 so a
-            // future runtime use can never surface as a bare identifier).
+            // Native-layer flags (gxt-native only). EMBER_NATIVE is also a gxt
+            // RUNTIME build constant since Inc 5 (G4 / G9 / G-kw branches in
+            // the gxt dom / helpers / list chunks): `false` folds them away
+            // here, like the WITH_* flags above (design §2.6).
             EMBER_NATIVE: 'false',
             EMBER_OUTLET: 'false',
           },

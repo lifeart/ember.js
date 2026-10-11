@@ -43,6 +43,7 @@ import {
   scheduleRevalidate,
 } from './host-hooks';
 import { OWNER } from './managers';
+import { commitModifiers, INTERACTIVE } from './modifier-manager';
 import { documentedDrop } from './not-implemented';
 import OutletView, { Outlet, OUTLET_STATE, outletNodeKind } from './outlet';
 
@@ -127,17 +128,21 @@ export function renderRoot(
     nextSibling = null,
     args = {},
     context = [],
+    interactive = true,
   }: {
     owner: object;
     parent: Node;
     nextSibling?: Node | null;
     args?: Record<string, unknown>;
     context?: ReadonlyArray<readonly [symbol, unknown]>;
+    /** `false`: no modifiers run in this render tree (SSR-style environments). */
+    interactive?: boolean;
   }
 ): NativeRenderRoot {
   const document = parent.ownerDocument ?? globalThis.document;
   const root = createRoot(document);
   provideContext(root as never, OWNER, owner);
+  provideContext(root as never, INTERACTIVE, interactive);
   for (const [key, value] of context) provideContext(root as never, key, value);
   const result = new NativeRenderRoot(owner, root, parent);
   rootsOf(owner).add(result);
@@ -158,6 +163,10 @@ export function renderRoot(
     throw error;
   }
   parent.insertBefore(fragment, nextSibling);
+  // The root's elements are in place: install its modifiers (Glimmer's
+  // environment commit). A root rendered during a render pass leaves them to
+  // the pass's commit (commitModifiers is a no-op while gxt is rendering).
+  commitModifiers();
   return result;
 }
 
@@ -218,6 +227,7 @@ export function renderComponent(
     owner = {},
     into,
     args,
+    env,
   }: {
     into: IntoTarget;
     owner?: object;
@@ -235,7 +245,13 @@ export function renderComponent(
   const parent = isElement(into) ? into : into.element;
   const nextSibling = isElement(into) ? null : into.nextSibling;
 
-  const nativeRoot = renderRoot(component, { owner, parent, nextSibling, args: args ?? {} });
+  const nativeRoot = renderRoot(component, {
+    owner,
+    parent,
+    nextSibling,
+    args: args ?? {},
+    interactive: env?.isInteractive ?? true,
+  });
 
   // Destroying the owner tears the render down (Ember destroyable graph).
   let ownerDestructor: (() => void) | null = () => nativeRoot.destroy();
@@ -286,11 +302,15 @@ export class Renderer {
       'native renderer: the application root element was not found (rootElement)',
       target !== null && target !== undefined
     );
+    const environment = (view.owner as { lookup(name: string): unknown }).lookup(
+      '-environment:main'
+    ) as { isInteractive?: boolean } | undefined;
     view.attachRoot(
       renderRoot(Outlet, {
         owner: view.owner,
         parent: target,
         context: [[OUTLET_STATE, view.rootRef]],
+        interactive: environment?.isInteractive ?? true,
       })
     );
   }

@@ -11,7 +11,7 @@
 export { setComponentTemplate, getComponentTemplate } from './manager-api';
 export { componentCapabilities as capabilities } from './manager-api';
 export { setComponentManager } from '@ember/-internals/glimmer/lib/utils/managers';
-export { templateOnlyComponent as templateOnly } from './runtime-helpers';
+export { templateOnlyComponent as templateOnly } from './template-only';
 export { default } from './stubs/component';
 export { default as Input } from './stubs/input';
 export { default as Textarea } from './stubs/textarea';

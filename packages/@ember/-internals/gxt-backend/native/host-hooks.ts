@@ -28,6 +28,7 @@ import { ENV } from '@ember/-internals/environment';
 import { _backburner, _getCurrentRunLoop } from '@ember/runloop';
 import toBool from '@ember/-internals/glimmer/lib/utils/to-bool';
 import { flushRevalidation } from '@lifeart/gxt';
+import { commitModifiers } from './modifier-manager';
 import { debug } from './validator';
 
 export { toBool };
@@ -75,6 +76,11 @@ function renderPass(): void {
     throw new Error('infinite rendering invalidation detected');
   }
   renderTransaction(flushRevalidation);
+  // Glimmer's environment commit: install / update the modifiers the pass
+  // created or invalidated, now that the pass's DOM is in place (outside the
+  // render transaction — a modifier writing tracked state schedules a new pass,
+  // it does not trip the backtracking assertion).
+  commitModifiers();
 }
 
 // ---------------------------------------------------------------- renderSettled

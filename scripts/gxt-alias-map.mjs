@@ -257,10 +257,17 @@ export const NATIVE_FLAGS = Object.freeze({
   EMBER_IN_ELEMENT: true,
   EMBER_TRUSTED_HTML: true,
   WITH_DYNAMIC_EVAL: false,
-  // gxt ember-vm-replacement ec35076 (compile-only flag, no runtime identifier):
-  // template-only templates get the `$_tpl` brand (G14, `isTemplateFn`) and
-  // block-param member taps emit the non-defining `$__tag` instead of
-  // `$__cellFor` (Inc 4a). Inc 5 also uses it for G4/G9/G15/G-kw.
+  // gxt ember-vm-replacement ec35076 / 4325c53 / 49f4929 — compile flag AND
+  // (since Inc 5) gxt runtime build constant:
+  //   compile: template-only templates get the `$_tpl` brand (G14) and
+  //   block-param member taps emit the non-defining `$__tag` (Inc 4a);
+  //   helper / modifier / curry call sites use literal-or-thunk arguments,
+  //   `$_maybeHelper(ref, args, named, ctx, site)` / `$_maybeModifier(…, ctx)`,
+  //   unbound `{{on}}` = Ember's modifier, `<@comp />` = `$_dc` (Inc 5);
+  //   runtime: `$_maybeHelper` hands every helper to the host helper manager
+  //   (G4), curried values (G9), Ember keyword-helper semantics (G-kw),
+  //   `$_dc` nullish / definition objects, list entanglement with Ember
+  //   tracked collections (Inc 5).
   EMBER_NATIVE: true,
   // gxt ember-vm-replacement 575ca3f (compile-only flag, G3): `{{outlet}}`
   // emits `$_outlet(ctx)`, which renders the native outlet component

@@ -13,7 +13,7 @@
 // records the public manager factory.
 import { DEBUG } from '@glimmer/env';
 import { isTemplateFn } from '@lifeart/gxt';
-import { TemplateOnlyComponentDefinition } from './runtime-helpers';
+import { TemplateOnlyComponentDefinition } from './template-only';
 import type { Tag } from './validator';
 
 // ---------------------------------------------------------------- internal api
@@ -71,8 +71,14 @@ export function hasInternalComponentManager(definition: object): boolean {
 export function setInternalHelperManager<T extends object>(manager: unknown, definition: T): T {
   return setManager(HELPER_MANAGERS, manager, definition);
 }
+// Functions are the "default" helper (RFC 756): a plain function without a
+// registered manager is driven by the function helper manager (Glimmer parity:
+// `getInternalHelperManager(fn)` returns DEFAULT_MANAGER — `invokeHelper` with a
+// plain function relies on it).
 export function getInternalHelperManager(definition: object, _isOptional?: boolean): any {
-  return getManager(HELPER_MANAGERS, definition);
+  const manager = getManager(HELPER_MANAGERS, definition);
+  if (manager === undefined && typeof definition === 'function') return DEFAULT_HELPER_MANAGER;
+  return manager;
 }
 export function hasInternalHelperManager(definition: object): boolean {
   return getManager(HELPER_MANAGERS, definition) !== undefined;
@@ -91,18 +97,106 @@ export function hasInternalModifierManager(definition: object): boolean {
 // ---------------------------------------------------------------- public api
 type ManagerFactory = (owner: object) => unknown;
 
-// Protocol-less records of a public custom manager registration. The native
-// `$_MANAGERS` tables (Inc 4/5) instantiate `factory(owner)` per owner and
-// drive the 3.13 / 3.23 / 3.22 protocols.
-export class CustomComponentManager {
+// Records of a public custom manager registration. The native `$_MANAGERS`
+// tables (native/managers.ts, helper-manager.ts, modifier-manager.ts) drive the
+// 3.13 / 3.23 / 3.22 protocols on the delegate `getDelegateFor(owner)` returns —
+// one delegate per (manager, owner), created by `factory(owner)` (Glimmer
+// parity, incl. a separate delegate for an `undefined` owner).
+const NO_OWNER = {};
+
+class CustomManagerRecord<D> {
+  #delegates = new WeakMap<object, D>();
   constructor(readonly factory: ManagerFactory) {}
+
+  getDelegateFor(owner: object | undefined): D {
+    const key = owner ?? NO_OWNER;
+    let delegate = this.#delegates.get(key);
+    if (delegate === undefined) {
+      delegate = this.factory(owner as object) as D;
+      this.#delegates.set(key, delegate);
+    }
+    return delegate;
+  }
 }
-export class CustomHelperManager {
-  constructor(readonly factory: ManagerFactory) {}
+
+export class CustomComponentManager extends CustomManagerRecord<unknown> {}
+export class CustomHelperManager extends CustomManagerRecord<HelperDelegate> {
+  override getDelegateFor(owner: object | undefined): HelperDelegate {
+    const delegate = super.getDelegateFor(owner);
+    if (DEBUG && !FROM_CAPABILITIES!.has(delegate.capabilities)) {
+      throw new Error(
+        `Custom helper managers must have a \`capabilities\` property that is the result of calling the \`capabilities('3.23')\` (imported via \`import { capabilities } from '@ember/helper';\`). Received: \`${JSON.stringify(delegate.capabilities)}\` for: \`${String(delegate)}\``
+      );
+    }
+    return delegate;
+  }
 }
-export class CustomModifierManager {
-  constructor(readonly factory: ManagerFactory) {}
+export class CustomModifierManager extends CustomManagerRecord<ModifierDelegate> {
+  override getDelegateFor(owner: object | undefined): ModifierDelegate {
+    const delegate = super.getDelegateFor(owner);
+    if (DEBUG && !FROM_CAPABILITIES!.has(delegate.capabilities)) {
+      throw new Error(
+        `Custom modifier managers must have a \`capabilities\` property that is the result of calling the \`capabilities('3.22')\` (imported via \`import { capabilities } from '@ember/modifier';\`). Received: \`${JSON.stringify(delegate.capabilities)}\` for: \`${String(delegate)}\``
+      );
+    }
+    return delegate;
+  }
 }
+
+/** Arguments handed to custom managers (lazy args proxies, native/args.ts). */
+export interface ManagerArgs {
+  positional: readonly unknown[];
+  named: Record<string, unknown>;
+}
+
+/** A public helper manager delegate (capabilities 3.23). */
+export interface HelperDelegate {
+  capabilities: { hasValue: boolean; hasDestroyable: boolean; hasScheduledEffect?: boolean };
+  createHelper(definition: object, args: ManagerArgs): unknown;
+  getValue?(bucket: unknown): unknown;
+  getDestroyable?(bucket: unknown): object | null;
+  getDebugName?(definition: object): string;
+}
+
+/** A public modifier manager delegate (capabilities 3.22). */
+export interface ModifierDelegate {
+  capabilities: { disableAutoTracking?: boolean };
+  createModifier(definition: object, args: ManagerArgs): unknown;
+  installModifier(instance: unknown, element: Element, args: ManagerArgs): void;
+  updateModifier(instance: unknown, args: ManagerArgs): void;
+  destroyModifier(instance: unknown, args: ManagerArgs): void;
+}
+
+// Ember's default (function) helper manager (Glimmer FunctionHelperManager):
+// positional arguments, plus the named arguments as a trailing argument when
+// there are any.
+class FunctionHelperManager implements HelperDelegate {
+  capabilities = buildCapabilities({
+    hasValue: true,
+    hasDestroyable: false,
+    hasScheduledEffect: false,
+  });
+
+  createHelper(fn: object, args: ManagerArgs): { fn: object; args: ManagerArgs } {
+    return { fn, args };
+  }
+
+  getValue({ fn, args }: { fn: (...a: unknown[]) => unknown; args: ManagerArgs }): unknown {
+    if (Object.keys(args.named).length > 0) {
+      return fn(...args.positional, args.named);
+    }
+    return fn(...args.positional);
+  }
+
+  getDebugName(fn: { name?: string }): string {
+    return fn.name ? `(helper function ${fn.name})` : '(anonymous helper function)';
+  }
+}
+
+let FUNCTION_HELPER_MANAGER: FunctionHelperManager | undefined;
+export const DEFAULT_HELPER_MANAGER = new CustomHelperManager(
+  () => (FUNCTION_HELPER_MANAGER ??= new FunctionHelperManager())
+);
 
 export function setComponentManager<T extends object>(factory: ManagerFactory, obj: T): T {
   return setInternalComponentManager(new CustomComponentManager(factory), obj);
@@ -144,9 +238,15 @@ export function helperCapabilities(
   options: { hasValue?: boolean; hasDestroyable?: boolean; hasScheduledEffect?: boolean } = {}
 ) {
   if (DEBUG && managerAPI !== '3.23') {
-    throw new Error('Invalid helper manager compatibility specified');
+    throw new Error(
+      `Invalid helper manager compatibility specified; you specified ${managerAPI}, but only '3.23' is supported.`
+    );
   }
-  if (DEBUG && !(options.hasValue || options.hasScheduledEffect)) {
+  if (
+    DEBUG &&
+    (!(options.hasValue || options.hasScheduledEffect) ||
+      (options.hasValue && options.hasScheduledEffect))
+  ) {
     throw new Error(
       'You must pass either the `hasValue` OR the `hasScheduledEffect` capability when defining a helper manager. Passing neither, or both, is not permitted.'
     );
@@ -175,7 +275,9 @@ export function modifierCapabilities(
   optionalFeatures: { disableAutoTracking?: boolean } = {}
 ) {
   if (DEBUG && managerAPI !== '3.22') {
-    throw new Error('Invalid modifier manager compatibility specified');
+    throw new Error(
+      `Invalid modifier manager compatibility specified; you specified ${managerAPI}, but only '3.22' is supported.`
+    );
   }
   return buildCapabilities({ disableAutoTracking: Boolean(optionalFeatures.disableAutoTracking) });
 }

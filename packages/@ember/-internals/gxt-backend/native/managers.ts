@@ -33,13 +33,18 @@ import { DEBUG } from '@glimmer/env';
 import {
   $_GET_ARGS,
   $_fin,
+  $PROPS_SYMBOL,
+  $SLOTS_SYMBOL,
   $template,
   cId,
   COMPONENT_ID_PROPERTY,
   getContext,
+  getCurried,
   isTemplateFn,
   registerDestructor as gxtRegisterDestructor,
+  resolveCurried,
 } from '@lifeart/gxt';
+import { argsProxyFor, unwrapArg } from './args';
 import {
   CustomComponentManager,
   FROM_CAPABILITIES,
@@ -48,7 +53,7 @@ import {
   getOwnComponentTemplate,
 } from './manager-api';
 import { notImplemented } from './not-implemented';
-import { TemplateOnlyComponentDefinition } from './runtime-helpers';
+import { TemplateOnlyComponentDefinition } from './template-only';
 import { templateFor, type GxtTemplate } from './template-factory';
 
 /** gxt context key for the Ember owner of a render tree (provided on roots). */
@@ -56,7 +61,10 @@ export const OWNER: unique symbol = Symbol('ember-native-owner');
 
 interface ComponentDelegate {
   capabilities: { destructor?: boolean };
-  createComponent(definition: object, args: { named: object; positional: unknown[] }): object;
+  createComponent(
+    definition: object,
+    args: { named: object; positional: readonly unknown[] }
+  ): object;
   getContext(component: object): object;
   destroyComponent?(component: object): void;
 }
@@ -174,17 +182,85 @@ export function resolveComponentName(node: object): string | undefined {
   return undefined;
 }
 
+// ---------------------------------------------------------------- curried
+// A curried component (`(component X a=1)`, gxt G9): Glimmer argument rules —
+// the curried layers' named arguments (inner → outer, later wins) under the
+// invocation's own arguments (which win); the invocation's blocks and
+// forwarded attributes. Values stay lazy (literal-or-thunk / gxt arg getters).
+function mergeCurriedArgs(
+  layers: ReadonlyArray<Readonly<Record<string, unknown>>>,
+  args: Record<PropertyKey, unknown>
+): Record<PropertyKey, unknown> {
+  const merged: Record<PropertyKey, unknown> = {};
+  Object.defineProperty(merged, $SLOTS_SYMBOL, { value: args[$SLOTS_SYMBOL] });
+  Object.defineProperty(merged, $PROPS_SYMBOL, {
+    value: args[$PROPS_SYMBOL],
+    configurable: true,
+    writable: true,
+  });
+  for (const layer of layers) {
+    for (const key of Object.keys(layer)) {
+      Object.defineProperty(merged, key, {
+        get: () => unwrapArg(layer[key]),
+        enumerable: true,
+        configurable: true,
+      });
+    }
+  }
+  for (const key of Object.keys(args)) {
+    Object.defineProperty(merged, key, {
+      get: () => args[key],
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  return merged;
+}
+
+function handleCurried(curried: object, args: object, fw: unknown, ctx: object): unknown {
+  const { definition, positional, named } = resolveCurried(curried);
+  if (typeof definition === 'string') {
+    return notImplemented(`native component lookup by name ("${definition}", loose mode)`, 8);
+  }
+  const merged = mergeCurriedArgs(named, args as Record<PropertyKey, unknown>);
+  if (definition === null || definition === undefined) return EMPTY_TEMPLATE;
+  if (canHandle(definition)) {
+    const resolved = handle(definition as object, merged, fw, ctx, positional);
+    // A manager factory closes over `merged`; a template function is
+    // constructed by gxt with the INVOCATION args — hand it the merged ones.
+    return isTemplateFn(resolved) || resolved === EMPTY_TEMPLATE
+      ? curriedTemplate(resolved as GxtTemplate, merged)
+      : resolved;
+  }
+  // a gxt template function (template-only `.gjs` component)
+  return curriedTemplate(definition as GxtTemplate, merged);
+}
+
+function curriedTemplate(template: GxtTemplate, merged: object): unknown {
+  return function CurriedTemplate(_args: unknown, fw: unknown): object {
+    return new (template as unknown as new (a: unknown, f: unknown) => object)(merged, fw);
+  };
+}
+
 // ---------------------------------------------------------------- component
 function canHandle(definition: unknown): boolean {
   if (definition === null || definition === undefined) return false;
   const type = typeof definition;
   if (type !== 'object' && type !== 'function') return false;
   if (definition instanceof TemplateOnlyComponentDefinition) return true;
+  if (getCurried(definition) !== undefined) return true;
   if (isTemplateFn(definition)) return false;
   return getInternalComponentManager(definition as object) !== undefined;
 }
 
-function handle(definition: object, args: object, _fw: unknown, ctx: object): unknown {
+function handle(
+  definition: object,
+  args: object,
+  fw: unknown,
+  ctx: object,
+  positional: readonly unknown[] = EMPTY_POSITIONAL
+): unknown {
+  if (getCurried(definition) !== undefined) return handleCurried(definition, args, fw, ctx);
   const owner = ownerFor(ctx);
 
   if (definition instanceof TemplateOnlyComponentDefinition) {
@@ -213,7 +289,10 @@ function handle(definition: object, args: object, _fw: unknown, ctx: object): un
   return function NativeComponent(): object {
     const component = delegate.createComponent(definition, {
       named: args,
-      positional: EMPTY_POSITIONAL,
+      positional:
+        positional.length === 0
+          ? EMPTY_POSITIONAL
+          : argsProxyFor({ positional, named: {} }, 'component').positional,
     });
     const node = delegate.getContext(component) as ComponentNode;
     // gxt tree identity BEFORE gxt adds the node to the render tree (a gxt
