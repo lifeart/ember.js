@@ -5,6 +5,9 @@
 // and LinkTo navigation across both routes.
 //
 //   node smoke-tests/modern-app/boot-check.mjs <distDir> [--json out.json]
+//   node smoke-tests/modern-app/boot-check.mjs --url <running app URL> [--json out.json]
+//     (--url: check an already-served app, e.g. a vite dev server, instead of
+//     static-serving a build)
 //
 // Exit 0 = every check passed; 1 = some check failed (details printed).
 import { createServer } from 'node:http';
@@ -12,33 +15,44 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, extname, resolve } from 'node:path';
 import { chromium } from 'playwright';
 
-const distDir = resolve(process.argv[2] || '');
-const jsonIdx = process.argv.indexOf('--json');
-const jsonOut = jsonIdx > 0 ? process.argv[jsonIdx + 1] : null;
-const htmlFile = existsSync(distDir) ? readdirSync(distDir).find((f) => f.endsWith('.html')) : null;
-if (!htmlFile) {
-  console.error(`[boot-check] no .html entry in ${distDir}`);
-  process.exit(2);
-}
+const argOf = (name) => {
+  const i = process.argv.indexOf(name);
+  return i > 0 ? process.argv[i + 1] : null;
+};
+const jsonOut = argOf('--json');
+const appUrl = argOf('--url');
+const distDir = appUrl ? null : resolve(process.argv[2] || '');
 
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
-const server = createServer((req, res) => {
-  const path = (req.url || '/').split('?')[0].split('#')[0];
-  const file = join(distDir, path === '/' ? htmlFile : path);
-  if (file.startsWith(distDir) && existsSync(file)) {
-    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
-    res.end(readFileSync(file));
-  } else {
-    res.writeHead(404);
-    res.end();
+let server = null;
+let url = appUrl;
+if (!appUrl) {
+  const htmlFile = existsSync(distDir)
+    ? readdirSync(distDir).find((f) => f.endsWith('.html'))
+    : null;
+  if (!htmlFile) {
+    console.error(`[boot-check] no .html entry in ${distDir}`);
+    process.exit(2);
   }
-});
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const url = `http://127.0.0.1:${server.address().port}/`;
+  const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+  server = createServer((req, res) => {
+    const path = (req.url || '/').split('?')[0].split('#')[0];
+    const file = join(distDir, path === '/' ? htmlFile : path);
+    if (file.startsWith(distDir) && existsSync(file)) {
+      res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
+      res.end(readFileSync(file));
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  url = `http://127.0.0.1:${server.address().port}/`;
+}
 
 const checks = [];
 const pageErrors = [];
 const consoleErrors = [];
+const scripts = [];
 function record(name, ok, detail) {
   checks.push({ name, ok, detail });
   console.log(`[boot-check] ${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`);
@@ -50,6 +64,9 @@ try {
   page.on('pageerror', (e) => pageErrors.push(String(e.stack || e.message).slice(0, 1500)));
   page.on('console', (m) => {
     if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 500));
+  });
+  page.on('response', (r) => {
+    if (r.request().resourceType() === 'script') scripts.push(r.url());
   });
 
   const text = async (sel) => {
@@ -130,17 +147,19 @@ try {
   );
 } finally {
   await browser.close();
-  server.close();
+  server?.close();
 }
 
 const failed = checks.filter((c) => !c.ok);
 const summary = {
   distDir,
+  url: appUrl,
   passed: checks.length - failed.length,
   total: checks.length,
   checks,
   pageErrors,
   consoleErrors: consoleErrors.slice(0, 20),
+  scripts,
 };
 if (pageErrors.length) console.log(`[boot-check] first page error:\n${pageErrors[0]}`);
 if (consoleErrors.length)
