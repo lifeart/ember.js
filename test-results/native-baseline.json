@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-11T09:59:52.932Z",
+    "capturedAt": "2026-10-11T10:41:55.292Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "433f45edad",
-    "totalTests": 577,
-    "totalModules": 89,
+    "emberCommit": "5c3f83c98e",
+    "totalTests": 588,
+    "totalModules": 90,
     "quarantinedTests": 0,
-    "totalAssertions": 1569,
-    "totalAssertionsPassing": 1569
+    "totalAssertions": 1610,
+    "totalAssertionsPassing": 1610
   },
   "modules": {
     "@cached decorator: get": {
@@ -471,6 +471,13 @@
       "passing": 5,
       "assertionsTotal": 20,
       "assertionsPassing": 20,
+      "failingTests": []
+    },
+    "gxt-native | outlet": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 41,
+      "assertionsPassing": 41,
       "failingTests": []
     },
     "gxt-native | render passes": {

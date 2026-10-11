@@ -2,8 +2,8 @@
   "$comment": "Tests turned into QUnit.skip on native.html. Key: '<full QUnit module name at definition time, nested modules joined by ' > '> :: <test name>'. Every entry is a documented drop (legacy), a Glimmer-VM-internal test with no native meaning, or work owned by a later increment (named). Value: the reason.",
   "skips": {
     "@glimmer/validator: validators > DirtyableTag :: it calls scheduleRevalidate": "VM-internal: asserts the @glimmer/global-context scheduleRevalidate hook (testOverrideGlobalContext). Native dirties go through gxt dirtyCell -> gxt scheduleRevalidate -> the native host hook (native/host-hooks.ts); covered by gxt tags.test.ts 'still signals the host'.",
-    "Controller model ::  model is tracked": "Renders a route template (ApplicationTestCase visit) — the native outlet / route rendering is Inc 4b.",
-    "Controller model ::  model can be observed with sync observers": "Renders a route template (ApplicationTestCase visit) — the native outlet / route rendering is Inc 4b.",
+    "Controller model ::  model is tracked": "The native outlet renders strict route templates since Inc 4b; this test's route template is LOOSE (`precompileTemplate` with `this` = controller → G6 EMBER_SELF + G10 AOT precompileTemplate, Inc 8) and uses `{{on}}` (native modifiers, Inc 5).",
+    "Controller model ::  model can be observed with sync observers": "The native outlet renders strict route templates since Inc 4b; this test's route template is LOOSE (`precompileTemplate` with `this` = controller → G6 EMBER_SELF + G10 AOT precompileTemplate, Inc 8) and uses `{{on}}` (native modifiers, Inc 5).",
     "gxt-native | renderComponent :: can render in to a detached element": "Known gap (Inc 9, G15 territory): gxt dynamic content cannot switch a reactive `{{value}}` that rendered as text to a DOM Node value (the node is stringified to [object HTMLDivElement]); Glimmer's dynamic content inserts the node. The detached-element render/destroy itself is covered by 'replaces existing contents within the target element'."
   }
 }
