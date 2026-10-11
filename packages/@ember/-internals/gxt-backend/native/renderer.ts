@@ -252,8 +252,45 @@ function isElement(into: IntoTarget): into is Element {
   return (into as Node).nodeType === 1;
 }
 
-const RENDER_CACHE = new WeakMap<object, RenderResult>();
+interface RenderCacheEntry {
+  result: RenderResult;
+  /**
+   * The root this render produced synchronously — what a later render into the
+   * same target replaces. `null` for a render queued behind its owner's render
+   * (Glimmer had no render result for it at call time): it is never replaced.
+   */
+  root: NativeRenderRoot | null;
+}
 
+// The last `renderComponent` into each target (an Element or a Cursor object).
+const RENDER_CACHE = new WeakMap<object, RenderCacheEntry>();
+
+// Owners whose `renderComponent` root is rendering right now → the renders
+// requested with the same owner meanwhile. Glimmer keeps one renderer per
+// owner; a root added during that renderer's render transaction is not
+// rendered on the spot but by the same transaction, after the current pass
+// (`RendererState#renderRoots` re-loops over the added roots), and the
+// `renderComponent` call that added it gets no render result.
+const QUEUED_RENDERS = new Map<object, Array<() => void>>();
+
+/**
+ * `@ember/renderer` `renderComponent` (RFC 1099), with Glimmer's semantics for
+ * repeated renders into one target:
+ *   - the first render into an Element clears it;
+ *   - a later render replaces the previous one IN PLACE (Glimmer inserts it
+ *     before the previous render's first node and destroys the previous render,
+ *     whose DOM goes away when the destruction runs; here it is torn down
+ *     synchronously and the new render takes its position);
+ *   - a render requested while a root of the same owner is rendering is queued
+ *     and rendered right after that root (see QUEUED_RENDERS). A queued render
+ *     is never replaced: a later render into the same target is added next to
+ *     it ("multiple calls to render in to the same element appear as
+ *     siblings"); it stays rendered and reactive until its own `destroy()` or
+ *     its owner's destruction. (Glimmer's result for it cannot be destroyed at
+ *     all and its root is never torn down — native does not keep that leak.)
+ * Queuing applies to the initial render of a root; a render requested from an
+ * update renders on the spot.
+ */
 export function renderComponent(
   component: object,
   {
@@ -268,40 +305,106 @@ export function renderComponent(
     args?: Record<string, unknown>;
   }
 ): RenderResult {
-  // Replace a previous render into the same target (RFC 1099), else start clean.
-  const existing = RENDER_CACHE.get(into);
-  if (existing !== undefined) {
-    existing.destroy();
-  } else if (isElement(into)) {
-    into.innerHTML = '';
-  }
   const parent = isElement(into) ? into : into.element;
-  const nextSibling = isElement(into) ? null : into.nextSibling;
+  let nextSibling = isElement(into) ? null : into.nextSibling;
+  const existing = RENDER_CACHE.get(into);
+  if (existing === undefined) {
+    if (isElement(into)) into.innerHTML = '';
+  } else if (existing.root !== null) {
+    const after = nodeAfter(existing.root, parent);
+    if (after !== undefined) nextSibling = after;
+    existing.result.destroy();
+  }
+  const mount = (): MountedRender =>
+    mountRender(component, owner, parent, nextSibling, args, env?.isInteractive ?? true);
 
-  const nativeRoot = renderRoot(component, {
+  const queue = QUEUED_RENDERS.get(owner);
+  if (queue !== undefined) {
+    let mounted: MountedRender | null = null;
+    let destroyed = false;
+    const result: RenderResult = {
+      destroy() {
+        destroyed = true;
+        mounted?.destroy();
+        if (RENDER_CACHE.get(into)?.result === result) RENDER_CACHE.delete(into);
+      },
+    };
+    queue.push(() => {
+      if (!destroyed) mounted = mount();
+    });
+    RENDER_CACHE.set(into, { result, root: null });
+    return result;
+  }
+
+  const queued: Array<() => void> = [];
+  QUEUED_RENDERS.set(owner, queued);
+  try {
+    const mounted = mount();
+    const result: RenderResult = {
+      destroy() {
+        mounted.destroy();
+        if (RENDER_CACHE.get(into)?.result === result) RENDER_CACHE.delete(into);
+      },
+    };
+    RENDER_CACHE.set(into, { result, root: mounted.root });
+    // A queued render may queue more (same transaction, next loop in Glimmer).
+    for (let i = 0; i < queued.length; i++) queued[i]!();
+    return result;
+  } finally {
+    QUEUED_RENDERS.delete(owner);
+  }
+}
+
+interface MountedRender {
+  root: NativeRenderRoot;
+  destroy(): void;
+}
+
+function mountRender(
+  component: object,
+  owner: object,
+  parent: Element,
+  nextSibling: Node | null,
+  args: Record<string, unknown> | undefined,
+  interactive: boolean
+): MountedRender {
+  // The anchor was taken when the render was requested; a queued render runs
+  // later, by which time it may have left the target (then: append).
+  const anchor = nextSibling !== null && nextSibling.parentNode !== parent ? null : nextSibling;
+  const root = renderRoot(component, {
     owner,
     parent,
-    nextSibling,
+    nextSibling: anchor,
     args: args ?? {},
-    interactive: env?.isInteractive ?? true,
+    interactive,
   });
 
   // Destroying the owner tears the render down (Ember destroyable graph).
-  let ownerDestructor: (() => void) | null = () => nativeRoot.destroy();
+  let ownerDestructor: (() => void) | null = () => root.destroy();
   registerDestructor(owner, ownerDestructor);
 
-  const result: RenderResult = {
+  return {
+    root,
     destroy() {
       if (ownerDestructor !== null) {
         if (!isDestroying(owner)) unregisterDestructor(owner, ownerDestructor);
         ownerDestructor = null;
       }
-      nativeRoot.destroy();
-      if (RENDER_CACHE.get(into) === result) RENDER_CACHE.delete(into);
+      root.destroy();
     },
   };
-  RENDER_CACHE.set(into, result);
-  return result;
+}
+
+// The node right after `root`'s last top-level node in `parent` (`null`: that
+// node is the last child), or `undefined` when `root` has no node there.
+function nodeAfter(root: NativeRenderRoot, parent: Element): Node | null | undefined {
+  if (root.isDestroyed || root.rendered === null) return undefined;
+  const own = new Set(topLevelNodes(root.rendered));
+  let last: Node | undefined;
+  for (let node = parent.firstChild; node !== null; node = node.nextSibling) {
+    if (own.has(node)) last = node;
+  }
+  return last === undefined ? undefined : last.nextSibling;
 }
 
 export function _resetRenderers(): void {

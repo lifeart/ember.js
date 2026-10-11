@@ -7,7 +7,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { trackedObject } from '@ember/reactive/collections';
-import { registerDestructor } from '@ember/destroyable';
+import { destroy, registerDestructor } from '@ember/destroyable';
 import { renderComponent } from '@ember/renderer';
 import Service, { service } from '@ember/service';
 import { run } from '@ember/runloop';
@@ -109,6 +109,79 @@ module('gxt-native | renderComponent', function (hooks) {
     assert.true(destroyedA, 'the previous render was destroyed');
     run(() => second.destroy());
     assert.strictEqual(element.innerHTML, '');
+  });
+
+  test('a render requested while a root of the same owner renders comes right after that root', function (assert) {
+    const element = document.createElement('div');
+    const Inner = <template>inner</template>;
+    let queued;
+    let duringRoot;
+    class Root extends Component {
+      constructor(owner, args) {
+        super(owner, args);
+        queued = renderComponent(Inner, { into: element, owner });
+        duringRoot = element.innerHTML;
+      }
+      <template>{{element}}</template>
+    }
+    this.render(Root);
+    assert.strictEqual(duringRoot, '', 'not rendered while the root renders (Glimmer queues it)');
+    assert.strictEqual(htmlOf(this.element), '<div>inner</div>');
+    run(() => queued.destroy());
+    assert.strictEqual(htmlOf(this.element), '<div></div>', 'a queued render can be destroyed');
+  });
+
+  test('a queued render stays next to a later render into the same element, until its owner is destroyed', function (assert) {
+    const element = document.createElement('div');
+    const data = trackedObject({ count: 1 });
+    let destroyedQueued = false;
+    class Queued extends Component {
+      willDestroy() {
+        destroyedQueued = true;
+      }
+      <template>q{{data.count}}</template>
+    }
+    const Later = <template>l{{data.count}}</template>;
+    let later;
+    class Root extends Component {
+      constructor(owner, args) {
+        super(owner, args);
+        renderComponent(Queued, { into: element, owner });
+        later = renderComponent(Later, { into: element });
+      }
+      <template>root</template>
+    }
+    this.render(Root);
+    assert.strictEqual(htmlOf(element), 'l1q1', 'the queued render is added after the later one');
+    run(() => data.count++);
+    assert.strictEqual(htmlOf(element), 'l2q2', 'both stay reactive');
+    run(() => later.destroy());
+    assert.strictEqual(htmlOf(element), 'q2');
+    run(() => destroy(this.owner));
+    assert.strictEqual(htmlOf(element), '', 'the owner tears the queued render down');
+    assert.true(destroyedQueued);
+  });
+
+  test('a render requested again by its reader replaces the previous render in place', function (assert) {
+    const element = document.createElement('div');
+    const data = trackedObject({ count: 1 });
+    const owner = this.owner;
+    let calls = 0;
+    const Queued = <template>q</template>;
+    const Later = <template>l{{data.count}}</template>;
+    // a helper that renders: it depends on what its render read (Glimmer
+    // consumes the render's reads into the helper's frame), so it runs again
+    function render(Comp, renderOwner) {
+      calls++;
+      renderComponent(Comp, { into: element, owner: renderOwner });
+    }
+    const Root = <template>{{render Queued owner}}{{render Later}}{{element}}</template>;
+    this.render(Root);
+    assert.strictEqual(htmlOf(element), 'l1q');
+    assert.strictEqual(calls, 2);
+    run(() => data.count++);
+    assert.strictEqual(calls, 3, 'the helper rendering `Later` ran again');
+    assert.strictEqual(htmlOf(element), 'l2q', 'the new render took the previous one\'s place');
   });
 
   test('multiple renderComponents share reactivity', function (assert) {
