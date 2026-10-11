@@ -203,6 +203,18 @@ export function getComponentTemplate(obj: object): any {
   return undefined;
 }
 
+// VM capability bitmask checks (`@glimmer/manager` surface; pure functions).
+export function hasCapability(capabilities: number, capability: number): boolean {
+  return !!(capabilities & capability);
+}
+export function managerHasCapability(
+  _manager: unknown,
+  capabilities: number,
+  capability: number
+): boolean {
+  return !!(capabilities & capability);
+}
+
 // ---------------------------------------------------------------- custom tags
 // Proxy objects (ArrayProxy / ObjectProxy) register a per-key tag function that
 // metal's tagForProperty consults.

@@ -20,6 +20,11 @@ import { notImplemented } from './not-implemented';
 
 const NATIVE_TEMPLATE_FACTORIES = new WeakSet<object>();
 
+// Part of the `@glimmer/opcode-compiler/lib/template` surface (re-exported by
+// the opcode-compiler index and `@ember/-internals/glimmer`). The native build
+// has no template cache, so the counters stay 0.
+export const templateCacheCounters = { cacheHit: 0, cacheMiss: 0 };
+
 export function isNativeTemplateFactory(value: unknown): boolean {
   return typeof value === 'function' && NATIVE_TEMPLATE_FACTORIES.has(value);
 }

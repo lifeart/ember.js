@@ -11,7 +11,13 @@
 //   renderComponent   gxt renderComponent(component, {into, owner, args})
 // Construction (registry `renderer:-dom` lookups) and destroy() stay safe so
 // container setup / teardown never fails before the first real render call.
+import { installHostHooks } from './host-hooks';
 import { notImplemented } from './not-implemented';
+
+// Classic installs the VM global context (scheduleRevalidate etc.) from
+// environment.ts, which the classic renderer imports; the native renderer is
+// the same always-loaded edge for the gxt host hooks.
+installHostHooks();
 
 const WHAT = 'native renderer';
 

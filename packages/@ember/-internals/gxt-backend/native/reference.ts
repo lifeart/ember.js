@@ -1,15 +1,19 @@
 // gxt NATIVE layer — alias target for `@glimmer/reference` (+ `lib/reference`).
 //
-// Consumers in the native closure are the reused classic modules only:
-// InternalComponent / LinkTo (`createConstRef`, `isConstRef`, `valueForRef`),
+// Consumers in the native closure are reused classic modules only:
+// InternalComponent / LinkTo (`createConstRef`, `isConstRef`, `valueForRef`) and
 // the `element` / `unique-id` helpers (`createComputeRef`, `createConstRef`,
 // `NULL_REFERENCE`). gxt itself never sees a Reference: the native managers
 // (Inc 4/5) adapt gxt args to these shapes at the InternalComponent boundary.
 //
-// INC-1 PLACEHOLDER: a minimal reference model over native/validator's
-// createCache (design §2.2 "~40 lines"). Inc 3 finalizes it (child refs via
-// metal get/set, iterator refs only if a native consumer needs them).
+// A compute ref is a native/validator `createCache` (so its tag is gxt cells);
+// a const / primitive ref carries CONSTANT_TAG. Child refs read and write
+// through Ember's `_getProp` / `_setProp` (what classic wires into Glimmer's
+// global-context getProp / setProp), so untracked properties entangle the
+// property tag exactly as in the VM.
 import { DEBUG } from '@glimmer/env';
+import { _getProp } from '@ember/-internals/metal/lib/property_get';
+import { _setProp } from '@ember/-internals/metal/lib/property_set';
 import { type Cache, type Tag, CONSTANT_TAG, createCache, getValue, isConst } from './validator';
 
 export const REFERENCE: unique symbol = Symbol('REFERENCE');
@@ -31,8 +35,8 @@ export interface Reference<T = unknown> {
   debugLabel?: string | undefined;
 }
 
-function makeRef<T>(type: ReferenceType, value?: T): Reference<T> {
-  return {
+function makeRef<T>(type: ReferenceType, value?: T, debugLabel?: string | false): Reference<T> {
+  const ref: Reference<T> = {
     [REFERENCE]: type,
     value,
     compute: null,
@@ -41,6 +45,8 @@ function makeRef<T>(type: ReferenceType, value?: T): Reference<T> {
     tag: type === COMPUTE || type === INVOKABLE ? null : CONSTANT_TAG,
     children: null,
   };
+  if (DEBUG && debugLabel) ref.debugLabel = debugLabel;
+  return ref;
 }
 
 export function createPrimitiveRef<T>(value: T): Reference<T> {
@@ -48,15 +54,11 @@ export function createPrimitiveRef<T>(value: T): Reference<T> {
 }
 
 export function createConstRef<T>(value: T, debugLabel?: string | false): Reference<T> {
-  const ref = makeRef(CONSTANT, value);
-  if (DEBUG && debugLabel) ref.debugLabel = debugLabel;
-  return ref;
+  return makeRef(CONSTANT, value, debugLabel);
 }
 
 export function createUnboundRef<T>(value: T, debugLabel?: string | false): Reference<T> {
-  const ref = makeRef(UNBOUND, value);
-  if (DEBUG && debugLabel) ref.debugLabel = debugLabel;
-  return ref;
+  return makeRef(UNBOUND, value, debugLabel);
 }
 
 export function createComputeRef<T>(
@@ -64,16 +66,19 @@ export function createComputeRef<T>(
   update: ((value: T) => void) | null = null,
   debugLabel?: string | false
 ): Reference<T> {
-  const ref = makeRef<T>(COMPUTE);
+  const ref = makeRef<T>(
+    COMPUTE,
+    undefined,
+    debugLabel && `(result of a \`${debugLabel}\` helper)`
+  );
   ref.compute = compute;
   ref.update = update;
-  if (DEBUG && debugLabel) ref.debugLabel = `(result of a \`${debugLabel}\` helper)`;
   return ref;
 }
 
 export function createReadOnlyRef<T>(ref: Reference<T>): Reference<T> {
   if (!isUpdatableRef(ref)) return ref;
-  return createComputeRef(() => valueForRef(ref) as T, null, ref.debugLabel);
+  return createComputeRef(() => valueForRef(ref), null, ref.debugLabel);
 }
 
 export function isInvokableRef(ref: Reference): boolean {
@@ -82,7 +87,7 @@ export function isInvokableRef(ref: Reference): boolean {
 
 export function createInvokableRef<T>(inner: Reference<T>): Reference<T> {
   const ref = createComputeRef(
-    () => valueForRef(inner) as T,
+    () => valueForRef(inner),
     (value: T) => updateRef(inner, value)
   );
   ref[REFERENCE] = INVOKABLE;
@@ -100,8 +105,9 @@ export function isUpdatableRef(ref: Reference): boolean {
 export function valueForRef<T>(ref: Reference<T>): T {
   if (ref.compute === null) return ref.value as T;
   let cache = ref.cache;
-  if (cache === null) cache = ref.cache = createCache(ref.compute);
+  if (cache === null) cache = ref.cache = createCache(ref.compute, DEBUG && ref.debugLabel);
   const value = getValue(cache) as T;
+  // A compute ref that consumed no tags is constant forever (Glimmer parity).
   if (isConst(cache)) ref.tag = CONSTANT_TAG;
   return value;
 }
@@ -118,13 +124,14 @@ export function childRefFor(parentRef: Reference, path: string): Reference {
   if (child === undefined) {
     child = createComputeRef(
       () => {
-        const parent = valueForRef(parentRef) as Record<string, unknown> | null | undefined;
-        return parent === null || parent === undefined ? undefined : parent[path];
+        const parent = valueForRef(parentRef);
+        return parent === null || parent === undefined ? undefined : _getProp(parent, path);
       },
       (value: unknown) => {
-        const parent = valueForRef(parentRef) as Record<string, unknown> | null | undefined;
-        if (parent !== null && parent !== undefined) parent[path] = value;
-      }
+        const parent = valueForRef(parentRef);
+        if (parent !== null && parent !== undefined) _setProp(parent as object, path, value);
+      },
+      DEBUG && `${parentRef.debugLabel ?? ''}.${path}`
     );
     children.set(path, child);
   }
