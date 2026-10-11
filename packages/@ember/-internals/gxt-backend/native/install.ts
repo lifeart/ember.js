@@ -3,6 +3,7 @@
 // (the module every Ember render path and the application registry load, the
 // edge classic uses for its VM global context). Registers once; named imports
 // only, so nothing else of gxt is retained.
+import { DEBUG } from '@glimmer/env';
 import { _getProp } from '@ember/-internals/metal';
 import { registerHostHooks, registerHostManagers } from '@lifeart/gxt';
 import { installRenderLoop, normalizeAttrValue, scheduleRevalidate, toBool } from './host-hooks';
@@ -10,7 +11,7 @@ import { helperManager } from './helper-manager';
 import { componentManager, resolveComponentName } from './managers';
 import { modifierManager } from './modifier-manager';
 import { Outlet } from './outlet';
-import { resolveComponentOrHelper } from './resolver';
+import { assertLooseBuiltins, resolveComponentOrHelper } from './resolver';
 import { classifyContent, eachInEntries, hostAssert } from './content';
 
 let installed = false;
@@ -36,6 +37,9 @@ export function install(): void {
     // loose template compiles to `$_looseAppend` under
     // NATIVE_FLAGS.EMBER_LOOSE_COMPONENTS): component, else helper.
     resolveComponentOrHelper,
+    // Loose-mode built-ins gxt lowers itself (`array` / `fn` / `hash` /
+    // `unique-id`): the classic resolver's overwritten-built-in assertion.
+    looseBuiltins: DEBUG ? assertLooseBuiltins : undefined,
     // Glimmer dynamic content (G15): `{{value}}` renders trusted HTML /
     // components / helpers by what the value is.
     classifyContent,

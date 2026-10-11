@@ -86,12 +86,7 @@ const CLASSIC_HELPER_MANAGER_ASSOCIATED = new WeakSet<object>();
  */
 export function lookupHelper(owner: InternalOwner | undefined, name: string): object | null {
   const builtin = BUILTIN_HELPERS[name];
-  if (owner !== undefined) {
-    assert(
-      `You attempted to overwrite the built-in helper "${name}" which is not allowed. Please rename the helper.`,
-      !(builtin !== undefined && owner.hasRegistration(`helper:${name}`))
-    );
-  }
+  if (owner !== undefined && builtin !== undefined) assertNotOverwritten(owner, name);
   if (builtin !== undefined) return builtin;
   if (owner !== undefined) {
     const factory = owner.factoryFor(`helper:${name}`) as InternalFactory<object> | undefined;
@@ -116,6 +111,26 @@ export function lookupHelper(owner: InternalOwner | undefined, name: string): ob
     }
   }
   return KEYWORD_HELPERS[name] ?? null;
+}
+
+// Classic `lookupHelper`'s check for a built-in helper name.
+function assertNotOverwritten(owner: InternalOwner, name: string): void {
+  assert(
+    `You attempted to overwrite the built-in helper "${name}" which is not allowed. Please rename the helper.`,
+    !owner.hasRegistration(`helper:${name}`)
+  );
+}
+
+/**
+ * gxt `looseBuiltins` host hook (DEBUG): a loose template that lowered the free
+ * names `array` / `fn` / `hash` / `unique-id` to gxt built-ins reports them on
+ * every render — Glimmer resolves them through `lookupHelper`, so the same
+ * overwritten-built-in assertion applies.
+ */
+export function assertLooseBuiltins(ctx: object, names: readonly string[]): void {
+  const owner = ownerOfContext(ctx);
+  if (owner === undefined) return;
+  for (const name of names) assertNotOverwritten(owner, name);
 }
 
 /** Glimmer's resolveHelper miss. */

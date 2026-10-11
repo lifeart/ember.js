@@ -17,6 +17,7 @@ import { setModifierManager, modifierCapabilities } from '@glimmer/manager';
 import { set } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import Component from '@glimmer/component';
+import { DEBUG } from '@glimmer/env';
 import { RenderingTestCase, moduleFor, runTask } from 'internal-test-helpers';
 
 function names(nodes, out = []) {
@@ -244,6 +245,38 @@ moduleFor(
       );
       this.render('{{x-count}}/{{x-fn}}');
       this.assertText('count/fn');
+    }
+
+    ['@test a built-in gxt lowers itself still refuses an overwriting registration: hash (DEBUG)'](
+      assert
+    ) {
+      if (!DEBUG) {
+        assert.expect(0);
+        return;
+      }
+      this.registerHelper('hash', () => 'Nope');
+      expectAssertion(() => {
+        this.render('{{#let (hash a=1) as |h|}}{{h.a}}{{/let}}');
+      }, /You attempted to overwrite the built-in helper "hash" which is not allowed/);
+    }
+
+    ['@test a built-in gxt lowers itself still refuses an overwriting registration: unique-id (DEBUG)'](
+      assert
+    ) {
+      if (!DEBUG) {
+        assert.expect(0);
+        return;
+      }
+      this.registerHelper('unique-id', () => 'Nope');
+      expectAssertion(() => {
+        this.render('{{unique-id}}');
+      }, /You attempted to overwrite the built-in helper "unique-id" which is not allowed/);
+    }
+
+    ['@test a block param named like a built-in is not a built-in']() {
+      this.registerHelper('fn', () => 'Nope');
+      this.render('{{#each this.list as |fn|}}{{fn}}{{/each}}', { list: ['a', 'b'] });
+      this.assertText('ab');
     }
   }
 );
