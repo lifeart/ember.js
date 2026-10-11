@@ -16,10 +16,10 @@
 //
 //   renderComponent(component, {into, owner, args})  public `@ember/renderer` API
 //   renderSettled()                                   host-hooks.ts
-//   Renderer (`renderer:-dom`)                         app renderer; the route /
-//                                                      outlet root (`appendOutletView`)
-//                                                      is Inc 4b and renders through
-//                                                      `renderRoot` below
+//   Renderer (`renderer:-dom`)                         app renderer; `appendOutletView`
+//                                                      renders the router's outlet
+//                                                      tree (native/outlet.ts) as a
+//                                                      root through `renderRoot`
 import './install';
 import { assert } from '@ember/debug';
 import { getOwner } from '@ember/-internals/owner';
@@ -43,7 +43,8 @@ import {
   scheduleRevalidate,
 } from './host-hooks';
 import { OWNER } from './managers';
-import { documentedDrop, notImplemented } from './not-implemented';
+import { documentedDrop } from './not-implemented';
+import OutletView, { Outlet, OUTLET_STATE, outletNodeKind } from './outlet';
 
 export { renderSettled };
 
@@ -114,8 +115,9 @@ function rootsOf(owner: object): Set<NativeRenderRoot> {
  * Render `component` as a new root owned by `owner`, inserted into `parent`
  * before `nextSibling`. Rendering happens off-document (a fragment) inside one
  * render transaction; on failure the partial root is torn down and the error
- * re-thrown. The building block of `renderComponent` and of the app's outlet
- * root (Inc 4b).
+ * re-thrown. `context` adds gxt render-context entries on the root (the outlet
+ * root provides its outlet state). The building block of `renderComponent` and
+ * of the app's outlet root (`Renderer#appendOutletView`).
  */
 export function renderRoot(
   component: object,
@@ -124,11 +126,19 @@ export function renderRoot(
     parent,
     nextSibling = null,
     args = {},
-  }: { owner: object; parent: Node; nextSibling?: Node | null; args?: Record<string, unknown> }
+    context = [],
+  }: {
+    owner: object;
+    parent: Node;
+    nextSibling?: Node | null;
+    args?: Record<string, unknown>;
+    context?: ReadonlyArray<readonly [symbol, unknown]>;
+  }
 ): NativeRenderRoot {
   const document = parent.ownerDocument ?? globalThis.document;
   const root = createRoot(document);
   provideContext(root as never, OWNER, owner);
+  for (const [key, value] of context) provideContext(root as never, key, value);
   const result = new NativeRenderRoot(owner, root, parent);
   rootsOf(owner).add(result);
   const fragment = document.createDocumentFragment();
@@ -154,7 +164,29 @@ export function renderRoot(
 function captureRootsOf(owner: object): CapturedRenderNode[] {
   const roots = Array.from(rootsOf(owner), (r) => r.root);
   // Each gxt Root is a container node; its children are the rendered components.
-  return captureRenderTree(roots as never).flatMap((node) => node.children);
+  return captureRenderTree(roots as never).flatMap((node) => node.children.map(withOutletKinds));
+}
+
+// gxt captures every node as `type: 'component'`; the outlet layer knows which
+// nodes are outlets and default `{{outlet}}` route templates (classic shapes:
+// an outlet node has no args / instance; a route-template node's instance is
+// its controller).
+function withOutletKinds(node: CapturedRenderNode): CapturedRenderNode {
+  const children = node.children.map(withOutletKinds);
+  switch (outletNodeKind(node.instance)) {
+    case 'outlet':
+      return {
+        ...node,
+        type: 'outlet',
+        args: { positional: [], named: {} },
+        instance: undefined,
+        children,
+      };
+    case 'route-template':
+      return { ...node, type: 'route-template', instance: node.args.named['controller'], children };
+    default:
+      return { ...node, children };
+  }
 }
 
 // ---------------------------------------------------------------- renderComponent
@@ -228,7 +260,6 @@ export function _resetRenderers(): void {
 }
 
 // ---------------------------------------------------------------- Renderer
-const OUTLET = 'native outlet (`appendOutletView`: route templates / {{outlet}})';
 const CLASSIC_VIEWS = 'Classic `@ember/component` views';
 const USE_GLIMMER = 'Use @glimmer/component (or a template-only component) instead.';
 
@@ -245,8 +276,23 @@ export class Renderer {
     readonly _viewRegistry?: unknown
   ) {}
 
-  appendOutletView(_view: unknown, _target: unknown): never {
-    return notImplemented(OUTLET, '4b');
+  /**
+   * Render the router's outlet tree into `target` (scheduled in the render
+   * queue by `OutletView#appendTo`, classic parity): one root whose component
+   * is the root `Outlet`, reading the view's top-level outlet state.
+   */
+  appendOutletView(view: OutletView, target: Element | null): void {
+    assert(
+      'native renderer: the application root element was not found (rootElement)',
+      target !== null && target !== undefined
+    );
+    view.attachRoot(
+      renderRoot(Outlet, {
+        owner: view.owner,
+        parent: target,
+        context: [[OUTLET_STATE, view.rootRef]],
+      })
+    );
   }
 
   // classic-component roots / view registry: legacy (curly components dropped)

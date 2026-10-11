@@ -6,6 +6,7 @@
 import { registerHostHooks, registerHostManagers } from '@lifeart/gxt';
 import { installRenderLoop, normalizeAttrValue, scheduleRevalidate, toBool } from './host-hooks';
 import { componentManager, resolveComponentName } from './managers';
+import { Outlet } from './outlet';
 
 let installed = false;
 
@@ -17,6 +18,8 @@ export function install(): void {
     toBool,
     normalizeAttrValue,
     resolveComponentName,
+    // `{{outlet}}` (G3: compiled to `$_outlet(ctx)` under NATIVE_FLAGS.EMBER_OUTLET)
+    outletComponent: Outlet,
   });
   registerHostManagers({ component: componentManager as never });
   installRenderLoop();

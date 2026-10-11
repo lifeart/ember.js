@@ -122,6 +122,11 @@ const DEFINITION_OF_NODE = new WeakMap<object, object>();
 const DEFINITION_OF_TEMPLATE = new WeakMap<object, object>();
 // Registry / route names (Inc 4b route templates, Inc 8 resolver lookups).
 const REGISTERED_NAMES = new WeakMap<object, string>();
+// Per rendered NODE (wins over the definition's name): the route name of a
+// route template rendered by an outlet (one template function can serve several
+// routes — `templateName`, the shared default `{{outlet}}` template), `main`
+// for an outlet.
+const NODE_NAMES = new WeakMap<object, string>();
 
 /**
  * Give a component definition (class, templateOnly() definition or gxt
@@ -130,6 +135,11 @@ const REGISTERED_NAMES = new WeakMap<object, string>();
  */
 export function nameComponent(definition: object, name: string): void {
   REGISTERED_NAMES.set(definition, name);
+}
+
+/** Name one rendered component node for the Inspector (native/outlet.ts). */
+export function nameNode(node: object, name: string): void {
+  NODE_NAMES.set(node, name);
 }
 
 function nameOfDefinition(definition: object): string {
@@ -151,6 +161,8 @@ function nameOfDefinition(definition: object): string {
  * slots / roots), so gxt's keyword naming still applies to them.
  */
 export function resolveComponentName(node: object): string | undefined {
+  const nodeName = NODE_NAMES.get(node);
+  if (nodeName !== undefined) return nodeName;
   const definition = DEFINITION_OF_NODE.get(node);
   if (definition !== undefined) return nameOfDefinition(definition);
   const ctor = (node as { constructor?: unknown }).constructor;

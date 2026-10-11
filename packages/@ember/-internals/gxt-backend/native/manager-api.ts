@@ -13,6 +13,7 @@
 // records the public manager factory.
 import { DEBUG } from '@glimmer/env';
 import { isTemplateFn } from '@lifeart/gxt';
+import { TemplateOnlyComponentDefinition } from './runtime-helpers';
 import type { Tag } from './validator';
 
 // ---------------------------------------------------------------- internal api
@@ -56,9 +57,15 @@ export function getInternalComponentManager(definition: object, _isOptional?: bo
 // this to keep such a template UNINVOKED instead of calling it as
 // `factory(owner)`. The gxt compiler brands template functions under
 // NATIVE_FLAGS.EMBER_NATIVE (G14, `$_tpl`), so this is an exact check — a
-// TemplateFactory or a plain function is not a template function.
+// TemplateFactory or a plain function is not a template function. A
+// `templateOnly()` definition is a component too (Glimmer registers its
+// TEMPLATE_ONLY_COMPONENT_MANAGER on the definition class).
 export function hasInternalComponentManager(definition: object): boolean {
-  return getManager(COMPONENT_MANAGERS, definition) !== undefined || isTemplateFn(definition);
+  return (
+    getManager(COMPONENT_MANAGERS, definition) !== undefined ||
+    isTemplateFn(definition) ||
+    definition instanceof TemplateOnlyComponentDefinition
+  );
 }
 
 export function setInternalHelperManager<T extends object>(manager: unknown, definition: T): T {
