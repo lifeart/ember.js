@@ -1,16 +1,78 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-11T14:02:47.217Z",
+    "capturedAt": "2026-10-11T16:00:36.508Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "dd2ca582f4",
-    "totalTests": 2277,
-    "totalModules": 141,
+    "emberCommit": "5eb54e22f6",
+    "totalTests": 2840,
+    "totalModules": 198,
     "quarantinedTests": 0,
-    "totalAssertions": 10835,
-    "totalAssertionsPassing": 10786
+    "totalAssertions": 13000,
+    "totalAssertionsPassing": 12859,
+    "mergedNote": "Inc 8: final run (ember 5eb54e22f6) + the module 'Syntax test: {{#if}} and {{#unless}} without inverse' from run 5 (same code; the final run hit a page-load harness timeout on it during a slow run)"
   },
   "modules": {
+    "<LinkTo /> component (rendering tests)": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "<LinkTo /> component (rendering tests, with router not started)": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "<LinkTo /> component (rendering tests, without router)": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "<LinkTo /> component (routing tests - location hooks)": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "<LinkTo /> component (routing tests)": {
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 95,
+      "assertionsPassing": 95,
+      "failingTests": []
+    },
+    "<LinkTo /> component with query params (routing)": {
+      "total": 19,
+      "passing": 18,
+      "assertionsTotal": 91,
+      "assertionsPassing": 89,
+      "failingTests": [
+        {
+          "name": " href updates when unsupplied controller QP props change",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "<LinkTo /> component with query-params (rendering)": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 18,
+      "assertionsPassing": 18,
+      "failingTests": []
+    },
+    "<LinkTo /> component: .transitioning-in .transitioning-out CSS classes": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 36,
+      "assertionsPassing": 36,
+      "failingTests": []
+    },
     "@cached decorator: get": {
       "total": 2,
       "passing": 2,
@@ -207,6 +269,167 @@
       "assertionsPassing": 15,
       "failingTests": []
     },
+    "AngleBracket Invocation": {
+      "total": 40,
+      "passing": 40,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "AngleBracket Invocation (splattributes)": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "AngleBracket Invocation Nested Lookup": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "Application Lifecycle - Helper Registration": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "Application test: debug render tree": {
+      "total": 10,
+      "passing": 6,
+      "assertionsTotal": 421,
+      "assertionsPassing": 332,
+      "failingTests": [
+        {
+          "name": " routes",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " template-only components",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " custom components",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " <LinkTo> components",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Application test: rendering": {
+      "total": 18,
+      "passing": 18,
+      "assertionsTotal": 47,
+      "assertionsPassing": 47,
+      "failingTests": []
+    },
+    "Basic Custom Modifier Manager: 3.22": {
+      "total": 14,
+      "passing": 12,
+      "assertionsTotal": 49,
+      "assertionsPassing": 47,
+      "failingTests": [
+        {
+          "name": " Cannot dynamically resolve a modifier",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " provides a helpful assertion when mutating a value that was consumed already",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Component Manager - Angle Invocation": {
+      "total": 8,
+      "passing": 6,
+      "assertionsTotal": 26,
+      "assertionsPassing": 22,
+      "failingTests": [
+        {
+          "name": " updating attributes triggers updateComponent and didUpdateComponent",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " updateComponent fires consistently with or without args",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Component Manager - Curly Invocation": {
+      "total": 15,
+      "passing": 14,
+      "assertionsTotal": 25,
+      "assertionsPassing": 21,
+      "failingTests": [
+        {
+          "name": " it can opt-in to running async lifecycle hooks",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Component Tracked Properties": {
+      "total": 17,
+      "passing": 17,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "Component Tracked Properties w/ Args Proxy": {
+      "total": 7,
+      "passing": 5,
+      "assertionsTotal": 18,
+      "assertionsPassing": 11,
+      "failingTests": [
+        {
+          "name": " downstream property changes do not invalidate upstream component getters/arguments",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " each-in works with args",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Components test: contextual components": {
+      "total": 47,
+      "passing": 47,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Components test: contextual components -- mutable params": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "Components test: fragment components": {
+      "total": 12,
+      "passing": 12,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "Components test: template-only components (glimmer components)": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 37,
+      "assertionsPassing": 37,
+      "failingTests": []
+    },
+    "Components test: template-only components (using `templateOnlyComponent()`)": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
     "Container": {
       "total": 30,
       "passing": 30,
@@ -252,8 +475,8 @@
     "Controller model": {
       "total": 2,
       "passing": 2,
-      "assertionsTotal": 0,
-      "assertionsPassing": 0,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
       "failingTests": []
     },
     "Destroyables": {
@@ -263,188 +486,168 @@
       "assertionsPassing": 165,
       "failingTests": []
     },
+    "Element modifiers on AngleBracket components": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "Helper Tracked Properties": {
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
+    "Helpers test: argument-less helper invocation in named arguments position": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "Helpers test: custom helpers": {
+      "total": 35,
+      "passing": 33,
+      "assertionsTotal": 91,
+      "assertionsPassing": 89,
+      "failingTests": [
+        {
+          "name": " it cannot override built-in syntax",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " Cannot dynamically resolve a helper",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Helpers test: default helper manager": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 18,
+      "assertionsPassing": 18,
+      "failingTests": []
+    },
     "Helpers test: helper managers": {
       "total": 15,
       "passing": 15,
-      "assertionsTotal": 4,
-      "assertionsPassing": 4,
+      "assertionsTotal": 32,
+      "assertionsPassing": 32,
       "failingTests": []
     },
     "Helpers test: inline {{if}} and {{unless}} without the inverse argument": {
       "total": 100,
-      "passing": 99,
-      "assertionsTotal": 495,
-      "assertionsPassing": 494,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 100,
+      "assertionsTotal": 504,
+      "assertionsPassing": 504,
+      "failingTests": []
+    },
+    "Helpers test: invokeHelper": {
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 47,
+      "assertionsPassing": 47,
+      "failingTests": []
+    },
+    "Helpers test: invokeHelper with custom helper managers": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "Helpers test: mutation triggers errors - class based helper": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
+    "Helpers test: mutation triggers errors - simple helper": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
     },
     "Helpers test: nested {{if}} helpers (returning falsy values)": {
       "total": 100,
-      "passing": 99,
-      "assertionsTotal": 495,
-      "assertionsPassing": 494,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 100,
+      "assertionsTotal": 504,
+      "assertionsPassing": 504,
+      "failingTests": []
     },
     "Helpers test: nested {{if}} helpers (returning truthy values)": {
       "total": 100,
-      "passing": 99,
-      "assertionsTotal": 495,
-      "assertionsPassing": 494,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 100,
+      "assertionsTotal": 504,
+      "assertionsPassing": 504,
+      "failingTests": []
     },
     "Helpers test: nested {{unless}} helpers (returning falsy values)": {
       "total": 100,
-      "passing": 99,
-      "assertionsTotal": 495,
-      "assertionsPassing": 494,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 100,
+      "assertionsTotal": 504,
+      "assertionsPassing": 504,
+      "failingTests": []
     },
     "Helpers test: nested {{unless}} helpers (returning truthy values)": {
       "total": 100,
-      "passing": 99,
-      "assertionsTotal": 495,
-      "assertionsPassing": 494,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 100,
+      "assertionsTotal": 504,
+      "assertionsPassing": 504,
+      "failingTests": []
     },
     "Helpers test: {{array}}": {
       "total": 14,
-      "passing": 12,
-      "assertionsTotal": 38,
-      "assertionsPassing": 36,
-      "failingTests": [
-        {
-          "name": " the array helper can be shadowed",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " capture array values in JS to assert deep equal",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 14,
+      "assertionsTotal": 57,
+      "assertionsPassing": 57,
+      "failingTests": []
     },
     "Helpers test: {{concat}}": {
       "total": 4,
-      "passing": 3,
-      "assertionsTotal": 12,
-      "assertionsPassing": 11,
-      "failingTests": [
-        {
-          "name": " it can be used as input for other helpers",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
     },
     "Helpers test: {{fn}}": {
       "total": 10,
-      "passing": 3,
-      "assertionsTotal": 9,
-      "assertionsPassing": 2,
-      "failingTests": [
-        {
-          "name": " fn can be shadowed",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " updates when arguments change",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " updates when the function changes",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " a stashed fn result update arguments when invoked",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " a stashed fn result invokes the correct function when the bound function changes",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " can use `this` if bound prior to passing to fn",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " partially applies each layer when nested [GH#17959]",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 10,
+      "assertionsTotal": 26,
+      "assertionsPassing": 26,
+      "failingTests": []
     },
     "Helpers test: {{get}}": {
       "total": 21,
-      "passing": 19,
-      "assertionsTotal": 74,
-      "assertionsPassing": 70,
-      "failingTests": [
-        {
-          "name": " can be shadowed",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " should be able to get an object value with a path from this.args in a glimmer component",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 21,
+      "assertionsTotal": 78,
+      "assertionsPassing": 78,
+      "failingTests": []
     },
     "Helpers test: {{hash}}": {
       "total": 12,
-      "passing": 11,
-      "assertionsTotal": 20,
-      "assertionsPassing": 19,
-      "failingTests": [
-        {
-          "name": " can be shadowed",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 12,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
     },
     "Helpers test: {{if}} used in attribute position": {
       "total": 100,
-      "passing": 99,
-      "assertionsTotal": 495,
-      "assertionsPassing": 494,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 100,
+      "assertionsTotal": 504,
+      "assertionsPassing": 504,
+      "failingTests": []
     },
     "Helpers test: {{if}} used with another helper": {
       "total": 100,
-      "passing": 99,
-      "assertionsTotal": 495,
-      "assertionsPassing": 494,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 100,
+      "assertionsTotal": 504,
+      "assertionsPassing": 504,
+      "failingTests": []
     },
     "Helpers test: {{log}}": {
       "total": 4,
@@ -469,27 +672,24 @@
     },
     "Helpers test: {{unless}} used in attribute position": {
       "total": 100,
-      "passing": 99,
-      "assertionsTotal": 495,
-      "assertionsPassing": 494,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 100,
+      "assertionsTotal": 504,
+      "assertionsPassing": 504,
+      "failingTests": []
     },
     "Helpers test: {{unless}} used with another helper": {
       "total": 100,
-      "passing": 99,
-      "assertionsTotal": 495,
-      "assertionsPassing": 494,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 100,
+      "assertionsTotal": 504,
+      "assertionsPassing": 504,
+      "failingTests": []
+    },
+    "Helpers test: {{yield}} helper": {
+      "total": 15,
+      "passing": 15,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
     },
     "Keys behavior with observers": {
       "total": 7,
@@ -519,45 +719,169 @@
       "assertionsPassing": 4,
       "failingTests": []
     },
-    "Syntax test: Multiple {{#let as}} helpers": {
-      "total": 5,
-      "passing": 3,
-      "assertionsTotal": 14,
-      "assertionsPassing": 12,
+    "Rendering test: non-interactive `on` modifier": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "Rendering test: non-interactive custom modifiers": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "Strict Mode": {
+      "total": 12,
+      "passing": 11,
+      "assertionsTotal": 36,
+      "assertionsPassing": 35,
       "failingTests": [
         {
-          "name": " the scoped variable is not available outside the {{#let}} block",
+          "name": " Can use a dynamic component definition (curly)",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Strict Mode - LinkTo": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "Strict Mode - RenderComponentTestCase": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "Strict Mode - built ins": {
+      "total": 9,
+      "passing": 5,
+      "assertionsTotal": 11,
+      "assertionsPassing": 7,
+      "failingTests": [
+        {
+          "name": " Can use hash",
           "category": "gxt:triage"
         },
         {
-          "name": " nested {{#let}} blocks should have access to root context",
+          "name": " Can use get",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " Can use each-in",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " Can use in-element",
           "category": "gxt:triage"
         }
       ]
+    },
+    "Strict Mode - renderComponent": {
+      "total": 27,
+      "passing": 21,
+      "assertionsTotal": 110,
+      "assertionsPassing": 100,
+      "failingTests": [
+        {
+          "name": " Can use a dynamic component definition (curly)",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " can render in to a detached element",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " renderComponent is eager, so it tracks with its parent",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " rendering multiple times to adjacent elements",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " multiple calls to render in to the same element appear as siblings",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " multiple calls to render in to the same element appear as siblings and can be updated",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Strict Mode - renderComponent (direct)": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
+    "Strict Mode - renderComponent - built ins": {
+      "total": 9,
+      "passing": 5,
+      "assertionsTotal": 16,
+      "assertionsPassing": 12,
+      "failingTests": [
+        {
+          "name": " Can use hash",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " Can use get",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " Can use each-in",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " Can use in-element",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Strict Mode <-> Loose Mode - renderComponent": {
+      "total": 3,
+      "passing": 1,
+      "assertionsTotal": 10,
+      "assertionsPassing": 7,
+      "failingTests": [
+        {
+          "name": " strict-mode components cannot lookup things in the registry",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " rendering multiple times to adjacent elements",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "Syntax test: Multiple {{#let as}} helpers": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 23,
+      "assertionsPassing": 23,
+      "failingTests": []
     },
     "Syntax test: toggling {{#each as}}": {
       "total": 39,
-      "passing": 38,
-      "assertionsTotal": 189,
-      "assertionsPassing": 187,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 39,
+      "assertionsTotal": 207,
+      "assertionsPassing": 207,
+      "failingTests": []
     },
     "Syntax test: toggling {{#each}}": {
       "total": 39,
-      "passing": 38,
-      "assertionsTotal": 189,
-      "assertionsPassing": 187,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 39,
+      "assertionsTotal": 207,
+      "assertionsPassing": 207,
+      "failingTests": []
     },
     "Syntax test: {{#each as}} DOM mutation test": {
       "total": 1,
@@ -603,83 +927,38 @@
     },
     "Syntax test: {{#each}} with array-like objects implementing Symbol.iterator": {
       "total": 23,
-      "passing": 21,
-      "assertionsTotal": 162,
-      "assertionsPassing": 160,
-      "failingTests": [
-        {
-          "name": " the scoped variable is not available outside the {{#each}} block.",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " the scoped variable is not available outside the {{#each}} block",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 23,
+      "assertionsTotal": 170,
+      "assertionsPassing": 170,
+      "failingTests": []
     },
     "Syntax test: {{#each}} with array-like objects implementing forEach": {
       "total": 23,
-      "passing": 21,
-      "assertionsTotal": 162,
-      "assertionsPassing": 160,
-      "failingTests": [
-        {
-          "name": " the scoped variable is not available outside the {{#each}} block.",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " the scoped variable is not available outside the {{#each}} block",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 23,
+      "assertionsTotal": 170,
+      "assertionsPassing": 170,
+      "failingTests": []
     },
     "Syntax test: {{#each}} with emberA-wrapped arrays": {
       "total": 23,
-      "passing": 21,
-      "assertionsTotal": 162,
-      "assertionsPassing": 160,
-      "failingTests": [
-        {
-          "name": " the scoped variable is not available outside the {{#each}} block.",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " the scoped variable is not available outside the {{#each}} block",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 23,
+      "assertionsTotal": 170,
+      "assertionsPassing": 170,
+      "failingTests": []
     },
     "Syntax test: {{#each}} with native Set": {
       "total": 23,
-      "passing": 21,
-      "assertionsTotal": 147,
-      "assertionsPassing": 145,
-      "failingTests": [
-        {
-          "name": " the scoped variable is not available outside the {{#each}} block.",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " the scoped variable is not available outside the {{#each}} block",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 23,
+      "assertionsTotal": 155,
+      "assertionsPassing": 155,
+      "failingTests": []
     },
     "Syntax test: {{#each}} with native arrays": {
       "total": 23,
-      "passing": 21,
-      "assertionsTotal": 162,
-      "assertionsPassing": 160,
-      "failingTests": [
-        {
-          "name": " the scoped variable is not available outside the {{#each}} block.",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " the scoped variable is not available outside the {{#each}} block",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 23,
+      "assertionsTotal": 170,
+      "assertionsPassing": 170,
+      "failingTests": []
     },
     "Syntax test: {{#each}} with sparse arrays": {
       "total": 1,
@@ -697,48 +976,66 @@
     },
     "Syntax test: {{#if}} and {{#unless}} without inverse": {
       "total": 104,
-      "passing": 103,
-      "assertionsTotal": 582,
-      "assertionsPassing": 581,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 104,
+      "assertionsTotal": 591,
+      "assertionsPassing": 591,
+      "failingTests": []
     },
     "Syntax test: {{#if}} with inverse": {
       "total": 104,
-      "passing": 103,
-      "assertionsTotal": 582,
-      "assertionsPassing": 581,
-      "failingTests": [
-        {
-          "name": " evaluation should be lazy",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 104,
+      "assertionsTotal": 591,
+      "assertionsPassing": 591,
+      "failingTests": []
     },
     "Syntax test: {{#let as}}": {
       "total": 8,
-      "passing": 7,
-      "assertionsTotal": 30,
-      "assertionsPassing": 29,
+      "passing": 8,
+      "assertionsTotal": 34,
+      "assertionsPassing": 34,
+      "failingTests": []
+    },
+    "Syntax test: {{#unless}} with inverse": {
+      "total": 104,
+      "passing": 104,
+      "assertionsTotal": 591,
+      "assertionsPassing": 591,
+      "failingTests": []
+    },
+    "The <LinkTo /> component - loading states and warnings": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 19,
+      "assertionsPassing": 19,
+      "failingTests": []
+    },
+    "The <LinkTo /> component - nested routes and link-to arguments": {
+      "total": 30,
+      "passing": 29,
+      "assertionsTotal": 96,
+      "assertionsPassing": 95,
       "failingTests": [
         {
-          "name": " the scoped variable is not available outside the {{#let}} block.",
+          "name": " it updates when route changes with only query-params and a block",
           "category": "gxt:triage"
         }
       ]
     },
-    "Syntax test: {{#unless}} with inverse": {
-      "total": 104,
-      "passing": 103,
-      "assertionsTotal": 582,
-      "assertionsPassing": 581,
+    "The {{link-to}} component - loading states and warnings": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 19,
+      "assertionsPassing": 19,
+      "failingTests": []
+    },
+    "The {{link-to}} component - nested routes and link-to arguments": {
+      "total": 24,
+      "passing": 23,
+      "assertionsTotal": 85,
+      "assertionsPassing": 84,
       "failingTests": [
         {
-          "name": " evaluation should be lazy",
+          "name": " it updates when route changes with only query-params and a block",
           "category": "gxt:triage"
         }
       ]
@@ -988,6 +1285,13 @@
       "assertionsPassing": 53,
       "failingTests": []
     },
+    "gxt-native | loose-mode resolution": {
+      "total": 17,
+      "passing": 17,
+      "assertionsTotal": 52,
+      "assertionsPassing": 52,
+      "failingTests": []
+    },
     "gxt-native | modifiers": {
       "total": 9,
       "passing": 9,
@@ -996,10 +1300,10 @@
       "failingTests": []
     },
     "gxt-native | outlet": {
-      "total": 11,
-      "passing": 11,
-      "assertionsTotal": 41,
-      "assertionsPassing": 41,
+      "total": 12,
+      "passing": 12,
+      "assertionsTotal": 43,
+      "assertionsPassing": 43,
       "failingTests": []
     },
     "gxt-native | render passes": {
@@ -1200,9 +1504,70 @@
           "category": "gxt:triage"
         }
       ]
+    },
+    "{{link-to}} component (rendering tests)": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "{{link-to}} component (rendering tests, without router)": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "{{link-to}} component (routing tests - location hooks)": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "{{link-to}} component (routing tests)": {
+      "total": 12,
+      "passing": 12,
+      "assertionsTotal": 93,
+      "assertionsPassing": 93,
+      "failingTests": []
+    },
+    "{{link-to}} component with query params (routing)": {
+      "total": 18,
+      "passing": 17,
+      "assertionsTotal": 84,
+      "assertionsPassing": 82,
+      "failingTests": [
+        {
+          "name": " href updates when unsupplied controller QP props change",
+          "category": "gxt:triage"
+        }
+      ]
+    },
+    "{{link-to}} component with query-params (rendering)": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 18,
+      "assertionsPassing": 18,
+      "failingTests": []
+    },
+    "{{link-to}} component: .transitioning-in .transitioning-out CSS classes": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 36,
+      "assertionsPassing": 36,
+      "failingTests": []
+    },
+    "{{on}} Modifier": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 45,
+      "assertionsPassing": 45,
+      "failingTests": []
     }
   },
   "categories": {
-    "gxt:triage": 44
+    "gxt:triage": 38
   }
 }
