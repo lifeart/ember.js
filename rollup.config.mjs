@@ -13,7 +13,11 @@ import {
   GXT_EXTERNAL_PACKAGES,
   GXT_DROPPED_ENTRIES,
   GXT_DIST_VM_STUBS,
+  GXT_NATIVE_DIST_DROPPED_ENTRIES,
+  NATIVE_FLAGS,
+  gxtNativeSpecifierForPath,
   gxtSubpathRegExp,
+  matchGxtNativeAlias,
 } from './scripts/gxt-alias-map.mjs';
 
 // eslint-disable-next-line no-redeclare
@@ -48,14 +52,21 @@ const RENDER_BACKEND = process.env.EMBER_RENDER_BACKEND || 'classic';
 // `gxt` = the GXT COMPAT backend (gxt-backend shims + bridge).
 //
 // `gxt-native` is the gxt NATIVE layer (scripts/gxt-alias-map.mjs
-// GXT_NATIVE_ALIASES; design docs-internal-gxt-native-layer-design.md). It is
-// built by vite only for now; the rollup native dist flavor is Inc 10, so a
-// rollup `gxt-native` build FAILS LOUDLY (nativeDistNotImplemented below) rather
-// than silently emitting a classic or compat dist under the native label. This
-// module must still IMPORT cleanly under gxt-native because the native vite
-// config reuses resolvePackages()/exposedDependencies() from here — with
-// USE_GXT_BACKEND false, i.e. the classic dependency map (the native boundary is
-// applied by vite's alias array on top of it).
+// GXT_NATIVE_ALIASES; design docs-internal-gxt-native-layer-design.md §2.1/§4):
+// CLASSIC Ember source with `__GXT_MODE__ = false` (USE_GXT_BACKEND stays false,
+// so exposedDependencies()/resolvePackages() are the classic dependency map —
+// vite.config.mjs imports them from here for its native config too), with
+//   - the native alias boundary applied on top (gxtNativeResolve: the SAME
+//     GXT_NATIVE_ALIASES table vite uses, plus the resolved-path guard for
+//     relative edges),
+//   - the gxt template compiler under NATIVE_FLAGS over native/**/*.gts and the
+//     G10 `precompileTemplate` call sites (gxtNativeCompiler),
+//   - the entry map re-pointed at the native modules / VM-only packages dropped
+//     (esmInputs), and
+//   - `@lifeart/gxt` external (resolvePackages, as in every flavor): the
+//     consuming app resolves it and compiles its own templates with the gxt
+//     vite plugin under the same NATIVE_FLAGS.
+// `node scripts/assert-native-dist.mjs` checks the result (DoD #2).
 const USE_GXT_BACKEND = RENDER_BACKEND === 'gxt';
 const USE_GXT_NATIVE = RENDER_BACKEND === 'gxt-native';
 
@@ -83,6 +94,10 @@ if (process.env.BUNDLE_VISUALIZER === '1') {
   visualizerPlugin = visualizer;
 }
 
+// The gxt template compiler, loaded only for the native dist (the classic and
+// compat rollup builds never compile templates with it).
+const gxtCompiler = USE_GXT_NATIVE ? (await import('@lifeart/gxt/compiler')).compiler : null;
+
 // GXT_EXTERNAL_PACKAGES (externalized shim deps) and GXT_DROPPED_ENTRIES
 // (VM packages dropped from the entry map) are imported from
 // scripts/gxt-alias-map.mjs — the canonical GXT build contract — so this
@@ -97,13 +112,6 @@ let configs = [
   glimmerSyntaxESM(),
   glimmerSyntaxCJS(),
 ];
-
-if (USE_GXT_NATIVE) {
-  configs = configs.map((config) => ({
-    ...config,
-    plugins: [nativeDistNotImplemented(), ...config.plugins],
-  }));
-}
 
 if (process.env.DEBUG_SINGLE_CONFIG) {
   configs = configs.slice(
@@ -174,6 +182,25 @@ function esmInputs() {
       }
     }
   }
+  if (USE_GXT_NATIVE) {
+    // An entry whose specifier is on the native boundary publishes the NATIVE
+    // module (`@glimmer/validator` → native/validator, `@ember/component` →
+    // the native barrel, `@ember/template-compilation` → the native G10
+    // runtime half, `@ember/template-compiler[/runtime]` → the native runtime
+    // compiler, …) — the module every intra-dist import of that specifier
+    // already resolves to. VM-only packages are not published at all.
+    for (const key of Object.keys(inputs)) {
+      const specifier = key.replace(/^packages\//, '').replace(/\/index$/, '');
+      if (GXT_NATIVE_DIST_DROPPED_ENTRIES.has(specifier)) {
+        delete inputs[key];
+        continue;
+      }
+      const hit = matchGxtNativeAlias(specifier);
+      if (hit && hit.entry.match !== 'prefix') {
+        inputs[key] = gxtNativeFile(hit.target, `entry ${key}`);
+      }
+    }
+  }
   return inputs;
 }
 
@@ -206,6 +233,12 @@ function sharedESMConfig({ input, debugMacrosMode, includePackageMeta = false })
   }
 
   let plugins = [
+    // gxt-native: the alias boundary resolves first, and the gxt compiler sees
+    // raw source (as the `enforce: 'pre'` vite plugin does in the native vite
+    // config) before babel strips TypeScript.
+    ...(USE_GXT_NATIVE
+      ? [gxtNativeResolve(), gxtNativeCompiler(debugMacrosMode ? 'development' : 'production')]
+      : []),
     babel({
       babelHelpers: 'bundled',
       extensions: ['.js', '.ts'],
@@ -229,6 +262,10 @@ function sharedESMConfig({ input, debugMacrosMode, includePackageMeta = false })
 
   if (includePackageMeta) {
     plugins.push(packageMeta());
+  }
+
+  if (USE_GXT_NATIVE) {
+    plugins.push(gxtNativeDistManifest());
   }
 
   const visualized = visualizerPlugin();
@@ -903,6 +940,17 @@ const allowedCycles = [
   // @ember/-internals/metal -> @ember/-internals/meta, which re-imports
   // destroyable when the GXT resolver-alias is active.
   'packages/@ember/-internals/gxt-backend/destroyable',
+
+  // The native twin of the cycle above (EMBER_RENDER_BACKEND=gxt-native):
+  // @glimmer/destroyable → native/destroyable.ts schedules destruction on the
+  // runloop, @ember/runloop → metal → meta re-imports destroyable.
+  'packages/@ember/-internals/gxt-backend/native/destroyable',
+  // native/validator.ts re-exports the vendored tracked collections (the full
+  // `@glimmer/validator` surface) whose `../tracking` edges resolve back to it.
+  'packages/@ember/-internals/gxt-backend/native/validator',
+  // The native component manager hands by-name definitions to the resolver,
+  // whose lookups wrap resolved components in the manager's named definition.
+  'packages/@ember/-internals/gxt-backend/native/managers',
 ];
 
 // Replace the bare `__GXT_MODE__` identifier with the boolean literal for the
@@ -932,20 +980,117 @@ function replaceGxtModeFlag() {
   };
 }
 
-// `EMBER_RENDER_BACKEND=gxt-native` rollup builds: refuse at build start (the
-// native dist flavor — gxt compiler over native/**/*.gts, GXT_NATIVE_ALIASES as
-// an exact-key map, `--assert-native` on the dist — is Inc 10). Erroring in a
-// hook (not at module scope) keeps this module importable by vite.config.mjs.
-function nativeDistNotImplemented() {
+// ---------------------------------------------------------------------------
+// gxt NATIVE dist (EMBER_RENDER_BACKEND=gxt-native)
+// ---------------------------------------------------------------------------
+
+// Repo-relative native alias target (no extension) → the source file.
+function gxtNativeFile(target, why) {
+  const base = resolve(projectRoot, target);
+  for (const ext of ['', '.ts', '.gts', '.js', '.gjs', '/index.ts', '/index.js']) {
+    const candidate = base + ext;
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  }
+  throw new Error(`[gxt-native] ${why} maps to ${target}, which does not exist`);
+}
+
+// The native alias boundary for rollup: the SAME GXT_NATIVE_ALIASES table the
+// native vite config applies as resolve.alias (scripts/gxt-alias-map.mjs), for
+//   - bare specifiers (first match wins; 'prefix' entries remap a directory),
+//   - RELATIVE edges inside packages/ whose resolved path spells an aliased
+//     specifier (the vendored collections' `../tracking`, LinkTo's
+//     `../templates/link-to`) — vite's gxtNativeRelativeRedirect twin, sharing
+//     gxtNativeSpecifierForPath — so an intra-package edge cannot pull the real
+//     VM module back in,
+//   - native/runtime-compile.ts's `NATIVE_FLAGS` import from
+//     scripts/gxt-alias-map.mjs (the one flag constant shared with the AOT
+//     compiler): the dist inlines the constant as a virtual module instead of
+//     bundling the build-script module.
+function gxtNativeResolve() {
+  const packagesDir = resolve(projectRoot, 'packages') + '/';
+  const FLAGS_ID = '\0gxt-native-flags';
   return {
-    name: 'gxt-native-dist-not-implemented',
-    buildStart() {
-      this.error(
-        'EMBER_RENDER_BACKEND=gxt-native: the rollup native dist is not implemented yet (Inc 10). ' +
-          'Build the native layer with vite (scripts/bundle-modern-app.mjs --variants gxt-native). ' +
-          'The pre-Inc-1 "compat with classic components DCE-stripped" dist is ' +
-          'EMBER_RENDER_BACKEND=gxt GXT_NATIVE=1.'
-      );
+    name: 'gxt-native-resolve',
+    resolveId(source, importer) {
+      if (source.startsWith('\0')) return null;
+      if (source.endsWith('/scripts/gxt-alias-map.mjs')) return FLAGS_ID;
+      if (source.startsWith('.')) {
+        if (!importer) return null;
+        const importerPath = importer.split('?')[0];
+        if (!importerPath.startsWith(packagesDir)) return null;
+        const specifier = gxtNativeSpecifierForPath(
+          resolve(dirname(importerPath), source),
+          packagesDir
+        );
+        if (!specifier) return null;
+        const hit = matchGxtNativeAlias(specifier);
+        if (!hit || hit.entry.match === 'prefix') return null;
+        return gxtNativeFile(hit.target, `${source} (from ${importerPath})`);
+      }
+      const hit = matchGxtNativeAlias(source);
+      return hit ? gxtNativeFile(hit.target, source) : null;
+    },
+    load(id) {
+      if (id !== FLAGS_ID) return null;
+      return `export const NATIVE_FLAGS = Object.freeze(${JSON.stringify(NATIVE_FLAGS)});\n`;
+    },
+  };
+}
+
+// The gxt template compiler (`@lifeart/gxt/compiler`) is a VITE plugin. Rollup
+// runs its `transform` hook but never the vite-only `config` hook — and that is
+// where the plugin merges `options.flags` (and returns its `define` map). Without
+// it the transform compiles with gxt's DEFAULT flags: a silent compat-shaped
+// miscompile (no `$_tpl` brand / `$_self` / `$__tag`, `{{on}}` called directly;
+// Inc 10 node rollup probe). So this adapter calls the documented
+// `config(userConfig, env)` hook once, verifies that every NATIVE_FLAGS value
+// reached the merged flag set, and exposes only `transform` (.gts/.gjs, plus the
+// G10 build-time `precompileTemplate` call sites). The dev dist compiles in
+// development mode without the HMR footer. The emitted templates import the gxt
+// runtime from `@lifeart/gxt` (external) and reference no build-flag identifier.
+function gxtNativeCompiler(mode) {
+  const plugin = gxtCompiler(mode, { flags: { ...NATIVE_FLAGS }, disableHMR: true });
+  const define = plugin.config({}, { mode, command: 'build' })?.define ?? {};
+  const drift = Object.entries(NATIVE_FLAGS).filter(([flag, value]) => define[flag] !== value);
+  if (drift.length > 0 || typeof plugin.transform !== 'function') {
+    throw new Error(
+      `[gxt-native] the gxt compiler plugin did not take NATIVE_FLAGS (${drift
+        .map(([flag]) => flag)
+        .join(', ')}); refusing to emit templates compiled with gxt default flags`
+    );
+  }
+  return { name: 'gxt-native-compiler', transform: plugin.transform };
+}
+
+// Emits `gxt-native-manifest.json` next to the native dist (dist/<mode>/, outside
+// the `packages/` tree the package exports map serves): per chunk, the source
+// modules it contains (repo-relative) and its static / dynamic imports. The
+// dist-level DoD #2 assertion (scripts/assert-native-dist.mjs) walks the import
+// graph from the SHIPPED files and uses this only to name the source modules
+// inside each reached chunk. JSON, so the *.js size gates never count it.
+function gxtNativeDistManifest() {
+  const rel = (id) => (id.startsWith(projectRoot + '/') ? id.slice(projectRoot.length + 1) : id);
+  return {
+    name: 'gxt-native-dist-manifest',
+    generateBundle(_options, bundle) {
+      const chunks = {};
+      for (const item of Object.values(bundle)) {
+        if (item.type !== 'chunk') continue;
+        chunks[item.fileName] = {
+          isEntry: item.isEntry,
+          facadeModuleId: item.facadeModuleId ? rel(item.facadeModuleId) : null,
+          imports: item.imports,
+          dynamicImports: item.dynamicImports,
+          modules: Object.fromEntries(
+            Object.entries(item.modules).map(([id, m]) => [rel(id), m.renderedLength])
+          ),
+        };
+      }
+      this.emitFile({
+        type: 'asset',
+        fileName: 'gxt-native-manifest.json',
+        source: JSON.stringify({ nativeFlags: NATIVE_FLAGS, chunks }, null, 1) + '\n',
+      });
     },
   };
 }

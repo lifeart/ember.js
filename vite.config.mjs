@@ -20,6 +20,7 @@ import {
   GXT_NATIVE_ALIASES,
   NATIVE_FLAGS,
   gxtNativeAliasMatcher,
+  gxtNativeSpecifierForPath,
   gxtSubpathRegExp,
   isGxtEnabled,
   isGxtNative,
@@ -512,15 +513,13 @@ function gxtNativeRelativeRedirect() {
       if (!importer || !source.startsWith('.')) return null;
       const importerPath = importer.split('?')[0].split('#')[0];
       if (!importerPath.startsWith(packagesDir)) return null;
-      const abs = resolve(dirname(importerPath), source);
-      if (!abs.startsWith(packagesDir)) return null;
-      const specifier = abs
-        .slice(packagesDir.length)
-        .replace(/\.(ts|js|gts|gjs)$/, '')
-        .replace(/\/index$/, '');
-      // A package's own test tree (`@glimmer/validator/test/-utils`) is not a
-      // runtime deep path of the aliased package: never collapse it.
-      if (/\/(test|tests|__tests__)\//.test(specifier + '/')) return null;
+      // Shared with the native rollup dist (rollup.config.mjs gxtNativeResolve):
+      // null outside packages/ and inside a package's own test tree.
+      const specifier = gxtNativeSpecifierForPath(
+        resolve(dirname(importerPath), source),
+        packagesDir
+      );
+      if (!specifier) return null;
       const hit = matchGxtNativeAlias(specifier);
       if (!hit || hit.entry.match === 'prefix') return null;
       const base = resolve(projectRoot, hit.target);

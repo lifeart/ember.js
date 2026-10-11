@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // scripts/bundle-size-check.mjs
 // Lightweight dual-backend bundle-size gate.
-// Usage: node scripts/bundle-size-check.mjs <classic|gxt>
+// Usage: node scripts/bundle-size-check.mjs <classic|gxt|gxt-native>
 //
 // Reads scripts/bundle-budgets.json and checks every entry's raw/gzip/brotli
 // size against its recorded budget. Fails (exit 1) if any metric exceeds its
@@ -51,7 +51,7 @@ const repoRoot = resolve(scriptDir, '..');
 
 const backend = process.argv[2];
 if (!backend) {
-  console.error('Usage: node scripts/bundle-size-check.mjs <classic|gxt>');
+  console.error('Usage: node scripts/bundle-size-check.mjs <classic|gxt|gxt-native>');
   process.exit(1);
 }
 
@@ -69,6 +69,23 @@ if (!budget) {
 }
 
 const TOLERANCE = 1.05; // 5 percent headroom
+
+// The dist/ directory holds whichever flavor rollup built last. A gxt-native
+// build (EMBER_RENDER_BACKEND=gxt-native) marks each mode with
+// `gxt-native-manifest.json` (rollup.config.mjs gxtNativeDistManifest); refuse
+// to judge one flavor's dist against another flavor's budget.
+function assertDistFlavor(entryPath) {
+  const abs = resolve(repoRoot, entryPath);
+  if (!existsSync(abs) || !statSync(abs).isDirectory()) return true;
+  const native = existsSync(join(abs, 'gxt-native-manifest.json'));
+  if (native !== (backend === 'gxt-native')) {
+    console.error(
+      `  FAIL: ${entryPath} is a ${native ? 'gxt-native' : 'non-native'} dist but the backend is '${backend}' — rebuild: rm -rf dist && ${backend === 'classic' ? '' : `EMBER_RENDER_BACKEND=${backend} `}npx rollup --config`
+    );
+    return false;
+  }
+  return true;
+}
 
 // GXT-residue guard for the classic backend. Every GXT-only call site in the
 // shared glimmer/metal/runloop/routing modules is wrapped in a build-time
@@ -140,6 +157,11 @@ for (const entry of budget.entries) {
   const abs = resolve(repoRoot, entry.path);
   if (!existsSync(abs)) {
     console.error(`MISSING: ${entry.path} (did the build run?)`);
+    failed = true;
+    continue;
+  }
+
+  if (!assertDistFlavor(entry.path)) {
     failed = true;
     continue;
   }

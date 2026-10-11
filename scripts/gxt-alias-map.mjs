@@ -497,3 +497,80 @@ export function matchGxtNativeAlias(specifier) {
   }
   return null;
 }
+
+/**
+ * The package specifier an ABSOLUTE source path inside `packagesDir` spells
+ * (`<packagesDir>/@glimmer/validator/lib/tracking.ts` →
+ * `@glimmer/validator/lib/tracking`), or null when the path is outside
+ * `packagesDir` or inside a package's own test tree (a test helper is never a
+ * runtime deep path of the aliased package). The resolved-path guard of the
+ * native rollup dist feeds the result to matchGxtNativeAlias, so a RELATIVE
+ * edge (the vendored collections' `../tracking`, LinkTo's
+ * `../templates/link-to`) is redirected exactly like the bare specifier.
+ */
+export function gxtNativeSpecifierForPath(absPath, packagesDir) {
+  if (!absPath.startsWith(packagesDir)) return null;
+  const specifier = absPath
+    .slice(packagesDir.length)
+    .replace(/\.(ts|js|gts|gjs)$/, '')
+    .replace(/\/index$/, '');
+  if (/\/(test|tests|__tests__)\//.test(specifier + '/')) return null;
+  return specifier;
+}
+
+/**
+ * DoD #2 (design docs-internal-gxt-native-layer-design.md §4): modules an app
+ * closure of the native build must not ship — the Glimmer VM, its tag-revision
+ * protocol, the gxt COMPAT bridge, the classic VM renderer, and the template
+ * compilers. `[pattern, reason]`; patterns match absolute module ids / sourcemap
+ * sources (vite harness, scripts/bundle-modern-app.mjs --assert-native) AND the
+ * repo-relative module ids of the rollup native dist manifest
+ * (scripts/assert-native-dist.mjs).
+ */
+export const GXT_NATIVE_FORBIDDEN = [
+  [
+    /packages\/@glimmer\/(runtime|opcode-compiler|program|vm|wire-format|encoder|node|global-context|reference|destroyable|manager)\//,
+    'Glimmer VM package',
+  ],
+  [
+    /packages\/@glimmer\/validator\/lib\/(tracking|validators|meta)\.ts$/,
+    'Glimmer VM tag protocol',
+  ],
+  [
+    /gxt-backend\/(compile|manager|ember-gxt-wrappers|validator|reference|destroyable|gxt-bridge|helper-manager)\.ts$/,
+    'gxt compat bridge',
+  ],
+  [
+    /-internals\/glimmer\/lib\/(renderer|component-managers\/[^/]+|templates\/(root|outlet)|component)\.ts$/,
+    'classic VM renderer',
+  ],
+  [
+    /(packages|node_modules)\/(@glimmer\/(syntax|compiler)|@handlebars|simple-html-tokenizer)\//,
+    'template compiler',
+  ],
+  [
+    /(glimmer-next|@lifeart\/gxt)\/dist\/(compile-|gxt\.runtime-compiler|rehydration-)/,
+    'gxt runtime compiler / rehydration',
+  ],
+];
+
+/**
+ * Glimmer VM packages with NO native meaning: dropped from the rollup
+ * `gxt-native` dist ENTRY map (no `dist/<mode>/packages/<pkg>/index.js` is
+ * published). Their code still lands in a shared chunk when a kept non-app
+ * entry reaches it (the `ember` barrel, the build-time template compiler) —
+ * `scripts/assert-native-dist.mjs` proves no app-facing entry does. The
+ * VM packages that DO have a native meaning keep their entry, re-pointed at the
+ * native module (`@glimmer/{validator,reference,destroyable,manager,runtime}` →
+ * GXT_NATIVE_ALIASES), so an addon importing them gets the same module the
+ * framework uses (no split-brain registry).
+ */
+export const GXT_NATIVE_DIST_DROPPED_ENTRIES = new Set([
+  '@glimmer/opcode-compiler',
+  '@glimmer/program',
+  '@glimmer/wire-format',
+  '@glimmer/encoder',
+  '@glimmer/vm',
+  '@glimmer/node',
+  '@glimmer/global-context',
+]);

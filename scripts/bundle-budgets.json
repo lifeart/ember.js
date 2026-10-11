@@ -1,5 +1,5 @@
 {
-  "_comment": "Bundle-size budgets for the dual-backend (classic / EMBER_RENDER_BACKEND=gxt) rollup build. Each entry's `path` is the DIRECTORY rollup emits for that build mode: dist/prod (production, debug macros stripped) and dist/dev (debug). The gate (scripts/bundle-size-check.mjs) concatenates every *.js under the directory (sorted) and measures raw/gzip/brotli on the concatenation — the single-bundle-equivalent size of the whole backend output. Numbers below are the current measured floor + 5% headroom; the check fails on anything more than 5% over (effective ceiling ~10.25% over the floor). Refresh with: rm -rf dist && [EMBER_RENDER_BACKEND=gxt] npx rollup --config && node scripts/bundle-size-check.mjs <backend>. NOTE: the whole-tree concat is the WORST CASE — it includes both template-compiler entries (GXT compile.ts + the legacy wire-format compiler) which a precompiled app never loads; see the per-backend app-relevant numbers below.",
+  "_comment": "Bundle-size budgets for the rollup build per render backend (classic / EMBER_RENDER_BACKEND=gxt / EMBER_RENDER_BACKEND=gxt-native). Each entry's `path` is the DIRECTORY rollup emits for that build mode: dist/prod (production, debug macros stripped) and dist/dev (debug). The gate (scripts/bundle-size-check.mjs) concatenates every *.js under the directory (sorted) and measures raw/gzip/brotli on the concatenation — the single-bundle-equivalent size of the whole backend output. Numbers below are the current measured floor + 5% headroom; the check fails on anything more than 5% over (effective ceiling ~10.25% over the floor). Refresh with: rm -rf dist && [EMBER_RENDER_BACKEND=gxt|gxt-native] npx rollup --config && node scripts/bundle-size-check.mjs <backend>. NOTE: the whole-tree concat is the WORST CASE — it includes both template-compiler entries (GXT compile.ts + the legacy wire-format compiler) which a precompiled app never loads; see the per-backend app-relevant numbers below.",
   "classic": {
     "_comment": "RE-BASELINED 2026-06-13c: recaptured at the current floor + 5% headroom (the prior dist/dev budget was stale/loose — real 2,111,383 vs old budget 2,666,892). prod still strips JSDoc/line comments via babel `shouldPrintComment` (rollup.config.mjs), keeping only @__PURE__/@__NO_SIDE_EFFECTS__/@license/@preserve. GXT integration code is build-time-gated out of the classic bundle (`if (__GXT_MODE__)` folded to false + DCE'd; gxt-bridge.ts side-effect-free). The presence guard in bundle-size-check.mjs (assertNoGxtResidue) fails if any LIVE gxt-bridge call site reappears.",
     "entries": [
@@ -31,6 +31,23 @@
         "maxRaw": 3625210,
         "maxGz": 980673,
         "maxBr": 736243
+      }
+    ]
+  },
+  "gxt-native": {
+    "_comment": "gxt NATIVE layer dist (EMBER_RENDER_BACKEND=gxt-native npx rollup --config; design docs-internal-gxt-native-layer-design.md, Inc 10): classic Ember source with __GXT_MODE__=false + the GXT_NATIVE_ALIASES boundary (gxt-backend/native/*), templates compiled by the gxt compiler under NATIVE_FLAGS, @lifeart/gxt EXTERNAL (the app resolves it), VM-only @glimmer packages dropped from the entry map. Baselined 2026-10-11 at the measured floor + 5% headroom (same method as classic/gxt). Whole-tree reference at that commit, prod / dev brotli: classic 197,648 / 390,651 · gxt compat 279,577 / 716,838 · gxt-native 158,496 / 327,591 (raw prod: 1,173,306 / 1,646,359 / 916,539). Whole-tree still includes the build-time Glimmer template compiler entries (ember-template-compiler, @ember/template-compiler/lib/*) and the native runtime compiler entry, none of which an app loads: the app-relevant number is the modern-app consumer measurement (node scripts/bundle-modern-app.mjs --from-dist --build-dists --boot: boot JS incl. gxt, brotli, strict 67,103 native vs 79,556 classic). scripts/assert-native-dist.mjs asserts the app closure of this dist is VM-free. Not in the CI dual-build matrix yet: the native build needs the unreleased gxt ember-vm-replacement compiler/runtime (local link).",
+    "entries": [
+      {
+        "path": "dist/prod",
+        "maxRaw": 962366,
+        "maxGz": 212079,
+        "maxBr": 166421
+      },
+      {
+        "path": "dist/dev",
+        "maxRaw": 1812812,
+        "maxGz": 456347,
+        "maxBr": 343971
       }
     ]
   }
