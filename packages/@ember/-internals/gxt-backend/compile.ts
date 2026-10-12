@@ -7894,6 +7894,25 @@ function _gxtClearTagHelperCache(): void {
 // cross-file readers (ember-gxt-wrappers' helper resolution + entries-of
 // patch) reach it by reference through `compilePipeline.getBuiltinHelpers`.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// The body of the `gt`/`gte`/`lt`/`lte`/`neq` keyword helpers (see their use in
+// `_emberBuiltinHelpers`). Built under a computed key so the function keeps the
+// helper's name.
+function _comparisonHelper(name: string, compare: (a: any, b: any) => boolean) {
+  return {
+    [name]: (...args: any[]) => {
+      if (args.length !== 2) {
+        const _assert = getDebugFunction('assert');
+        const msg = `\`${name}\` expects exactly two arguments, received ${args.length}`;
+        if (_assert) _assert(msg, false);
+        throw new Error(msg);
+      }
+      const a = typeof args[0] === 'function' && !(args[0] as any).prototype ? args[0]() : args[0];
+      const b = typeof args[1] === 'function' && !(args[1] as any).prototype ? args[1]() : args[1];
+      return compare(a, b);
+    },
+  }[name]!;
+}
+
 const _emberBuiltinHelpers: Record<string, any> = {
   // readonly: Returns a readonly cell marker object.
   // The component manager detects __isReadonly and provides an immutable attr
@@ -8146,61 +8165,11 @@ const _emberBuiltinHelpers: Record<string, any> = {
   // `'throws if not called with exactly two arguments'` tests pass.
   // Use getDebugFunction('assert') so expectAssertion's stub can capture
   // the throw before it propagates.
-  gt: (...args: any[]) => {
-    if (args.length !== 2) {
-      const _assert = getDebugFunction('assert');
-      const msg = `\`gt\` expects exactly two arguments, received ${args.length}`;
-      if (_assert) _assert(msg, false);
-      throw new Error(msg);
-    }
-    const a = typeof args[0] === 'function' && !(args[0] as any).prototype ? args[0]() : args[0];
-    const b = typeof args[1] === 'function' && !(args[1] as any).prototype ? args[1]() : args[1];
-    return (a as number) > (b as number);
-  },
-  gte: (...args: any[]) => {
-    if (args.length !== 2) {
-      const _assert = getDebugFunction('assert');
-      const msg = `\`gte\` expects exactly two arguments, received ${args.length}`;
-      if (_assert) _assert(msg, false);
-      throw new Error(msg);
-    }
-    const a = typeof args[0] === 'function' && !(args[0] as any).prototype ? args[0]() : args[0];
-    const b = typeof args[1] === 'function' && !(args[1] as any).prototype ? args[1]() : args[1];
-    return (a as number) >= (b as number);
-  },
-  lt: (...args: any[]) => {
-    if (args.length !== 2) {
-      const _assert = getDebugFunction('assert');
-      const msg = `\`lt\` expects exactly two arguments, received ${args.length}`;
-      if (_assert) _assert(msg, false);
-      throw new Error(msg);
-    }
-    const a = typeof args[0] === 'function' && !(args[0] as any).prototype ? args[0]() : args[0];
-    const b = typeof args[1] === 'function' && !(args[1] as any).prototype ? args[1]() : args[1];
-    return (a as number) < (b as number);
-  },
-  lte: (...args: any[]) => {
-    if (args.length !== 2) {
-      const _assert = getDebugFunction('assert');
-      const msg = `\`lte\` expects exactly two arguments, received ${args.length}`;
-      if (_assert) _assert(msg, false);
-      throw new Error(msg);
-    }
-    const a = typeof args[0] === 'function' && !(args[0] as any).prototype ? args[0]() : args[0];
-    const b = typeof args[1] === 'function' && !(args[1] as any).prototype ? args[1]() : args[1];
-    return (a as number) <= (b as number);
-  },
-  neq: (...args: any[]) => {
-    if (args.length !== 2) {
-      const _assert = getDebugFunction('assert');
-      const msg = `\`neq\` expects exactly two arguments, received ${args.length}`;
-      if (_assert) _assert(msg, false);
-      throw new Error(msg);
-    }
-    const a = typeof args[0] === 'function' && !(args[0] as any).prototype ? args[0]() : args[0];
-    const b = typeof args[1] === 'function' && !(args[1] as any).prototype ? args[1]() : args[1];
-    return a !== b;
-  },
+  gt: _comparisonHelper('gt', (a, b) => a > b),
+  gte: _comparisonHelper('gte', (a, b) => a >= b),
+  lt: _comparisonHelper('lt', (a, b) => a < b),
+  lte: _comparisonHelper('lte', (a, b) => a <= b),
+  neq: _comparisonHelper('neq', (a, b) => a !== b),
   // gxtGetOutletState: Returns the current outlet state from
   // globalThis.__currentOutletState. Used as the fallback for
   // `{{-get-dynamic-var "outletState"}}` when no enclosing
