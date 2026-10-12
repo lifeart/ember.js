@@ -131,9 +131,19 @@ function gxtConsumableTests(scenarios: Scenarios) {
           );
 
           // And the canonical reactive-core entry is unambiguously the GXT shim.
+          // The entry is a facade (gxt-backend/validator-entry.ts) that
+          // re-exports the runtime shim and the VM-compat surface from shared
+          // chunks, so follow its relative re-exports one level.
           const validatorPath = resolveFrom('ember-source/@glimmer/validator/index.js', appDir);
+          const validatorCode = readFileSync(validatorPath, 'utf8');
+          const validatorSources = [
+            validatorCode,
+            ...Array.from(validatorCode.matchAll(/from\s+'(\.\.?\/[^']+)'/g), (m) =>
+              readFileSync(join(dirname(validatorPath), m[1]!), 'utf8')
+            ),
+          ];
           assert.ok(
-            readFileSync(validatorPath, 'utf8').includes('@lifeart/gxt/glimmer-compatibility'),
+            validatorSources.some((code) => code.includes('@lifeart/gxt/glimmer-compatibility')),
             '@glimmer/validator is the GXT compatibility shim'
           );
         });
