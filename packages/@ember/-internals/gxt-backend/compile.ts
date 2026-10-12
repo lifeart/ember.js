@@ -600,33 +600,21 @@ import {
   withRenderRoot as _gxtWithRenderRoot,
   createRenderRootState as _gxtCreateRenderRootState,
 } from '@lifeart/gxt';
-// Host hooks, capability detected: dists shipping the formal
-// `registerHostHooks()` API get the hooks registered module-locally on the gxt
-// side; older dists keep the legacy `globalThis.__gxt*` slot writes. Namespace import so the missing export on a
-// pre-API dist binds as `undefined` instead of a build error (the
-// `__lifeartGxtForOptional` pattern in manager.ts).
-import * as __gxtForHostHooks from '@lifeart/gxt';
-const _gxtRegisterHostHooks: ((hooks: Record<string, unknown>) => void) | undefined = (
-  __gxtForHostHooks as any
-).registerHostHooks;
-// Named-block factory marker predicate (gxt >=0.0.76, glimmer-next #253) —
-// optional-bound so older dists resolve `undefined` instead of a build error.
-const _gxtGetNamedBlockName: ((fn: unknown) => string | null) | undefined = (
-  __gxtForHostHooks as any
-).getNamedBlockName;
-// Native each-in key-set reactivity (gxt >=0.0.79, glimmer-next #257): gxt owns
-// the per-object key-set revision cell; ember forwards the two signals it has.
-const _gxtEntangleObjectKeys: ((obj: object, keys: string[]) => void) | undefined = (
-  __gxtForHostHooks as any
-).entangleObjectKeys;
-const _gxtNotifyObjectKeyAdded: ((obj: object, key: string) => void) | undefined = (
-  __gxtForHostHooks as any
-).notifyObjectKeyAdded;
+// Host hooks: the gxt runtime calls the hooks registered here instead of
+// reading `globalThis.__gxt*` slots. `registerHostHooks`, the named-block
+// marker predicate and the each-in key-set signals are named exports of the
+// pinned gxt; a dist without them fails at import time.
+import {
+  registerHostHooks as _gxtRegisterHostHooks,
+  getNamedBlockName as _gxtGetNamedBlockName,
+  // Native each-in key-set reactivity: gxt owns the per-object key-set
+  // revision cell; ember forwards the two signals it has.
+  entangleObjectKeys as _gxtEntangleObjectKeys,
+  notifyObjectKeyAdded as _gxtNotifyObjectKeyAdded,
+} from '@lifeart/gxt';
 // Module-local seam for Ember truthiness: the canonical `emberToBool` is
 // defined inside the wrapper-installer scope below; this ref lets other
-// compile.ts scopes (the {{#if}}-helper cleanup paths) reach it without the
-// legacy `__gxtToBool` global round-trip, which hook-capable dists no longer
-// populate.
+// compile.ts scopes (the {{#if}}-helper cleanup paths) reach it.
 let _emberToBoolRef: ((predicate: unknown) => boolean) | null = null;
 // §2e symbol-table parameter injection: runtime-compiled template Function()
 // bodies reference `$_tag` / `$_maybeHelper` / … as free identifiers. They are
@@ -1885,50 +1873,42 @@ const _HTML_BOOLEAN_ATTRS = new Set([
 // (The style warning is emitted from _styleEmptyGuard in the $_tag_ember
 // wrapper — earlier in the pipeline — to avoid double warnings. The prop side
 // needs no ember normalization: the old prop patch was a passthrough.)
-if (_gxtRegisterHostHooks) {
-  _gxtRegisterHostHooks({
-    normalizeAttrValue: (name: string, value: any, element: any, isProp: boolean) => {
-      if (isProp) return value;
-      if (value === undefined || value === false) {
-        // Ember removes the attribute entirely for undefined/false bound values.
-        return undefined; // gxt remove sentinel
-      }
-      if (
-        value === true &&
-        typeof name === 'string' &&
-        _HTML_BOOLEAN_ATTRS.has(name.toLowerCase())
-      ) {
-        // HTML boolean attribute — write bare (empty string value) so the
-        // serialized innerHTML reads `<option selected>` instead of
-        // `<option selected="true">`. Non-boolean attrs with `true` still go
-        // through the normal path (becoming the literal string "true"), which
-        // preserves current behavior for attributes that legitimately carry
-        // stringified booleans (e.g. `aria-pressed="true"`).
-        return '';
-      }
-      if (
-        typeof value === 'symbol' ||
-        (value !== null &&
-          typeof value === 'object' &&
-          typeof (value as any).toString !== 'function')
-      ) {
-        // Symbol values throw on implicit string coercion inside setAttribute.
-        // Objects with no toString method (e.g. Object.create(null)) likewise
-        // throw "Cannot convert object to primitive value". Normalize these
-        // explicitly to match Glimmer's normalizeStringValue semantics:
-        //   Symbol(debug) -> "Symbol(debug)"
-        //   Object.create(null) -> ""
-        return _normalizeStringValue(value);
-      }
-      if (typeof value === 'string') {
-        // Strings are always unsafe and need URL sanitization on
-        // href/src/action/background (SafeStrings have toHTML and are objects).
-        return _sanitizeUrlAttribute(element, name, value);
-      }
-      return value;
-    },
-  });
-}
+_gxtRegisterHostHooks({
+  normalizeAttrValue: (name: string, value: any, element: any, isProp: boolean) => {
+    if (isProp) return value;
+    if (value === undefined || value === false) {
+      // Ember removes the attribute entirely for undefined/false bound values.
+      return undefined; // gxt remove sentinel
+    }
+    if (value === true && typeof name === 'string' && _HTML_BOOLEAN_ATTRS.has(name.toLowerCase())) {
+      // HTML boolean attribute — write bare (empty string value) so the
+      // serialized innerHTML reads `<option selected>` instead of
+      // `<option selected="true">`. Non-boolean attrs with `true` still go
+      // through the normal path (becoming the literal string "true"), which
+      // preserves current behavior for attributes that legitimately carry
+      // stringified booleans (e.g. `aria-pressed="true"`).
+      return '';
+    }
+    if (
+      typeof value === 'symbol' ||
+      (value !== null && typeof value === 'object' && typeof (value as any).toString !== 'function')
+    ) {
+      // Symbol values throw on implicit string coercion inside setAttribute.
+      // Objects with no toString method (e.g. Object.create(null)) likewise
+      // throw "Cannot convert object to primitive value". Normalize these
+      // explicitly to match Glimmer's normalizeStringValue semantics:
+      //   Symbol(debug) -> "Symbol(debug)"
+      //   Object.create(null) -> ""
+      return _normalizeStringValue(value);
+    }
+    if (typeof value === 'string') {
+      // Strings are always unsafe and need URL sanitization on
+      // href/src/action/background (SafeStrings have toHTML and are objects).
+      return _sanitizeUrlAttribute(element, name, value);
+    }
+    return value;
+  },
+});
 
 // Override GXT's $__fn to support mut cells.
 // GXT's $__fn unwraps function args by calling them with no args, which breaks
@@ -2753,14 +2733,10 @@ function _gxtWalkHashGetterPaths(getter: any, ctx: any): void {
   }
 
   // Register Ember truthiness for GXT's $_if (block control flow)
-  // GXT's IfCondition.setupCondition checks the toBool host hook (legacy slot
-  // `__gxtToBool`) before its own !!v
+  // GXT's IfCondition.setupCondition checks the toBool host hook before its
+  // own !!v
   _emberToBoolRef = emberToBool;
-  if (_gxtRegisterHostHooks) {
-    _gxtRegisterHostHooks({ toBool: emberToBool });
-  } else {
-    g.__gxtToBool = emberToBool;
-  }
+  _gxtRegisterHostHooks({ toBool: emberToBool });
 
   // Replace $__if on globalThis with Ember-aware version.
   // Use a persistent property trap so GXT's setupGlobalScope cannot overwrite.
@@ -2801,8 +2777,7 @@ function _gxtWalkHashGetterPaths(getter: any, ctx: any): void {
 }
 
 // GXT external schedule hook: GXT's cell.update() calls scheduleRevalidate()
-// which consults the scheduleRevalidate host hook (legacy slot
-// `__gxtExternalSchedule`) before using queueMicrotask.
+// which consults the scheduleRevalidate host hook before using queueMicrotask.
 // We set it to a no-op so GXT doesn't auto-schedule DOM sync — instead we
 // control when gxtSyncDom() is called (after runTask, or via setTimeout fallback).
 // The canonical pending-sync state is the module-local `_gxtPendingSyncFlag`
@@ -2816,11 +2791,7 @@ const _gxtExternalScheduleHook = function () {
   // writers (templates/root.ts outlet rerender + routing/router.ts transition
   // LinkTo path).
 };
-if (_gxtRegisterHostHooks) {
-  _gxtRegisterHostHooks({ scheduleRevalidate: _gxtExternalScheduleHook });
-} else {
-  (globalThis as any).__gxtExternalSchedule = _gxtExternalScheduleHook;
-}
+_gxtRegisterHostHooks({ scheduleRevalidate: _gxtExternalScheduleHook });
 
 // Reverse mapping: array/object -> Set<{ obj, key }> for dirty propagation.
 // When cellFor installs a cell and the value is an array, register a mapping.
@@ -3005,12 +2976,9 @@ function _gxtAddAfterTriggerReRender(fn: _TriggerReRenderHook): () => void {
 let _gxtCurrentTemplateThis: any = null;
 // Accessor bound into compiled template Function() bodies (the {{unbound}}
 // live/deferred detection) and registered as the `getCurrentTemplateThis`
-// host hook so hook-capable gxt dists read the module-local instead of the
-// `__gxtCurrentTemplateThis` global (whose writes are legacy-gated below).
+// host hook, through which gxt reads the module-local.
 const _gxtGetTemplateThisFn = () => _gxtCurrentTemplateThis;
-if (_gxtRegisterHostHooks) {
-  _gxtRegisterHostHooks({ getCurrentTemplateThis: _gxtGetTemplateThisFn });
-}
+_gxtRegisterHostHooks({ getCurrentTemplateThis: _gxtGetTemplateThisFn });
 
 let _gxtInTriggerReRenderFlag = false;
 function _gxtWithInTriggerReRender<T>(fn: () => T): T {
@@ -4086,9 +4054,7 @@ function _gxtTriggerReRenderSyncCore(
   // Group D (gated): if a NEW key was added to an object an each-in source has
   // iterated, bump its key-SET revision so the source re-iterates. No-op when
   // the key was already observed (value-only change) or no each-in tracks `obj`.
-  {
-    _gxtNotifyObjectKeyAdded?.(obj, keyName);
-  }
+  _gxtNotifyObjectKeyAdded(obj, keyName);
   // Collect owners that need their Ember tag dirtied for force-rerender.
   // The actual dirtying is deferred to AFTER gxtSyncDom + updateRootTagValues.
   // The OWNER COUNT decision here drives the `_gxtSetHadNestedObjectChange(true)`
@@ -5074,15 +5040,13 @@ function patchGlobalIf() {
       (ifCondition as any).__emberHelperCleanupInstalled = true;
       (ifCondition as any).__gxtTrueBranchHelpers = trueBranchHelpers;
       (ifCondition as any).__gxtFalseBranchHelpers = falseBranchHelpers;
-      if (_gxtRegisterDestructor) {
-        try {
-          _gxtRegisterDestructor(ifCondition as unknown as object, () => {
-            _gxtDestroyHelperScope(trueBranchHelpers);
-            _gxtDestroyHelperScope(falseBranchHelpers);
-          });
-        } catch {
-          /* ignore — best-effort prompt teardown */
-        }
+      try {
+        _gxtRegisterDestructor(ifCondition as unknown as object, () => {
+          _gxtDestroyHelperScope(trueBranchHelpers);
+          _gxtDestroyHelperScope(falseBranchHelpers);
+        });
+      } catch {
+        /* ignore — best-effort prompt teardown */
       }
     }
 
@@ -6080,11 +6044,7 @@ const _gxtRebindEachItemHook = function gxtRebindEachItem(oldRawItem: any, newRa
   _gxtSetPendingSync(true);
   _gxtSetPendingSyncFromPropertyChange(true);
 };
-if (_gxtRegisterHostHooks) {
-  _gxtRegisterHostHooks({ rebindEachItem: _gxtRebindEachItemHook });
-} else {
-  (globalThis as any).__gxtRebindEachItem = _gxtRebindEachItemHook;
-}
+_gxtRegisterHostHooks({ rebindEachItem: _gxtRebindEachItemHook });
 
 // Gated bridge: resolve an each-item body-PROXY back to its RAW source object.
 // `wrapEachItemForTracking` (above) is module-local, so `_eachItemProxyToRaw`
@@ -6705,41 +6665,31 @@ function patchGlobalEachSync() {
     };
     if (typeof items === 'function' && !items.prototype) {
       const origGetter = items;
-      if (gxtFormula) {
-        // Wrap in formula → MergedCell so $_eachSync gets a proper reactive tag
-        const wrappedCell = gxtFormula(() => {
-          const raw = origGetter();
-          // Register array-owner mapping on every read so that newly-set
-          // collection wrappers (post replaceList) hook their underlying
-          // arrays into KVO mutation propagation too.
-          _registerIterableUnderlyingArray(raw);
-          // Fine-grained mode (gated): subscribe the source formula DIRECTLY to
-          // the backing array's `[]` cell. `arrayContentDidChange` →
-          // `notifyPropertyChange(array,'[]')` dirties `cellFor(array,'[]')`
-          // (SyncCore primary cell.update). The array-owner fan-out covers
-          // `this.<prop>` sources (parseable name), but NOT block-param sources
-          // like the INNER each in `{{#each foo as |bar|}}` where `foo` has no
-          // owner cell — its in-place mutation (`inner.replace(0,1,['lady'])`,
-          // nested-each test) then never re-fired the inner list. Reading the
-          // backing array's `[]` cell here makes the formula re-run on any
-          // in-place mutation regardless of source shape.
-          {
-            _gxtSubscribeBackingArray(raw);
-          }
-          // `as |item index|`: gxt's index path calls `.indexOf(item)` on this
-          // cell value, so materialize non-Array iterables here (Arrays no-op).
-          return hasIndex ? normalizeEachCollection(raw) : raw;
-        });
-        return origEachSync(wrappedCell, fn, key, ctx, inverseFn, hasIndex);
-      }
-      // Fallback: pass function directly (legacy behavior)
-      const wrappedGetter: any = function () {
+      // Wrap in formula → MergedCell so $_eachSync gets a proper reactive tag
+      const wrappedCell = gxtFormula(() => {
         const raw = origGetter();
+        // Register array-owner mapping on every read so that newly-set
+        // collection wrappers (post replaceList) hook their underlying
+        // arrays into KVO mutation propagation too.
+        _registerIterableUnderlyingArray(raw);
+        // Fine-grained mode (gated): subscribe the source formula DIRECTLY to
+        // the backing array's `[]` cell. `arrayContentDidChange` →
+        // `notifyPropertyChange(array,'[]')` dirties `cellFor(array,'[]')`
+        // (SyncCore primary cell.update). The array-owner fan-out covers
+        // `this.<prop>` sources (parseable name), but NOT block-param sources
+        // like the INNER each in `{{#each foo as |bar|}}` where `foo` has no
+        // owner cell — its in-place mutation (`inner.replace(0,1,['lady'])`,
+        // nested-each test) then never re-fired the inner list. Reading the
+        // backing array's `[]` cell here makes the formula re-run on any
+        // in-place mutation regardless of source shape.
+        {
+          _gxtSubscribeBackingArray(raw);
+        }
+        // `as |item index|`: gxt's index path calls `.indexOf(item)` on this
+        // cell value, so materialize non-Array iterables here (Arrays no-op).
         return hasIndex ? normalizeEachCollection(raw) : raw;
-      };
-      if (origGetter.__gxtWatchTarget) wrappedGetter.__gxtWatchTarget = origGetter.__gxtWatchTarget;
-      if (origGetter.__gxtWatchKey) wrappedGetter.__gxtWatchKey = origGetter.__gxtWatchKey;
-      return origEachSync(wrappedGetter, fn, key, ctx, inverseFn, hasIndex);
+      });
+      return origEachSync(wrappedCell, fn, key, ctx, inverseFn, hasIndex);
     } else if (items && typeof items === 'object' && 'value' in items) {
       const origCell = items;
       const wrappedCell = Object.create(origCell);
@@ -8132,7 +8082,7 @@ const _emberBuiltinHelpers: Record<string, any> = {
     // Subscribe the each-in source to the object's key-SET revision (gxt
     // >=0.0.79 #257) so `set(obj,'NewKey')` re-iterates. (This inline copy is
     // the fallback — ember-gxt-wrappers.ts overrides `gxtEntriesOf` at runtime.)
-    _gxtEntangleObjectKeys?.(resolved, keys);
+    _gxtEntangleObjectKeys(resolved, keys);
     return keys.map((key) => ({ k: key, v: (resolved as any)[key] }));
   },
   // get: Dynamic property lookup — supports dot-path keys like 'foo.bar'
@@ -8650,20 +8600,14 @@ try {
   }
 }
 
-// The functional-helper brand for GXT's helper resolution. Hook mode keeps the
-// brand Set module-local (the gxt runtime calls the registered pair); legacy
-// mode keeps the historical `EmberFunctionalHelpers` global Set (which the
-// pre-API gxt dist consults directly).
-if (_gxtRegisterHostHooks) {
+// The functional-helper brand for GXT's helper resolution: a module-local Set
+// behind the registered hook pair (the gxt runtime calls the pair).
+{
   const _functionalHelpers = new Set<unknown>();
   _gxtRegisterHostHooks({
     isFunctionalHelper: (fn: unknown) => _functionalHelpers.has(fn),
     markFunctionalHelper: (fn: unknown) => void _functionalHelpers.add(fn),
   });
-} else {
-  if (typeof (globalThis as any).EmberFunctionalHelpers === 'undefined') {
-    (globalThis as any).EmberFunctionalHelpers = new Set();
-  }
 }
 
 // Stack to track the current slots context during rendering
@@ -10641,7 +10585,6 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
                 typeof child === 'function' &&
                 !child.__isCurriedComponent &&
                 !(child instanceof Node) &&
-                _gxtGetNamedBlockName !== undefined &&
                 _gxtGetNamedBlockName(child) !== null
               ) {
                 try {
@@ -13551,8 +13494,8 @@ export function precompileTemplate(
           // down. On that deferred pass `() => this.x` reads from a lost
           // context and yields the WRONG value — but `{{unbound}}` must FREEZE
           // the value captured during the live render. We detect a deferred
-          // pass via the absence of `globalThis.__gxtCurrentTemplateThis` (only
-          // set during the live synchronous render) and REPLAY the cached
+          // pass via a null `__gxtGetTemplateThis()` (the template `this` is
+          // only set during the live synchronous render) and REPLAY the cached
           // live-pass slots in order instead of advancing the live counter +
           // re-reading. `__ubReplay` resets on each live→deferred transition so
           // the replay walks `id:0, id:1, ...` exactly as the live pass produced
@@ -15043,24 +14986,19 @@ export function precompileTemplate(
           _gxtSetCurrentlyRendering(true);
           const _prevTemplateThis = _gxtCurrentTemplateThis;
           _gxtCurrentTemplateThis = renderContext;
-          // Expose the current template `this` to glimmer-next so its
+          // glimmer-next reads the current template `this` (through the
+          // `getCurrentTemplateThis` host hook registered above) so its
           // const-binding recovery (resolveRenderable / attribute binding) can
           // materialize a leaf cell for an initially-undefined `this.<path>`.
-          // Hook-capable dists read it via the `getCurrentTemplateThis` host
-          // hook (registered over the module-local above); only legacy dists
-          // still consult the `__gxtCurrentTemplateThis` global.
-          if (!_gxtRegisterHostHooks) {
-            (globalThis as any).__gxtCurrentTemplateThis = renderContext;
-          }
           try {
             result = compilationResult.templateFn.call(renderContext);
           } catch (e) {
             // THROW path: the itemToNode-loop `finally` below (which owns the
             // `_gxtCurrentTemplateThis` / isRendering restore on the success
-            // path) will never run, so restore here. Leaving the GLOBAL
-            // `__gxtCurrentTemplateThis` set would poison every subsequent
+            // path) will never run, so restore here. Leaving
+            // `_gxtCurrentTemplateThis` set would poison every subsequent
             // `{{unbound}}` evaluation in the realm: the live/deferred
-            // detection (`!globalThis.__gxtCurrentTemplateThis`, see the
+            // detection (`__gxtGetTemplateThis()`, see the
             // unboundEvalInjection) misclassifies deferred passes as live and
             // unbound values silently un-freeze. Invisible in the per-module
             // Playwright runner (fresh realm per module) but a hard cumulative
@@ -15068,9 +15006,6 @@ export function precompileTemplate(
             // throw broke every later "does not update when unbound" test.
             gxtSetIsRendering(false);
             _gxtCurrentTemplateThis = _prevTemplateThis;
-            if (!_gxtRegisterHostHooks) {
-              (globalThis as any).__gxtCurrentTemplateThis = _prevTemplateThis;
-            }
             throw e;
           } finally {
             // NOTE: `_gxtCurrentTemplateThis` is intentionally NOT reset here
@@ -15128,9 +15063,6 @@ export function precompileTemplate(
           } finally {
             gxtSetIsRendering(false);
             _gxtCurrentTemplateThis = _prevTemplateThis;
-            if (!_gxtRegisterHostHooks) {
-              (globalThis as any).__gxtCurrentTemplateThis = _prevTemplateThis;
-            }
           }
 
           // Restore previous global values
@@ -15254,62 +15186,50 @@ import {
 // holds (e.g. `nullObject` for `this.nullObject.message`) as a value-owner —
 // making `set(nullObject,'message',...)` reach the cell via the SyncCore reverse
 // lookup. The compilePipeline bridge method is not visible to glimmer-next core,
-// so a globalThis hook is the seam.
-if (_gxtRegisterHostHooks) {
-  _gxtRegisterHostHooks({
-    registerObjectValueOwner,
-    // each/if delegation Step 3 (E-c). This hook is new in gxt 0.0.69 and has no
-    // legacy `globalThis.__gxt*` fallback — on a pre-API dist the row delegation
-    // simply doesn't engage and the existing reattach paths handle teardown
-    // unchanged. `registerHostHooks` merges per-key, so this does not clobber the
-    // `registerObjectValueOwner` above (or any later registration).
-    //
-    // Flag each `{{#each}}` rowCtx (a plain object) as an association anchor and
-    // register its pre-destroy destructor. Skip `{{#if}}`/`{{#unless}}` branch
-    // ctxs (IfCondition class instances) by the prototype discriminator — the
-    // if-branch helper delegation (I-a) is a separate follow-on.
-    onRowContextCreated: (ctx: object) => {
-      const isEachRow = Object.getPrototypeOf(ctx) === Object.prototype;
-      if (!isEachRow) return; // IfCondition branch scope — branch-swap teardown rides onConditionBranchSwap below
-      _gxtEachRowCtxSet.add(ctx);
-      _gxtRowCtxInstances.set(ctx, new Set());
-      _gxtRegisterDestructor(ctx, () => _gxtFireRowPreDestroy(ctx));
-    },
-    // each/if delegation Step 3 (I-a): {{#if}}/{{#unless}} branch class-helper
-    // teardown. New in gxt >=0.0.79 (glimmer-next #259). gxt fires this once per
-    // branch RENDER with a fresh `branchCtx` and `meta = { if, value }`, and runs
-    // that ctx's destructors at the START of the OUTGOING branch's teardown
-    // (pre-DOM-removal) — so a destructor registered here reaps the branch's
-    // class-based helpers at the Ember-correct moment, replacing the retired
-    // `ifCondition.syncState` prevBool flip-tracking wrapper. The per-branch
-    // helper-capture Sets are stashed on the IfCondition by `patchGlobalIf`; read
-    // them LAZILY in the destructor (the initial-render hook can fire during
-    // `origIf(...)` construction, before the Sets are attached). Snapshot the
-    // class-helper cache at hook-fire time (before the branch body renders) so
-    // the destructor can also reap helpers created in deferred formulas outside
-    // `wrapBranch`'s dynamic scope — mirroring the old `destroyNewCacheEntriesSince`
-    // fallback, which the old wrapper applied only when tearing down the TRUE
-    // branch. No legacy `globalThis.__gxt*` fallback: on a pre-#259 dist the hook
-    // never fires and the whole-`{{#if}}`-destroy fallback (registered in
-    // `patchGlobalIf`) reaps both branches on teardown as before.
-    onConditionBranchSwap: (branchCtx: object, meta: { if?: object; value?: boolean }) => {
-      const ifc = meta?.if as any;
-      const isTrue = !!meta?.value;
-      const snap = isTrue ? _gxtSnapshotClassHelperCacheKeys() : null;
-      _gxtRegisterDestructor(branchCtx, () => {
-        const scope = ifc && (isTrue ? ifc.__gxtTrueBranchHelpers : ifc.__gxtFalseBranchHelpers);
-        if (scope) _gxtDestroyHelperScope(scope);
-        if (isTrue) _gxtDestroyNewClassHelperCacheEntriesSince(snap);
-      });
-    },
-  });
-} else {
-  try {
-    (globalThis as any).__gxtRegisterObjectValueOwner = registerObjectValueOwner;
-  } catch {
-    /* ignore */
-  }
-}
+// so a host hook is the seam.
+_gxtRegisterHostHooks({
+  registerObjectValueOwner,
+  // each/if delegation Step 3 (E-c). `registerHostHooks` merges per-key, so
+  // this does not clobber the `registerObjectValueOwner` above (or any later
+  // registration).
+  //
+  // Flag each `{{#each}}` rowCtx (a plain object) as an association anchor and
+  // register its pre-destroy destructor. Skip `{{#if}}`/`{{#unless}}` branch
+  // ctxs (IfCondition class instances) by the prototype discriminator — the
+  // if-branch helper delegation (I-a) is a separate follow-on.
+  onRowContextCreated: (ctx: object) => {
+    const isEachRow = Object.getPrototypeOf(ctx) === Object.prototype;
+    if (!isEachRow) return; // IfCondition branch scope — branch-swap teardown rides onConditionBranchSwap below
+    _gxtEachRowCtxSet.add(ctx);
+    _gxtRowCtxInstances.set(ctx, new Set());
+    _gxtRegisterDestructor(ctx, () => _gxtFireRowPreDestroy(ctx));
+  },
+  // each/if delegation Step 3 (I-a): {{#if}}/{{#unless}} branch class-helper
+  // teardown. New in gxt >=0.0.79 (glimmer-next #259). gxt fires this once per
+  // branch RENDER with a fresh `branchCtx` and `meta = { if, value }`, and runs
+  // that ctx's destructors at the START of the OUTGOING branch's teardown
+  // (pre-DOM-removal) — so a destructor registered here reaps the branch's
+  // class-based helpers at the Ember-correct moment, replacing the retired
+  // `ifCondition.syncState` prevBool flip-tracking wrapper. The per-branch
+  // helper-capture Sets are stashed on the IfCondition by `patchGlobalIf`; read
+  // them LAZILY in the destructor (the initial-render hook can fire during
+  // `origIf(...)` construction, before the Sets are attached). Snapshot the
+  // class-helper cache at hook-fire time (before the branch body renders) so
+  // the destructor can also reap helpers created in deferred formulas outside
+  // `wrapBranch`'s dynamic scope — mirroring the old `destroyNewCacheEntriesSince`
+  // fallback, which the old wrapper applied only when tearing down the TRUE
+  // branch.
+  onConditionBranchSwap: (branchCtx: object, meta: { if?: object; value?: boolean }) => {
+    const ifc = meta?.if as any;
+    const isTrue = !!meta?.value;
+    const snap = isTrue ? _gxtSnapshotClassHelperCacheKeys() : null;
+    _gxtRegisterDestructor(branchCtx, () => {
+      const scope = ifc && (isTrue ? ifc.__gxtTrueBranchHelpers : ifc.__gxtFalseBranchHelpers);
+      if (scope) _gxtDestroyHelperScope(scope);
+      if (isTrue) _gxtDestroyNewClassHelperCacheEntriesSince(snap);
+    });
+  },
+});
 installCompilePipelinePart({
   compileTemplate: compileTemplate,
   resetIntervalBudget: _gxtResetIntervalBudget,

@@ -1810,55 +1810,52 @@ function createEmberTag(original: Function) {
       const parentFw = tagProps[3];
       const parentFwAttrs = parentFw[1];
       if (Array.isArray(parentFwAttrs) && parentFwAttrs.length > 0) {
-        const effectFn = (gxtModule as any).effect;
-        if (effectFn) {
-          const capturedAttrs: Array<[string, any]> = [];
-          const remainingFwAttrs: any[] = [];
-          for (const entry of parentFwAttrs) {
-            const [key, val] = entry;
-            // Only intercept reactive (function-valued) data-/aria-/title/etc.
-            // attrs. Skip @-prefixed entries (named args) and static values.
-            if (key && !String(key).startsWith('@') && typeof val === 'function') {
-              capturedAttrs.push([key, val]);
-            } else {
-              remainingFwAttrs.push(entry);
+        const capturedAttrs: Array<[string, any]> = [];
+        const remainingFwAttrs: any[] = [];
+        for (const entry of parentFwAttrs) {
+          const [key, val] = entry;
+          // Only intercept reactive (function-valued) data-/aria-/title/etc.
+          // attrs. Skip @-prefixed entries (named args) and static values.
+          if (key && !String(key).startsWith('@') && typeof val === 'function') {
+            capturedAttrs.push([key, val]);
+          } else {
+            remainingFwAttrs.push(entry);
+          }
+        }
+        if (capturedAttrs.length > 0) {
+          // Start from whatever events list the earlier modifier/text
+          // reorder left us with — otherwise we'd drop that reorder.
+          const sourceEvents = Array.isArray(patchedTagProps[2])
+            ? patchedTagProps[2]
+            : Array.isArray(tagProps[2])
+              ? tagProps[2]
+              : [];
+          const localEvents = [...sourceEvents];
+          const onCreated = (el: Element) => {
+            for (const [aKey, aGetter] of capturedAttrs) {
+              gxtModule.effect(() => {
+                const v = aGetter();
+                if (v === undefined || v === null || v === false) {
+                  el.removeAttribute(aKey);
+                } else if (v === true) {
+                  el.setAttribute(aKey, '');
+                } else if (typeof v === 'symbol') {
+                  el.setAttribute(aKey, (v as symbol).toString());
+                } else if (typeof v === 'object' && typeof (v as any).toString !== 'function') {
+                  el.setAttribute(aKey, '');
+                } else {
+                  el.setAttribute(aKey, String(v));
+                }
+              });
             }
-          }
-          if (capturedAttrs.length > 0) {
-            // Start from whatever events list the earlier modifier/text
-            // reorder left us with — otherwise we'd drop that reorder.
-            const sourceEvents = Array.isArray(patchedTagProps[2])
-              ? patchedTagProps[2]
-              : Array.isArray(tagProps[2])
-                ? tagProps[2]
-                : [];
-            const localEvents = [...sourceEvents];
-            const onCreated = (el: Element) => {
-              for (const [aKey, aGetter] of capturedAttrs) {
-                effectFn(() => {
-                  const v = aGetter();
-                  if (v === undefined || v === null || v === false) {
-                    el.removeAttribute(aKey);
-                  } else if (v === true) {
-                    el.setAttribute(aKey, '');
-                  } else if (typeof v === 'symbol') {
-                    el.setAttribute(aKey, (v as symbol).toString());
-                  } else if (typeof v === 'object' && typeof (v as any).toString !== 'function') {
-                    el.setAttribute(aKey, '');
-                  } else {
-                    el.setAttribute(aKey, String(v));
-                  }
-                });
-              }
-            };
-            localEvents.push(['0', onCreated]);
-            patchedTagProps = [
-              tagProps[0],
-              tagProps[1],
-              localEvents,
-              [parentFw[0], remainingFwAttrs, parentFw[2]],
-            ];
-          }
+          };
+          localEvents.push(['0', onCreated]);
+          patchedTagProps = [
+            tagProps[0],
+            tagProps[1],
+            localEvents,
+            [parentFw[0], remainingFwAttrs, parentFw[2]],
+          ];
         }
       }
     }
@@ -1974,11 +1971,8 @@ function createEmberDc(original: Function) {
     // the resolved component's `...attributes` the way a static invocation does.
     let __fw: any = null;
     const __tuple = gxtArgs && typeof gxtArgs === 'object' ? (gxtArgs as any)[$PROPS] : null;
-    if (
-      typeof (gxtModule as any).hasDynamicSplatProps === 'function' &&
-      (gxtModule as any).hasDynamicSplatProps(__tuple)
-    ) {
-      const __derived = (gxtModule as any).deriveManagerFwFromPropsTuple(__tuple);
+    if (gxtModule.hasDynamicSplatProps(__tuple)) {
+      const __derived = gxtModule.deriveManagerFwFromPropsTuple(__tuple);
       __fw = __derived.fw;
       for (const [__name, __getter] of __derived.argEntries) {
         Object.defineProperty(mergedArgs, __name, {
@@ -2142,7 +2136,7 @@ function createEmberDc(original: Function) {
         _nullDestroyed = true;
         _offNullListener?.();
       };
-      if (ctx && typeof gxtModule.registerDestructor === 'function') {
+      if (ctx) {
         try {
           gxtModule.registerDestructor(ctx, _nullCleanup);
         } catch {
@@ -2295,7 +2289,7 @@ function createEmberDc(original: Function) {
         _dcDestroyed = true;
         _offDcListener?.();
       };
-      if (ctx && typeof gxtModule.registerDestructor === 'function') {
+      if (ctx) {
         try {
           gxtModule.registerDestructor(ctx, _cleanupDcListener);
         } catch {
@@ -2572,7 +2566,7 @@ function createEmberDc(original: Function) {
           anchor.parentNode.removeChild(anchor);
         }
       };
-      if (ctx && typeof gxtModule.registerDestructor === 'function') {
+      if (ctx) {
         try {
           gxtModule.registerDestructor(ctx, _cleanupDcListener);
         } catch {
@@ -2978,7 +2972,7 @@ function _patchGxtEntriesOf(): void {
     // output). Regular `{{#each}}` over arrays does not route through
     // gxtEntriesOf, so it is unaffected. gxt owns the key-set revision cell:
     // this records the observed keys and subscribes the active source formula.
-    (gxtModule as any).entangleObjectKeys?.(resolved, keys);
+    gxtModule.entangleObjectKeys(resolved, keys);
     return keys.map((key) => ({ k: key, v: (resolved as any)[key] }));
   };
   Object.defineProperty(BUILTIN, '__gxtEntriesOfPatched', {

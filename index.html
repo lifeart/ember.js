@@ -85,11 +85,6 @@
         QUnit.testStart(function () {
           // Each test gets a fresh operation budget.
           globalThis.__gxtOpCount = 0;
-          // A mid-render throw in a prior test can leave the live-render signal
-          // set (see the templateFn.call catch in compile.ts); a stale truthy
-          // value makes every later {{unbound}} deferred pass look live and
-          // silently un-freezes unbound values. Always start a test clear.
-          globalThis.__gxtCurrentTemplateThis = undefined;
         });
 
         QUnit.testDone(function () {

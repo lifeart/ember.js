@@ -81,30 +81,17 @@ import {
   setTracker as _gxtSetTracker,
   getTracker as _gxtGetTracker,
   cached as _gxtCached,
+  setOpcodeErrorReporter as _gxtSetOpcodeErrorReporter,
+  setComponentRenderErrorReporter as _gxtSetComponentRenderErrorReporter,
+  // Synchronously flush a cell's opcodes (used by the fine-grained
+  // custom-managed arg effect to update a CP-backed text node from inside the
+  // sync drain).
+  flushCellOpcodes as _gxtFlushCellOpcodes,
+  // Host hooks and host managers: the gxt runtime calls what is registered
+  // here instead of reading `globalThis.__gxt*` slots.
+  registerHostHooks as _gxtRegisterHostHooks,
+  registerHostManagers as _gxtRegisterHostManagers,
 } from '@lifeart/gxt';
-// setOpcodeErrorReporter / setComponentRenderErrorReporter are read off the
-// namespace so the host no-ops when the installed runtime lacks them.
-import * as __lifeartGxtForOptional from '@lifeart/gxt';
-const _gxtSetOpcodeErrorReporter:
-  | ((fn: ((err: unknown, ctx?: unknown) => void) | null) => void)
-  | undefined = (__lifeartGxtForOptional as any).setOpcodeErrorReporter;
-const _gxtSetComponentRenderErrorReporter:
-  | ((fn: ((err: unknown, ctx?: unknown) => void) | null) => void)
-  | undefined = (__lifeartGxtForOptional as any).setComponentRenderErrorReporter;
-// Synchronously flush a cell's opcodes (used by the fine-grained
-// custom-managed arg effect to update a CP-backed text node from inside the
-// sync drain). Read off the namespace so the host no-ops when it is missing.
-const _gxtFlushCellOpcodes: ((cell: unknown) => void) | undefined = (__lifeartGxtForOptional as any)
-  .flushCellOpcodes;
-// Host hooks: runtimes shipping `registerHostHooks()` get hooks registered
-// module-locally on the gxt side; otherwise the `globalThis.__gxt*` slots are
-// written. compile.ts holds its own detection const for its writer sites.
-const _gxtRegisterHostHooks: ((hooks: Record<string, unknown>) => void) | undefined = (
-  __lifeartGxtForOptional as any
-).registerHostHooks;
-const _gxtRegisterHostManagers: ((managers: Record<string, unknown>) => void) | undefined = (
-  __lifeartGxtForOptional as any
-).registerHostManagers;
 // The members of `@lifeart/gxt` that glimmer-package call sites read through
 // the typed bridge as `gxtLib` (see the setGxtRenderer install at file EOF).
 // Named imports, not the namespace object: a namespace that escapes into a
@@ -424,11 +411,9 @@ setCreateCurriedComponent(createCurriedComponent);
 // handleOpcodeError splices a failing opcode out of its op array; wiring the
 // reporter lets the host receive the error too, so it can surface through
 // assert.throws / runTask / etc. alongside the lifecycle-layer captures.
-if (typeof _gxtSetOpcodeErrorReporter === 'function') {
-  _gxtSetOpcodeErrorReporter((err) => {
-    captureRenderError(err);
-  });
-}
+_gxtSetOpcodeErrorReporter((err) => {
+  captureRenderError(err);
+});
 
 // Wire GXT's component-construction reporter. Fires for errors thrown inside
 // GXT's `_component()` — i.e., when the throw path actually reaches GXT's
@@ -441,14 +426,12 @@ if (typeof _gxtSetOpcodeErrorReporter === 'function') {
 //   1. Calls captureRenderError so the error queues for flushRenderErrors
 //      and the renderer's render-error count (which drives its DOM-clear logic).
 //   2. Re-throws to bypass GXT's silent dev/prod recovery substitution.
-if (typeof _gxtSetComponentRenderErrorReporter === 'function') {
-  _gxtSetComponentRenderErrorReporter((err) => {
-    if (err instanceof Error) {
-      captureRenderError(err);
-    }
-    throw err;
-  });
-}
+_gxtSetComponentRenderErrorReporter((err) => {
+  if (err instanceof Error) {
+    captureRenderError(err);
+  }
+  throw err;
+});
 
 // Classic Helper recompute() → GXT reactivity bridge.
 //
@@ -624,18 +607,10 @@ if (__GXT_CLASSIC_COMPONENTS__) {
 // Global Registries
 // =============================================================================
 
-if (!_gxtRegisterHostHooks) {
-  // Legacy dists consult the `EmberFunctionalHelpers` global Set directly; on
-  // hook-capable dists compile.ts registers the brand pair over a module-local
-  // Set instead and this global is never read.
-  globalThis.EmberFunctionalHelpers = globalThis.EmberFunctionalHelpers || new Set();
-}
 // The manager/template registries are module-local WeakMaps; cross-package
 // readers (glimmer renderer/root, compile.ts) reach them through the typed
 // `registries` bridge namespace. A second copy of this module would fork
 // every module-local, so it fails loudly at load instead.
-// (`EmberFunctionalHelpers` above stays a global because the GXT runtime dist
-// itself consults it when `registerHostHooks` is unavailable.)
 {
   const sentinel = Symbol.for('ember.gxt-backend.instance');
   const g = globalThis as Record<symbol, unknown>;
@@ -7479,8 +7454,8 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
 // =============================================================================
 
 // List-marker registry. glimmer-next's SyncList/AsyncList constructor calls
-// `__gxtRegisterListMarker(topMarker)` / `(bottomMarker)` and per-item markers,
-// and `__gxtUnregisterListMarker` on teardown. We collect those markers here so
+// the `registerListMarker` host hook for its top/bottom and per-item markers,
+// and `unregisterListMarker` on teardown. We collect those markers here so
 // `removeGxtArtifacts` can SKIP stripping them.
 //
 // WHY: production glimmer-next builds emit empty-text comments (`api.comment()`)
@@ -7507,20 +7482,10 @@ const _gxtListMarkers = new WeakSet<Comment>();
       /* ignore */
     }
   };
-  if (_gxtRegisterHostHooks) {
-    _gxtRegisterHostHooks({
-      registerListMarker: _registerMarker,
-      unregisterListMarker: _unregisterMarker,
-    });
-  } else {
-    const _g = globalThis as any;
-    if (typeof _g.__gxtRegisterListMarker !== 'function') {
-      _g.__gxtRegisterListMarker = _registerMarker;
-    }
-    if (typeof _g.__gxtUnregisterListMarker !== 'function') {
-      _g.__gxtUnregisterListMarker = _unregisterMarker;
-    }
-  }
+  _gxtRegisterHostHooks({
+    registerListMarker: _registerMarker,
+    unregisterListMarker: _unregisterMarker,
+  });
 }
 
 /**
@@ -10839,7 +10804,7 @@ function _installCustomManagedArgEffect(o: {
               // opcodes synchronously here so the bound text node updates in the
               // same tick.
               try {
-                if (_gxtFlushCellOpcodes) _gxtFlushCellOpcodes(dc);
+                _gxtFlushCellOpcodes(dc);
               } catch {
                 /* ignore */
               }
@@ -10967,7 +10932,7 @@ function _installCustomManagedArgEffect(o: {
         if (revCell && typeof revCell.update === 'function') {
           try {
             revCell.update((revCell.value || 0) + 1);
-            if (_gxtFlushCellOpcodes) _gxtFlushCellOpcodes(revCell);
+            _gxtFlushCellOpcodes(revCell);
           } catch {
             /* per-cell best-effort */
           }
@@ -14160,15 +14125,11 @@ function _createUpdatableTagForModifier(): any {
 // Install our handlers onto GXT's $_MANAGERS table via `registerHostManagers()`,
 // which lives in the same module instance the runtime call sites close over,
 // so the registration reaches the canonical table directly.
-{
-  if (_gxtRegisterHostManagers) {
-    _gxtRegisterHostManagers({
-      component: $_MANAGERS.component,
-      helper: $_MANAGERS.helper,
-      modifier: $_MANAGERS.modifier,
-    });
-  }
-}
+_gxtRegisterHostManagers({
+  component: $_MANAGERS.component,
+  helper: $_MANAGERS.helper,
+  modifier: $_MANAGERS.modifier,
+});
 
 export { $_MANAGERS };
 
