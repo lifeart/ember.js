@@ -62,11 +62,10 @@ export default class OutletView {
 
   // In GXT mode `ref` is the raw OutletState (used directly for cellFor-based
   // reactivity). In classic mode `ref` is a Glimmer Reference returned by
-  // createComputeRef, with outletStateTag as the invalidation handle. Both
-  // shapes pose as Reference<OutletState | undefined> via the cast below so
-  // that `state.ref` carries the same type to consumers.
+  // createComputeRef, with a tag as the invalidation handle. Both shapes pose
+  // as Reference<OutletState | undefined> via the cast below so that
+  // `state.ref` carries the same type to consumers.
   private ref: Reference<OutletState | undefined>;
-  private outletStateTag: ReturnType<typeof createTag> | null = null;
   public state: OutletDefinitionState;
 
   constructor(
@@ -100,7 +99,7 @@ export default class OutletView {
       // setOutletState has no invalidation hook and the renderer hangs on
       // subsequent revalidation cycles (observed as the bench's clearItems4
       // hang in benchmark-app, which never sets __GXT_MODE__).
-      const tag = (this.outletStateTag = createTag());
+      const tag = createTag();
       this.ref = createComputeRef(
         () => {
           consumeTag(tag);

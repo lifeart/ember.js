@@ -27,9 +27,6 @@ import {
   setAmbientOwner,
 } from '@ember/-internals/gxt-backend/gxt-bridge';
 
-// Expose setViewElement on globalThis for GXT manager to use (avoids circular dep)
-(globalThis as any).__emberInternalsViews = { setViewElement, getViewElement };
-
 import {
   pushParentView,
   popParentView,
@@ -186,7 +183,7 @@ import { createConstRef, UNDEFINED_REFERENCE, valueForRef } from '@glimmer/refer
 import type { CurriedValue } from '@glimmer/runtime/lib/curried-value';
 import { clientBuilder } from '@glimmer/runtime/lib/vm/element-builder';
 import { createCapturedArgs, EMPTY_POSITIONAL } from '@glimmer/runtime/lib/vm/arguments';
-import { curry as glimmerCurry } from '@glimmer/runtime/lib/curried-value';
+import { curry } from '@glimmer/runtime/lib/curried-value';
 import { inTransaction, runtimeOptions } from '@glimmer/runtime/lib/environment';
 import { renderComponent as glimmerRenderComponent, renderMain } from '@glimmer/runtime/lib/render';
 import { dict } from '@glimmer/util/lib/collections';
@@ -234,9 +231,6 @@ export interface View {
   isDestroyed: boolean;
   [BOUNDS]: Bounds | null;
 }
-
-// Use glimmerCurry imported from @glimmer/runtime
-const curry = glimmerCurry;
 
 // VM-free stand-in for @glimmer/runtime's `EMPTY_POSITIONAL` (a frozen empty
 // reference array), used on the GXT outlet-append path so the renderer chunk
@@ -471,7 +465,6 @@ class ClassicRootState {
   }
   public isGxt: boolean = false; // Track if this root uses GXT templates
   public isOutletView: boolean = false; // Track if this root is an OutletView
-  public gxtNeedsRerender: boolean = false; // Flag for GXT re-render scheduling
   // True while the most recent render() attempt threw before completing.
   // Such a root never wired its reactivity (gxtComponentTag stays unset), so
   // the tag-based dirty selection in _gxtForceEmberRerender cannot see it;
@@ -1711,17 +1704,6 @@ class RendererState {
       return true;
     }
 
-    // Check if any GXT roots have dirty component tags
-    for (const root of this.#roots) {
-      const classicRoot = root as ClassicRootState;
-      if (classicRoot.isGxt && classicRoot.gxtComponentTag) {
-        const currentTagValue = valueForTag(classicRoot.gxtComponentTag);
-        if (currentTagValue !== classicRoot.gxtLastTagValue) {
-          return false;
-        }
-      }
-    }
-
     return (
       this.#destroyed || this.#roots.length === 0 || validateTag(CURRENT_TAG, this.#lastRevision)
     );
@@ -1997,16 +1979,6 @@ function _renderComponentGxt(
     domCleanupDone = true;
     if (entry.firstNode || entry.lastNode) {
       clearRegion();
-    } else if (
-      targetElement instanceof Element &&
-      (!targetState || targetState.entries.length <= 1)
-    ) {
-      // Fallback for non-Element targets (Cursor) or empty entries on a
-      // last-entry teardown: ensure the target is fully cleaned. We avoid
-      // clobbering sibling entries by gating on entries.length.
-      if (!(targetElement instanceof Element)) {
-        // unreachable here, kept for type safety
-      }
     }
     if (targetState) {
       const idx = targetState.entries.indexOf(entry);
@@ -2096,10 +2068,7 @@ function _renderComponentGxt(
 
     // Walk prototype chain if not found directly (for class-based components)
     if (!template && component) {
-      let proto =
-        typeof component === 'function'
-          ? Object.getPrototypeOf(component)
-          : Object.getPrototypeOf(component);
+      let proto = Object.getPrototypeOf(component);
       while (proto && proto !== Function.prototype && proto !== Object.prototype) {
         template = globalTemplates?.get(proto);
         if (template) break;
@@ -2371,13 +2340,6 @@ function _renderComponentGxt(
     let _rendering = false;
     const _doRender = () => {
       if (destroyed || _rendering) return;
-      if (
-        !(targetElement instanceof Element) ||
-        (!targetElement.isConnected && classicReactorUnsub)
-      ) {
-        // Target detached — leave DOM alone until reattached. We still keep
-        // the reactor so the first reattachment triggers a fresh render.
-      }
       _rendering = true;
       const prevOwnerLocal = getAmbientOwner();
       setAmbientOwner(owner);

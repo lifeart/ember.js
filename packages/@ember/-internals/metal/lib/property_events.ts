@@ -340,13 +340,12 @@ function _gxtRecomputeDependents(
     // recomputed here. Aliases have no user-getter side effects (they just read
     // the target), so eager re-evaluation is safe and the
     // `revisionFor === undefined` guard is bypassed for them.
-    const _fineGrained = true;
     meta.forEachDescriptors((propKey: string, descriptor: any) => {
       if (!descriptor) return;
       let isAlias = false;
       let matches = false;
       const _altKey: string | undefined =
-        _fineGrained && typeof descriptor.altKey === 'string' ? descriptor.altKey : undefined;
+        typeof descriptor.altKey === 'string' ? descriptor.altKey : undefined;
       if (_altKey !== undefined) {
         // Alias: dependency is `altKey`. Match changedKey against it including
         // path-prefix relationships in either direction (set(obj,'a.b.c')

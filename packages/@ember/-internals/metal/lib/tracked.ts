@@ -37,12 +37,6 @@ import { COMPUTED_SETTERS, isElementDescriptor, setClassicDecorator } from './de
 // in gxt-bridge.ts.
 import { notifyPropertyChange } from './property_events';
 
-const {
-  consumeTag: _nativeConsumeTag,
-  tagFor: _nativeTagFor,
-  trackedData: _nativeTrackedData,
-} = validator;
-
 // Use compat trackedData for backtracking detection support.
 // The native GXT trackedData doesn't support backtracking detection.
 const trackedData = compatTrackedData;

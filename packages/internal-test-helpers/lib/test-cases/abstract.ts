@@ -120,9 +120,7 @@ export abstract class AbstractStrictTestCase {
         // Also destroy any custom modifiers that are still active (their
         // formula destructors might not have fired during cleanup).
         const modMgr = getGxtRenderer()?.compilePipeline.getManagers?.()?.modifier;
-        if (modMgr?._destroyedInstances) {
-          // Already tracked — skip
-        } else if (modMgr?._updatedInstances) {
+        if (modMgr?._updatedInstances) {
           // Walk recently-active instances and call destroyModifier on their managers
           for (const inst of modMgr._updatedInstances) {
             try {
@@ -308,27 +306,11 @@ export default abstract class AbstractTestCase {
   }
 
   assertInnerHTML(html: string) {
-    this.cleanGxtArtifacts();
     equalInnerHTML(this.assert, getElement(), html);
   }
 
   assertHTML(html: string) {
-    this.cleanGxtArtifacts();
     equalTokens(getElement(), html, `#qunit-fixture content should be: \`${html}\``);
-  }
-
-  /** Remove GXT rendering artifacts from #qunit-fixture before assertions */
-  private cleanGxtArtifacts() {
-    // Intentionally a no-op: GXT comment markers must NOT be destructively
-    // stripped from the LIVE fixture. `equalTokens`/`equalInnerHTML` already
-    // strip these artifacts from the compared HTML STRING
-    // (`stripGxtArtifacts`/`normalizeInnerHTML`), so removing them from the
-    // live DOM is redundant for the assertion — and it ORPHANS the syncList
-    // top/bottom/item markers (empty comments) that fine-grained rendering
-    // mutates on subsequent updates. Stripping them caused a later source
-    // ref-swap to find `bottomMarker.parentNode === null` and render into a
-    // detached fragment, so element-child each(-in) rendered empty (object
-    // proxies / POJO ref-swap / Map object-keys).
   }
 
   assertElement(
