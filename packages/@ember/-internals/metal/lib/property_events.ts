@@ -91,6 +91,48 @@ function notifyPropertyChange(
   _meta?: Meta | null,
   value?: unknown
 ): void {
+  if (__GXT_MODE__) {
+    _gxtNotifyPropertyChange(obj, keyName, _meta, value, arguments.length === 4);
+    return;
+  }
+
+  let meta = _meta === undefined ? peekMeta(obj) : _meta;
+
+  if (meta !== null && (meta.isInitializing() || meta.isPrototypeMeta(obj))) {
+    return;
+  }
+
+  markObjectAsDirty(obj, keyName);
+
+  if (deferred <= 0) {
+    flushSyncObservers();
+  }
+
+  if (PROPERTY_DID_CHANGE in obj) {
+    // It's redundant to do this here, but we don't want to check above so we can avoid an extra function call in prod.
+    assert('property did change hook is invalid', hasPropertyDidChange(obj));
+
+    // we need to check the arguments length here; there's a check in Component's `PROPERTY_DID_CHANGE`
+    // that checks its arguments length, so we have to explicitly not call this with `value`
+    // if it is not passed to `notifyPropertyChange`
+    if (arguments.length === 4) {
+      obj[PROPERTY_DID_CHANGE](keyName, value);
+    } else {
+      obj[PROPERTY_DID_CHANGE](keyName);
+    }
+  }
+}
+
+// GXT: `notifyPropertyChange` with the GXT re-render trigger and the CP
+// invalidation marker. `hasValueArg` is whether the public call passed `value`
+// (its `arguments.length === 4`).
+function _gxtNotifyPropertyChange(
+  obj: object,
+  keyName: string,
+  _meta: Meta | null | undefined,
+  value: unknown,
+  hasValueArg: boolean
+): void {
   let meta = _meta === undefined ? peekMeta(obj) : _meta;
 
   // GXT integration: mark (obj, keyName) as invalidating for the whole
@@ -99,20 +141,15 @@ function notifyPropertyChange(
   // CP-backed properties re-run their formulas synchronously on either path,
   // which would invoke the user's getter (classic Ember never does that); the
   // marker makes `CP.get` return the cached value for this key instead while
-  // unrelated CPs read normally. Classic mode never reads the marker, so skip
-  // the bookkeeping there (clearing a large list issues thousands of
-  // notifies).
-  let wasPresent = true;
-  if (__GXT_MODE__) {
-    wasPresent = _gxtCPMarkInvalidating(obj, keyName);
-  }
+  // unrelated CPs read normally.
+  const wasPresent = _gxtCPMarkInvalidating(obj, keyName);
 
   try {
     // GXT integration: Trigger synchronous re-render to keep GXT components updated.
     // Skip during initialization — reading properties at this stage can trigger
     // computed-property getters whose cache revision hasn't been set yet (e.g. PromiseProxy).
     // Still fire for prototype meta objects so GXT stays in sync.
-    if (__GXT_MODE__ && (meta === null || !meta.isInitializing())) {
+    if (meta === null || !meta.isInitializing()) {
       const _cp = getGxtRenderer()?.compilePipeline;
       const _triggerReRender = _cp?.triggerReRender;
       if (typeof _triggerReRender === 'function') {
@@ -123,11 +160,10 @@ function notifyPropertyChange(
         // `class Foo { @computed ... }` cases.) If the helper is unavailable,
         // the trigger still marks the scope for its own body.
         //
-        // Forward `value` when the caller passed it (see the `arguments.length`
-        // check around `PROPERTY_DID_CHANGE` below) so the trigger can update
-        // the cell without re-reading `obj[keyName]`. `arguments.length` is
-        // captured because the arrow below has no `arguments` of its own.
-        const _hasValueArg = arguments.length === 4;
+        // Forward `value` when the caller passed it (see `PROPERTY_DID_CHANGE`
+        // below) so the trigger can update the cell without re-reading
+        // `obj[keyName]`.
+        const _hasValueArg = hasValueArg;
         const _withIn = _cp?.withInTriggerReRender;
         if (_withIn) {
           _withIn(() => {
@@ -156,7 +192,7 @@ function notifyPropertyChange(
     // `PROPERTY_DID_CHANGE` hook invoked.
     let isProtoNotify = false;
     if (meta !== null && (meta.isInitializing() || meta.isPrototypeMeta(obj))) {
-      if (!meta.isInitializing() && __GXT_MODE__) {
+      if (!meta.isInitializing()) {
         // Fall through — allow markObjectAsDirty for GXT prototype-meta objects,
         // but remember this is a prototype notification so `PROPERTY_DID_CHANGE`
         // below is skipped (matching classic behavior).
@@ -166,9 +202,8 @@ function notifyPropertyChange(
       }
     }
 
-    // GXT infinite loop detection (test-harness loop-guard only — runs on the
-    // notifyPropertyChange update hot path; gate on DEBUG so it tree-shakes out
-    // of the production dist).
+    // GXT test-harness loop guard (runs on the notifyPropertyChange update hot
+    // path; gate on DEBUG so it tree-shakes out of the production dist).
     if (DEBUG && typeof (globalThis as any).__gxtOpCheck === 'function') {
       (globalThis as any).__gxtOpCheck();
     }
@@ -186,10 +221,9 @@ function notifyPropertyChange(
       // It's redundant to do this here, but we don't want to check above so we can avoid an extra function call in prod.
       assert('property did change hook is invalid', hasPropertyDidChange(obj));
 
-      // we need to check the arguments length here; there's a check in Component's `PROPERTY_DID_CHANGE`
-      // that checks its arguments length, so we have to explicitly not call this with `value`
-      // if it is not passed to `notifyPropertyChange`
-      if (arguments.length === 4) {
+      // Component's `PROPERTY_DID_CHANGE` checks its arguments length, so do
+      // not pass `value` if it was not passed to `notifyPropertyChange`.
+      if (hasValueArg) {
         obj[PROPERTY_DID_CHANGE](keyName, value);
       } else {
         obj[PROPERTY_DID_CHANGE](keyName);

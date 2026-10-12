@@ -1,6 +1,7 @@
 import type { Meta } from '@ember/-internals/meta/lib/meta';
 import { meta as metaFor, peekMeta } from '@ember/-internals/meta/lib/meta';
 import { assert } from '@ember/debug';
+import { DEBUG } from '@glimmer/env';
 
 export type DecoratorPropertyDescriptor = (PropertyDescriptor & { initializer?: any }) | undefined;
 
@@ -75,14 +76,20 @@ export abstract class ComputedDescriptor {
   abstract set(obj: object, keyName: string, value: any | null | undefined): any | null | undefined;
 }
 
-export let COMPUTED_GETTERS: WeakSet<() => unknown> = new WeakSet();
+let COMPUTED_GETTERS: WeakSet<() => unknown>;
+
+if (DEBUG) {
+  COMPUTED_GETTERS = new WeakSet();
+}
 
 function DESCRIPTOR_GETTER_FUNCTION(name: string, descriptor: ComputedDescriptor): () => unknown {
   function getter(this: object): unknown {
     return descriptor.get(this, name);
   }
 
-  COMPUTED_GETTERS.add(getter);
+  if (DEBUG) {
+    COMPUTED_GETTERS.add(getter);
+  }
 
   return getter;
 }

@@ -672,6 +672,16 @@ export interface GxtRenderPassCapabilities {
   endRenderPass(): void;
 
   /**
+   * Fire the queued `didInsertElement` / `didRender` hooks once a root's DOM
+   * is in the document. Hook errors are queued for `flushRenderErrors`. Unlike
+   * `viewUtils.flushAfterInsertQueue`, runs no `afterFlushAfterInsertQueue`.
+   */
+  flushAfterInsertQueue(): void;
+
+  /** Re-throw the first queued render error, if any, and clear the queue. */
+  flushRenderErrors(): void;
+
+  /**
    * Mark `instance` as rendered in this pass, so a later write to it is
    * reported as backtracking. Non-component objects it references are marked too.
    */

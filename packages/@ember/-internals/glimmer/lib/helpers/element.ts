@@ -55,17 +55,6 @@ class ElementComponentManager {
 const ELEMENT_COMPONENT_MANAGER = new ElementComponentManager();
 
 class ElementComponentDefinition {
-  // GXT-bridge marker: the gxt-backend's `$_c_ember` wrapper checks for this
-  // brand to render `(element "tag")` results directly as `$_tag(tagName, ...)`
-  // instead of routing through `handleManagedComponent` (which would try to
-  // build a full Glimmer-style wrapped instance and crash because GXT does not
-  // run the Glimmer VM). Without this brand the keyword/helper tests for
-  // `{{element ...}}` in attribute position (e.g.
-  // `<Inner @tag={{element "p"}} />`) fail when user scope rebinds `element`
-  // back to the official `elementHelper` (the function then returns this
-  // definition, which `$_c` cannot interpret).
-  static __isElementHelperDefinition = true;
-
   constructor(public tagName: string) {}
 
   toString(): string {
@@ -78,9 +67,12 @@ setInternalComponentManager(
   ElementComponentDefinition.prototype
 );
 
-// Also brand the prototype so the GXT-bridge check (which receives the
-// instance via `$_c_ember`) is a single property lookup on `proto`.
-(ElementComponentDefinition.prototype as any).__isElementHelperDefinition = true;
+// GXT: brand the prototype so gxt-backend's `$_c_ember` renders `(element "tag")`
+// results directly as `$_tag(tagName, ...)` instead of routing them through
+// `handleManagedComponent` (GXT runs no Glimmer VM to build them).
+if (__GXT_MODE__) {
+  (ElementComponentDefinition.prototype as any).__isElementHelperDefinition = true;
+}
 
 // Cache component definitions per tag name to avoid creating duplicate definitions
 const ELEMENT_DEFINITIONS = new Map<string, ElementComponentDefinition>();

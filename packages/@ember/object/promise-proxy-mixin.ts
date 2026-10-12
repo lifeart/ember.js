@@ -22,7 +22,7 @@ function tap<T>(proxy: PromiseProxyMixin<T>, promise: RSVP.Promise<T>) {
     isRejected: false,
   });
 
-  // GXT fast-path: when the supplied promise is already-settled (RSVP sets
+  // GXT fast-path (GXT builds only): when the supplied promise is already-settled (RSVP sets
   // `_state` synchronously for `Promise.resolve(x)` and friends), mirror the
   // fulfillment onto the proxy immediately. In classic Ember, the backburner
   // `actions` queue would have run the `.then` callback before the render
@@ -34,6 +34,7 @@ function tap<T>(proxy: PromiseProxyMixin<T>, promise: RSVP.Promise<T>) {
     _result?: unknown;
   };
   if (
+    __GXT_MODE__ &&
     settledPromise &&
     typeof settledPromise === 'object' &&
     !(proxy as unknown as CoreObject).isDestroyed &&

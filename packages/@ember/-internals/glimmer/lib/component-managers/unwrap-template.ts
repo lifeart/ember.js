@@ -111,6 +111,21 @@ function adaptTemplate(template: any): TemplateOk {
  * @deprecated
  */
 export function unwrapTemplate(template: Template): TemplateOk {
+  if (__GXT_MODE__) {
+    return unwrapGxtTemplate(template);
+  }
+
+  if (template.result === 'error') {
+    throw new Error(
+      `Compile Error: ${template.problem} @ ${template.span.start}..${template.span.end}`
+    );
+  }
+
+  return template;
+}
+
+// GXT: gxt-compiled templates have no `asLayout`; adapt them to `TemplateOk`.
+function unwrapGxtTemplate(template: Template): TemplateOk {
   if (!template) {
     throw new Error('Template is undefined or null');
   }

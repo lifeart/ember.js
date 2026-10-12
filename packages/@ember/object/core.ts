@@ -305,29 +305,24 @@ class CoreObject {
           //   - the property name is a dotted path (only Ember plumbing emits
           //     these via `notifyPropertyChange(obj, 'foo.bar')`).
           // User code (`proxy.foo`) hits none of these, so the assertion still
-          // fires for the original use case.
-          let _renderingNow = false;
-          let _syncingNow = false;
-          let _inTriggerNow = false;
-          // These flags only exist in GXT mode (each reads as `false` before
-          // the bridge is installed). Gating on `__GXT_MODE__` drops the
-          // bridge read from the classic bundle.
+          // fires for the original use case. Classic builds keep the assertion
+          // unconditionally.
           if (__GXT_MODE__) {
             const _pipeline = getGxtRenderer()?.compilePipeline;
             const _isRen = _pipeline?.isRendering;
             const _isSyn = _pipeline?.isSyncing;
             const _isInTrig = _pipeline?.isInTriggerReRender;
-            _renderingNow = typeof _isRen === 'function' ? _isRen() : false;
-            _syncingNow = typeof _isSyn === 'function' ? _isSyn() : false;
-            _inTriggerNow = typeof _isInTrig === 'function' ? _isInTrig() : false;
-          }
-          const _isInternalPath =
-            _renderingNow ||
-            _syncingNow ||
-            _inTriggerNow ||
-            (typeof property === 'string' && property.indexOf('.') !== -1);
-          if (_isInternalPath) {
-            return value;
+            const _renderingNow = typeof _isRen === 'function' ? _isRen() : false;
+            const _syncingNow = typeof _isSyn === 'function' ? _isSyn() : false;
+            const _inTriggerNow = typeof _isInTrig === 'function' ? _isInTrig() : false;
+            const _isInternalPath =
+              _renderingNow ||
+              _syncingNow ||
+              _inTriggerNow ||
+              (typeof property === 'string' && property.indexOf('.') !== -1);
+            if (_isInternalPath) {
+              return value;
+            }
           }
 
           if (typeof value !== 'function') {
@@ -340,7 +335,11 @@ class CoreObject {
     }
 
     const destroyable = self;
-    registerDestructor(self, () => ensureDestroyCalled(self), true);
+    registerDestructor(
+      self,
+      __GXT_MODE__ ? () => ensureDestroyCalled(self) : ensureDestroyCalled,
+      true
+    );
     registerDestructor(self, () => destroyable.willDestroy());
 
     // disable chains

@@ -14320,6 +14320,8 @@ setGxtRenderer({
     beginRenderPass,
     endRenderPass,
     markTemplateRendered,
+    flushAfterInsertQueue,
+    flushRenderErrors,
   },
   // Populated entirely via `installRootComponentPart` from
   // glimmer/lib/renderer.ts. Seeded empty here so `Object.assign` has a target

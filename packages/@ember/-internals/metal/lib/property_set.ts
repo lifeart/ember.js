@@ -39,7 +39,7 @@ interface ExtendedObject {
   @return {Object} the passed value.
   @public
 */
-export function set<T>(obj: object, keyName: string | number, value: T, tolerant?: boolean): T {
+export function set<T>(obj: object, keyName: string, value: T, tolerant?: boolean): T {
   assert(
     `Set must be called with three or four arguments; an object, a property key, a value and tolerant true/false`,
     arguments.length === 3 || arguments.length === 4
@@ -53,8 +53,8 @@ export function set<T>(obj: object, keyName: string | number, value: T, tolerant
     typeof keyName === 'string' || (typeof keyName === 'number' && !isNaN(keyName))
   );
 
-  // Normalize numeric keys to strings for consistent downstream handling
-  if (typeof keyName === 'number') {
+  // GXT: normalize numeric keys to strings for consistent downstream handling.
+  if (__GXT_MODE__ && typeof keyName === 'number') {
     keyName = String(keyName);
   }
 
@@ -114,10 +114,13 @@ export function _setProp(obj: object, keyName: string, value: any) {
     }
 
     if (currentValue !== value) {
-      // Forward `value` so the GXT trigger can update the property's cell
-      // synchronously without re-reading `obj[keyName]`. `null` meta makes
-      // `notifyPropertyChange` look it up as usual.
-      notifyPropertyChange(obj, keyName, null, value);
+      if (__GXT_MODE__) {
+        // Forward `value` so the GXT trigger can update the property's cell
+        // synchronously without re-reading `obj[keyName]`.
+        notifyPropertyChange(obj, keyName, null, value);
+      } else {
+        notifyPropertyChange(obj, keyName);
+      }
     }
   }
 
@@ -139,7 +142,7 @@ function _setPath(root: object, path: string, value: any, tolerant?: boolean): a
     // to set(model, 'lookupComponent', val) which only notifies on the leaf object.
     // But GXT templates track `this.model` (cell on the component), so we need to
     // dirty the root property cell too.
-    if (newRoot !== root) {
+    if (__GXT_MODE__ && newRoot !== root) {
       notifyPropertyChange(root, path);
     }
     return result;

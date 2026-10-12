@@ -437,42 +437,42 @@ export class ComputedProperty extends ComputedDescriptor {
 
       let { _getter, _dependentKeys } = this;
 
-      // GXT integration: the GXT re-render trigger may read a CP through a
-      // cell installed on the class prototype (it walks proto chains and
-      // calls cellFor(proto, keyName)). Evaluating a user getter with `this === prototype` is
-      // meaningless — `this.someInstanceField++` mutates the prototype and
-      // produces bogus side effects that leak into every instance. Classic
-      // Ember never reads CPs off prototypes, so mirror that behavior here:
-      // for prototype meta, return `undefined` without invoking `_getter`.
-      //
-      // NOTE: `meta.isPrototypeMeta(obj)` can also flip to `true` as a side
-      // effect of `peekMeta` walking a prototype chain — when one plain
-      // object is used as another's prototype via `Object.create`, peekMeta
-      // mutates the parent's `meta.proto` to the parent object itself.
-      // In that case `obj` is still a legitimate instance being read
-      // directly (e.g. `defineProperty(objA, 'foo', computed(...))`, then
-      // `Object.create(objA)`, then `get(objA, 'foo')`). Distinguish by
-      // checking whether `meta.proto` still matches what the Meta
-      // constructor originally stored (`obj.constructor.prototype`). A
-      // genuine class prototype keeps that invariant; a mutated meta
-      // loses it, and we fall through to run the user getter as usual.
-      if (meta.isPrototypeMeta(obj)) {
-        let originalProto: unknown = undefined;
-        try {
-          const ctor = (obj as any).constructor;
-          if (ctor !== undefined) originalProto = ctor.prototype;
-        } catch {
-          /* leave originalProto undefined */
-        }
-        if (meta.proto === originalProto) {
-          consumeTag(propertyTag);
-          return undefined;
-        }
-      }
-      // GXT integration: the three short-circuits below can only fire in GXT
-      // mode (classic mode never installs cells/formulas), so skip the
-      // lookups otherwise; they run on every CP get cache miss.
+      // GXT integration: the short-circuits below can only fire in GXT mode
+      // (classic mode never installs cells/formulas), so skip the lookups
+      // otherwise; they run on every CP get cache miss.
       if (__GXT_MODE__) {
+        // GXT integration: the GXT re-render trigger may read a CP through a
+        // cell installed on the class prototype (it walks proto chains and
+        // calls cellFor(proto, keyName)). Evaluating a user getter with `this === prototype` is
+        // meaningless — `this.someInstanceField++` mutates the prototype and
+        // produces bogus side effects that leak into every instance. Classic
+        // Ember never reads CPs off prototypes, so mirror that behavior here:
+        // for prototype meta, return `undefined` without invoking `_getter`.
+        //
+        // NOTE: `meta.isPrototypeMeta(obj)` can also flip to `true` as a side
+        // effect of `peekMeta` walking a prototype chain — when one plain
+        // object is used as another's prototype via `Object.create`, peekMeta
+        // mutates the parent's `meta.proto` to the parent object itself.
+        // In that case `obj` is still a legitimate instance being read
+        // directly (e.g. `defineProperty(objA, 'foo', computed(...))`, then
+        // `Object.create(objA)`, then `get(objA, 'foo')`). Distinguish by
+        // checking whether `meta.proto` still matches what the Meta
+        // constructor originally stored (`obj.constructor.prototype`). A
+        // genuine class prototype keeps that invariant; a mutated meta
+        // loses it, and we fall through to run the user getter as usual.
+        if (meta.isPrototypeMeta(obj)) {
+          let originalProto: unknown = undefined;
+          try {
+            const ctor = (obj as any).constructor;
+            if (ctor !== undefined) originalProto = ctor.prototype;
+          } catch {
+            /* leave originalProto undefined */
+          }
+          if (meta.proto === originalProto) {
+            consumeTag(propertyTag);
+            return undefined;
+          }
+        }
         // While a CP.set is mid-flight, any re-entrant read (e.g. from a
         // GXT formula re-evaluation triggered by dirtyTagFor) must return
         // the setter's freshly-stored value rather than re-running the user
@@ -654,12 +654,15 @@ export class ComputedProperty extends ComputedDescriptor {
     // see an extra invocation on every set, corrupting user assertions.
     // Classic mode never re-enters via this path — gate to skip per-call
     // WeakMap+Set churn on the notify cascade.
-    const _inGxt = __GXT_MODE__;
-    if (_inGxt) _beginCPSet(obj, keyName);
-    try {
+    if (__GXT_MODE__) {
+      _beginCPSet(obj, keyName);
+      try {
+        notifyPropertyChange(obj, keyName, meta, value);
+      } finally {
+        _endCPSet(obj, keyName);
+      }
+    } else {
       notifyPropertyChange(obj, keyName, meta, value);
-    } finally {
-      if (_inGxt) _endCPSet(obj, keyName);
     }
 
     return ret;
