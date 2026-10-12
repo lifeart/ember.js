@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-12T05:04:26.526Z",
+    "capturedAt": "2026-10-12T07:09:27.270Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "4f20ad0fab",
-    "totalTests": 6973,
+    "emberCommit": "6ba5ba3c8f",
+    "totalTests": 6977,
     "totalModules": 664,
     "quarantinedTests": 0,
-    "totalAssertions": 34782,
-    "totalAssertionsPassing": 34773
+    "totalAssertions": 34789,
+    "totalAssertionsPassing": 34780
   },
   "modules": {
     "<LinkTo /> component (rendering tests)": {
@@ -4020,10 +4020,10 @@
       "failingTests": []
     },
     "gxt-native | components": {
-      "total": 16,
-      "passing": 16,
-      "assertionsTotal": 40,
-      "assertionsPassing": 40,
+      "total": 19,
+      "passing": 19,
+      "assertionsTotal": 44,
+      "assertionsPassing": 44,
       "failingTests": []
     },
     "gxt-native | content": {
@@ -4104,10 +4104,10 @@
       "failingTests": []
     },
     "gxt-native | runtime template()": {
-      "total": 5,
-      "passing": 5,
-      "assertionsTotal": 6,
-      "assertionsPassing": 6,
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
       "failingTests": []
     },
     "gxt-native | {{on}}": {
