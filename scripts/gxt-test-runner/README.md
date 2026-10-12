@@ -93,6 +93,24 @@ node scripts/gxt-test-runner/categorize.mjs test-results/gxt-summary.json \
   --module-pattern "^rehydration:"
 ```
 
+### Native-legacy gauge (the compat population on the native build)
+
+`native-legacy.html` loads every test file the compat page loads (no
+`native-modules.json` allow-list, no `native-skip.json`) on the native vite
+server. A file that cannot load on native becomes a failing module
+`native-legacy.html: load <path>` carrying the error. It measures what a
+"native layer + legacy add-on" compat build still has to turn green; it has no
+baseline of its own.
+
+```bash
+EMBER_RENDER_BACKEND=gxt-native npx vite --port 5181 --strictPort --force
+# test file -> module map, load errors, test counts (one page load)
+node scripts/gxt-test-runner/native-legacy-inventory.mjs --out <dir>/inventory.json
+# the run; --baseline lists the compat-green tests that are red here
+node scripts/gxt-test-runner/runner.mjs --url http://localhost:5181/native-legacy.html \
+  --full --min-modules 1 --out-dir <dir> --baseline test-results/gxt-baseline.json
+```
+
 ## Updating the baseline
 
 1. Run `runner.mjs --full` on a clean working tree.
