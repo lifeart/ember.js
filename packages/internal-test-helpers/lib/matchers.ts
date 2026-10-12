@@ -153,9 +153,9 @@ export function equalsElement(
       message: 'Element must be an HTML Element, not an SVG Element',
     });
   } else {
-    // Exclude GXT internal data-node-id attribute from count comparison
-    // GXT adds this in SSR/test mode for node tracking; it's not user-visible
-    const gxtInternalAttrCount = element.hasAttribute('data-node-id') ? 1 : 0;
+    // GXT: exclude its `data-node-id` node-tracking attribute (SSR/test mode)
+    // from the count; it is not user-visible.
+    const gxtInternalAttrCount = __GXT_MODE__ && element.hasAttribute('data-node-id') ? 1 : 0;
     const actualAttrCount = element.attributes.length - gxtInternalAttrCount;
     assert.pushResult({
       result: actualAttrCount === expectedCount || !attributes,
@@ -165,7 +165,7 @@ export function equalsElement(
     });
 
     if (content !== null) {
-      // Strip GXT internal comments (if-entry placeholders, each-entry markers)
+      // GXT: strip its internal comments (if-entry placeholders, each-entry markers)
       // from innerHTML before comparison. These are used by GXT's control flow
       // for DOM manipulation and should not affect content assertions.
       //
@@ -179,10 +179,12 @@ export function equalsElement(
       // strip them too. No `assertComponentElement`/`assertElement` content
       // assertion expects a literal comment node, so this only ever removes
       // framework markers.
-      const actualContent = element.innerHTML.replace(
-        /<!--[^>]*?(?:if-entry|each-entry|ember-if)[^>]*?-->|<!---->/g,
-        ''
-      );
+      const actualContent = __GXT_MODE__
+        ? element.innerHTML.replace(
+            /<!--[^>]*?(?:if-entry|each-entry|ember-if)[^>]*?-->|<!---->/g,
+            ''
+          )
+        : element.innerHTML;
       assert.pushResult({
         result: actualContent === content,
         actual: actualContent,

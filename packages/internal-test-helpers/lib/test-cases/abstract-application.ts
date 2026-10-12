@@ -58,22 +58,30 @@ export default abstract class AbstractApplicationTestCase extends AbstractTestCa
   }
 
   afterEach() {
-    try {
-      // Clean up GXT active components before application destroy.
-      getGxtRenderer()?.compilePipeline.cleanupActiveComponents?.();
+    if (__GXT_MODE__) {
+      try {
+        // Clean up GXT active components before application destroy.
+        getGxtRenderer()?.compilePipeline.cleanupActiveComponents?.();
 
-      runDestroy(this.applicationInstance);
-      runDestroy(this.application);
+        runDestroy(this.applicationInstance);
+        runDestroy(this.application);
 
-      super.teardown();
-    } finally {
-      // Reset GXT sync state so it doesn't leak into the next test.
-      const _cpAA = getGxtRenderer()?.compilePipeline;
-      _cpAA?.setPendingSync?.(false);
-      _cpAA?.setPendingSyncFromPropertyChange?.(false);
-      // Clear stale render errors so they don't leak into the next test.
-      _cpAA?.clearRenderErrors?.();
+        super.teardown();
+      } finally {
+        // Reset GXT sync state so it doesn't leak into the next test.
+        const _cpAA = getGxtRenderer()?.compilePipeline;
+        _cpAA?.setPendingSync?.(false);
+        _cpAA?.setPendingSyncFromPropertyChange?.(false);
+        // Clear stale render errors so they don't leak into the next test.
+        _cpAA?.clearRenderErrors?.();
+      }
+      return;
     }
+
+    runDestroy(this.applicationInstance);
+    runDestroy(this.application);
+
+    super.teardown();
   }
 
   get applicationOptions() {

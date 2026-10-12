@@ -24,7 +24,7 @@ import { JitSerializationDelegate } from '../suites/custom-dom-helper';
  * module registration throws before any QUnit tests are declared, and
  * the runner reports "No tests matched the module".
  *
- * When `globalThis.__GXT_MODE__` is truthy and the caller is trying to
+ * In GXT builds (`__GXT_MODE__`), when the caller is trying to
  * register a delegate whose `style === 'rehydration'`, we transparently
  * swap in `GxtRehydrationDelegate`. This keeps the tests declarative
  * and lets the module at least RUN under GXT — individual test bodies
@@ -41,8 +41,6 @@ import { JitSerializationDelegate } from '../suites/custom-dom-helper';
 function overrideRehydrationDelegate<D extends RenderDelegate>(
   Delegate: RenderDelegateConstructor<D>
 ): RenderDelegateConstructor<D> {
-  const gxtMode = __GXT_MODE__;
-  if (!gxtMode) return Delegate;
   if (Delegate.style !== 'rehydration') return Delegate;
   if ((Delegate as unknown) === GxtRehydrationDelegate) return Delegate;
   if ((Delegate as unknown) === GxtPartialRehydrationDelegate) return Delegate;
@@ -111,17 +109,9 @@ export function suite<D extends RenderDelegate>(
   Delegate: RenderDelegateConstructor<D>,
   options: { componentModule?: boolean; env?: EnvironmentDelegate } = {}
 ): void {
-  // Defer override to instantiation time — `__GXT_MODE__` may not be set
-  // yet at module-registration time (the GXT compile.ts module that
-  // toggles the flag can load after test files register their suites).
-  const RegisteredDelegate = Delegate;
-  const ResolvedDelegate = new Proxy(RegisteredDelegate, {
-    construct(target, args) {
-      const Override = overrideRehydrationDelegate(target as RenderDelegateConstructor<D>);
-      return Reflect.construct(Override as unknown as new (...a: unknown[]) => object, args);
-    },
-  }) as unknown as RenderDelegateConstructor<D>;
-  Delegate = ResolvedDelegate;
+  if (__GXT_MODE__) {
+    Delegate = overrideRehydrationDelegate(Delegate);
+  }
   let suiteName = klass.suiteName;
 
   if (options.componentModule) {

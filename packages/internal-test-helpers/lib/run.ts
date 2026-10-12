@@ -5,6 +5,16 @@ import { getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
 import { Promise } from 'rsvp';
 
 export function runAppend(view: any): void {
+  if (__GXT_MODE__) {
+    gxtRunAppend(view);
+    return;
+  }
+  run(view, 'appendTo', document.getElementById('qunit-fixture'));
+}
+
+// GXT: `runAppend` that suppresses the end-of-loop DOM sync during the initial
+// render and syncs explicitly afterwards.
+function gxtRunAppend(view: any): void {
   // Suppress the run loop's end-of-loop GXT DOM sync during initial render.
   // Property changes from component init mark a sync as pending, and syncing
   // mid-render would re-evaluate each-formulas with stale values (e.g. `[]`
@@ -51,36 +61,54 @@ export function runAppend(view: any): void {
 
 export function runDestroy(toDestroy: any): void {
   if (toDestroy) {
-    try {
-      run(destroy, toDestroy);
-    } catch (e: any) {
-      // Swallow "already destroyed" errors during test cleanup
-      if (e && e.message && e.message.includes('after the owner has been destroyed')) {
-        return;
-      }
-      throw e;
+    if (__GXT_MODE__) {
+      gxtRunDestroy(toDestroy);
+      return;
     }
-    // In GXT mode, also destroy tracked class-based helper instances so their
-    // `willDestroy` / `destroy` lifecycle runs.
-    const helperInstances = getGxtRenderer()?.compilePipeline.getHelperInstances?.();
-    if (Array.isArray(helperInstances) && helperInstances.length > 0) {
-      for (const inst of helperInstances) {
-        try {
-          if (typeof inst.destroy === 'function' && !inst.isDestroyed && !inst.isDestroying) {
-            inst.destroy();
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-      helperInstances.length = 0;
-    }
-    // Also clear the helper instance cache
-    getGxtRenderer()?.compilePipeline.clearHelperCache?.();
+    run(destroy, toDestroy);
   }
 }
 
+// GXT: `runDestroy` that tolerates "already destroyed" teardown errors and also
+// destroys the class-based helper instances GXT tracks.
+function gxtRunDestroy(toDestroy: any): void {
+  try {
+    run(destroy, toDestroy);
+  } catch (e: any) {
+    // Swallow "already destroyed" errors during test cleanup
+    if (e && e.message && e.message.includes('after the owner has been destroyed')) {
+      return;
+    }
+    throw e;
+  }
+  // In GXT mode, also destroy tracked class-based helper instances so their
+  // `willDestroy` / `destroy` lifecycle runs.
+  const helperInstances = getGxtRenderer()?.compilePipeline.getHelperInstances?.();
+  if (Array.isArray(helperInstances) && helperInstances.length > 0) {
+    for (const inst of helperInstances) {
+      try {
+        if (typeof inst.destroy === 'function' && !inst.isDestroyed && !inst.isDestroying) {
+          inst.destroy();
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    helperInstances.length = 0;
+  }
+  // Also clear the helper instance cache
+  getGxtRenderer()?.compilePipeline.clearHelperCache?.();
+}
+
 export function runTask<F extends () => any>(callback: F): ReturnType<F> {
+  if (__GXT_MODE__) {
+    return gxtRunTask(callback);
+  }
+  return run(callback);
+}
+
+// GXT: `runTask` that syncs the GXT DOM explicitly after the task.
+function gxtRunTask<F extends () => any>(callback: F): ReturnType<F> {
   // Mark that we're inside runTask so the run loop's end hook doesn't
   // double-sync the GXT DOM (runTask has its own explicit sync below).
   getGxtRenderer()?.compilePipeline.setRunTaskActive?.(true);

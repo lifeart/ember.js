@@ -22,6 +22,79 @@ import AbstractTestCase from './abstract';
 
 const TextNode = window.Text;
 
+// GXT test-harness steps, `undefined` in classic builds. A module-level value
+// instead of bridge calls inside the test-case methods: rollup keeps every
+// binding a test-case method refers to (the classes escape into `moduleFor`),
+// even from a folded `__GXT_MODE__` branch, which would keep gxt-backend in the
+// classic test build.
+const gxtHarness = __GXT_MODE__
+  ? {
+      cleanupActiveComponents() {
+        // Clean up GXT active components first.
+        getGxtRenderer()?.compilePipeline.cleanupActiveComponents?.();
+      },
+      teardownModifiers() {
+        // Destroy active custom modifier instances during teardown so
+        // willDestroyElement fires (matching Glimmer VM behavior).
+        // Only destroy each modifier class once (the LAST instance) to match
+        // Glimmer VM's behavior of one destroy per active modifier.
+        try {
+          const modMgr = getGxtRenderer()?.compilePipeline.getManagers?.()?.modifier;
+          if (modMgr?._updatedInstances?.size > 0) {
+            // Only destroy the LAST instance (most recently installed modifier).
+            // Multiple instances may exist due to GXT formula double-fires creating
+            // parallel cache entries. Only the last one is "active".
+            const instances = [...modMgr._updatedInstances];
+            const lastInst = instances[instances.length - 1];
+            if (
+              lastInst?.__gxtModManager?.destroyModifier &&
+              !lastInst.__gxtTeardownDestroyed &&
+              !lastInst.__gxtModDestroyed
+            ) {
+              try {
+                lastInst.__gxtModManager.destroyModifier(lastInst);
+                lastInst.__gxtTeardownDestroyed = true;
+                lastInst.__gxtModDestroyed = true;
+              } catch {
+                /* ignore */
+              }
+            }
+            modMgr._updatedInstances.clear();
+          }
+          // Clear pending destroys without processing (already handled above)
+          const pendingDestroys = getGxtRenderer()?.compilePipeline.getPendingModifierDestroys?.();
+          if (pendingDestroys) pendingDestroys.length = 0;
+        } catch {
+          /* ignore */
+        }
+
+        // Clear a stale ambient owner so subsequent tests don't see a destroyed owner
+        if (getAmbientOwner()?.isDestroyed || getAmbientOwner()?.isDestroying) {
+          setAmbientOwner(null);
+        }
+      },
+      resetAfterTeardown() {
+        // Reset the GXT pending-sync flags AFTER destroy
+        const _cpRC = getGxtRenderer()?.compilePipeline;
+        _cpRC?.setPendingSync?.(false);
+        _cpRC?.setPendingSyncFromPropertyChange?.(false);
+        // Replace #qunit-fixture element to drop accumulated event listeners
+        // (EventDispatcher.setup adds listeners that aren't always cleaned up)
+        const fixture = document.getElementById('qunit-fixture');
+        if (fixture) {
+          const fresh = fixture.cloneNode(false) as HTMLElement;
+          fixture.parentNode?.replaceChild(fresh, fixture);
+        }
+      },
+      incrementRenderPassId() {
+        getGxtRenderer()?.viewUtils.incrementRenderPassId?.();
+      },
+      clearPendingSyncFromPropertyChange() {
+        getGxtRenderer()?.compilePipeline.setPendingSyncFromPropertyChange?.(false);
+      },
+    }
+  : undefined;
+
 export default abstract class RenderingTestCase extends AbstractTestCase {
   owner: EngineInstance;
   renderer: Renderer;
@@ -86,8 +159,9 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
 
   afterEach() {
     try {
-      // Clean up GXT active components first (if using GXT).
-      getGxtRenderer()?.compilePipeline.cleanupActiveComponents?.();
+      if (__GXT_MODE__) {
+        gxtHarness!.cleanupActiveComponents();
+      }
 
       if (this.component) {
         runDestroy(this.component);
@@ -96,56 +170,13 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
         runDestroy(this.owner);
       }
 
-      // Destroy active custom modifier instances during teardown so
-      // willDestroyElement fires (matching Glimmer VM behavior).
-      // Only destroy each modifier class once (the LAST instance) to match
-      // Glimmer VM's behavior of one destroy per active modifier.
-      try {
-        const modMgr = getGxtRenderer()?.compilePipeline.getManagers?.()?.modifier;
-        if (modMgr?._updatedInstances?.size > 0) {
-          // Only destroy the LAST instance (most recently installed modifier).
-          // Multiple instances may exist due to GXT formula double-fires creating
-          // parallel cache entries. Only the last one is "active".
-          const instances = [...modMgr._updatedInstances];
-          const lastInst = instances[instances.length - 1];
-          if (
-            lastInst?.__gxtModManager?.destroyModifier &&
-            !lastInst.__gxtTeardownDestroyed &&
-            !lastInst.__gxtModDestroyed
-          ) {
-            try {
-              lastInst.__gxtModManager.destroyModifier(lastInst);
-              lastInst.__gxtTeardownDestroyed = true;
-              lastInst.__gxtModDestroyed = true;
-            } catch {
-              /* ignore */
-            }
-          }
-          modMgr._updatedInstances.clear();
-        }
-        // Clear pending destroys without processing (already handled above)
-        const pendingDestroys = getGxtRenderer()?.compilePipeline.getPendingModifierDestroys?.();
-        if (pendingDestroys) pendingDestroys.length = 0;
-      } catch {
-        /* ignore */
-      }
-
-      // Clear a stale ambient owner so subsequent tests don't see a destroyed owner
-      if (getAmbientOwner()?.isDestroyed || getAmbientOwner()?.isDestroying) {
-        setAmbientOwner(null);
+      if (__GXT_MODE__) {
+        gxtHarness!.teardownModifiers();
       }
     } finally {
       _resetRenderers();
-      // Reset the GXT pending-sync flags AFTER destroy
-      const _cpRC = getGxtRenderer()?.compilePipeline;
-      _cpRC?.setPendingSync?.(false);
-      _cpRC?.setPendingSyncFromPropertyChange?.(false);
-      // Replace #qunit-fixture element to drop accumulated event listeners
-      // (EventDispatcher.setup adds listeners that aren't always cleaned up)
-      const fixture = document.getElementById('qunit-fixture');
-      if (fixture && __GXT_MODE__) {
-        const fresh = fixture.cloneNode(false) as HTMLElement;
-        fixture.parentNode?.replaceChild(fresh, fixture);
+      if (__GXT_MODE__) {
+        gxtHarness!.resetAfterTeardown();
       }
     }
   }
@@ -173,16 +204,20 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
 
     this.component = owner.lookup('component:-top-level');
 
-    // Increment the render pass ID before starting a new render transaction
-    // so all components in this render share the same pass ID.
-    getGxtRenderer()?.viewUtils.incrementRenderPassId?.();
+    if (__GXT_MODE__) {
+      // Increment the render pass ID before starting a new render transaction
+      // so all components in this render share the same pass ID.
+      gxtHarness!.incrementRenderPassId();
+    }
 
     runAppend(this.component);
 
-    // Property changes made during the initial render (e.g. from
-    // EmberObject.create in modifier managers) must not trigger a fallback
-    // re-sync; the DOM is already correct.
-    getGxtRenderer()?.compilePipeline.setPendingSyncFromPropertyChange?.(false);
+    if (__GXT_MODE__) {
+      // Property changes made during the initial render (e.g. from
+      // EmberObject.create in modifier managers) must not trigger a fallback
+      // re-sync; the DOM is already correct.
+      gxtHarness!.clearPendingSyncFromPropertyChange();
+    }
   }
 
   renderComponent(component: object, options: { expect: string }) {
@@ -194,8 +229,10 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
 
   rerender() {
     this.#assertNotAwaiting('rerender');
-    // Increment render pass ID for re-renders too
-    getGxtRenderer()?.viewUtils.incrementRenderPassId?.();
+    if (__GXT_MODE__) {
+      // Increment render pass ID for re-renders too
+      gxtHarness!.incrementRenderPassId();
+    }
     this.component!.rerender();
   }
 

@@ -48,6 +48,88 @@ function isMarker(node: unknown): node is Comment | typeof TextNode {
   return false;
 }
 
+// GXT test-harness steps, `undefined` in classic builds. A module-level value
+// instead of bridge calls inside the test-case methods: rollup keeps every
+// binding a test-case method refers to (the classes escape into `moduleFor`),
+// even from a folded `__GXT_MODE__` branch, which would keep gxt-backend in the
+// classic test build.
+const gxtHarness = __GXT_MODE__
+  ? {
+      cleanupActiveComponents() {
+        // Clean up GXT active components before destroy.
+        getGxtRenderer()?.compilePipeline.cleanupActiveComponents?.();
+      },
+      flushModifierDestroys() {
+        // Flush pending GXT modifier destroys so willDestroyElement fires during
+        // teardown, matching the Glimmer VM, which calls destroyModifier
+        // synchronously when the element is removed.
+        try {
+          const pendingDestroys = getGxtRenderer()?.compilePipeline.getPendingModifierDestroys?.();
+          if (pendingDestroys && pendingDestroys.length > 0) {
+            const toFlush = pendingDestroys.splice(0) as any[];
+            for (const entry of toFlush) {
+              if (!entry.cached.pendingDestroy) continue;
+              try {
+                if (
+                  entry.isCustom &&
+                  entry.cached.manager?.destroyModifier &&
+                  !entry.cached.instance?.__gxtModDestroyed
+                ) {
+                  entry.cached.manager.destroyModifier(entry.cached.instance);
+                  if (entry.cached.instance) entry.cached.instance.__gxtModDestroyed = true;
+                }
+                // Modifier destroyables are already cleaned up by gxt-backend's
+                // own teardown path.
+              } catch {
+                /* ignore individual modifier destroy errors */
+              }
+              const elCache = entry.cache?.get(entry.element);
+              if (elCache) {
+                elCache.delete(entry.modKey);
+                if (elCache.size === 0) entry.cache.delete(entry.element);
+              }
+            }
+          }
+          // Also destroy any custom modifiers that are still active (their
+          // formula destructors might not have fired during cleanup).
+          const modMgr = getGxtRenderer()?.compilePipeline.getManagers?.()?.modifier;
+          if (modMgr?._updatedInstances) {
+            // Walk recently-active instances and call destroyModifier on their managers
+            for (const inst of modMgr._updatedInstances) {
+              try {
+                if (inst?.__gxtModManager?.destroyModifier && !inst.__gxtModDestroyed) {
+                  inst.__gxtModManager.destroyModifier(inst);
+                  inst.__gxtModDestroyed = true;
+                }
+              } catch {
+                /* ignore */
+              }
+            }
+            modMgr._updatedInstances.clear();
+          }
+        } catch {
+          /* ignore */
+        }
+
+        // Clear a stale ambient owner so subsequent tests don't see a destroyed owner
+        if (getAmbientOwner()?.isDestroyed || getAmbientOwner()?.isDestroying) {
+          setAmbientOwner(null);
+        }
+      },
+      resetSyncState() {
+        // Clear the GXT pending-sync flags.
+        const _cpAT = getGxtRenderer()?.compilePipeline;
+        _cpAT?.setPendingSync?.(false);
+        _cpAT?.setPendingSyncFromPropertyChange?.(false);
+        // Clear stale render errors so they don't leak into the next test.
+        // Errors such as backtracking assertions are caught by
+        // assert.rejectsAssertion but also queued by gxt-backend, and the
+        // queued copy would otherwise rethrow later.
+        _cpAT?.clearRenderErrors?.();
+      },
+    }
+  : undefined;
+
 export type TestCase = AbstractStrictTestCase | AbstractTestCase;
 
 export abstract class AbstractStrictTestCase {
@@ -68,77 +150,20 @@ export abstract class AbstractStrictTestCase {
 
   afterEach() {
     try {
-      // Clean up GXT active components before destroy.
-      getGxtRenderer()?.compilePipeline.cleanupActiveComponents?.();
+      if (__GXT_MODE__) {
+        gxtHarness!.cleanupActiveComponents();
+      }
 
       runDestroy(this);
 
-      // Flush pending GXT modifier destroys so willDestroyElement fires during
-      // teardown, matching the Glimmer VM, which calls destroyModifier
-      // synchronously when the element is removed.
-      try {
-        const pendingDestroys = getGxtRenderer()?.compilePipeline.getPendingModifierDestroys?.();
-        if (pendingDestroys && pendingDestroys.length > 0) {
-          const toFlush = pendingDestroys.splice(0) as any[];
-          for (const entry of toFlush) {
-            if (!entry.cached.pendingDestroy) continue;
-            try {
-              if (
-                entry.isCustom &&
-                entry.cached.manager?.destroyModifier &&
-                !entry.cached.instance?.__gxtModDestroyed
-              ) {
-                entry.cached.manager.destroyModifier(entry.cached.instance);
-                if (entry.cached.instance) entry.cached.instance.__gxtModDestroyed = true;
-              }
-              // Modifier destroyables are already cleaned up by gxt-backend's
-              // own teardown path.
-            } catch {
-              /* ignore individual modifier destroy errors */
-            }
-            const elCache = entry.cache?.get(entry.element);
-            if (elCache) {
-              elCache.delete(entry.modKey);
-              if (elCache.size === 0) entry.cache.delete(entry.element);
-            }
-          }
-        }
-        // Also destroy any custom modifiers that are still active (their
-        // formula destructors might not have fired during cleanup).
-        const modMgr = getGxtRenderer()?.compilePipeline.getManagers?.()?.modifier;
-        if (modMgr?._updatedInstances) {
-          // Walk recently-active instances and call destroyModifier on their managers
-          for (const inst of modMgr._updatedInstances) {
-            try {
-              if (inst?.__gxtModManager?.destroyModifier && !inst.__gxtModDestroyed) {
-                inst.__gxtModManager.destroyModifier(inst);
-                inst.__gxtModDestroyed = true;
-              }
-            } catch {
-              /* ignore */
-            }
-          }
-          modMgr._updatedInstances.clear();
-        }
-      } catch {
-        /* ignore */
-      }
-
-      // Clear a stale ambient owner so subsequent tests don't see a destroyed owner
-      if (getAmbientOwner()?.isDestroyed || getAmbientOwner()?.isDestroying) {
-        setAmbientOwner(null);
+      if (__GXT_MODE__) {
+        gxtHarness!.flushModifierDestroys();
       }
     } finally {
       _resetRenderers();
-      // Clear the GXT pending-sync flags.
-      const _cpAT = getGxtRenderer()?.compilePipeline;
-      _cpAT?.setPendingSync?.(false);
-      _cpAT?.setPendingSyncFromPropertyChange?.(false);
-      // Clear stale render errors so they don't leak into the next test.
-      // Errors such as backtracking assertions are caught by
-      // assert.rejectsAssertion but also queued by gxt-backend, and the
-      // queued copy would otherwise rethrow later.
-      _cpAT?.clearRenderErrors?.();
+      if (__GXT_MODE__) {
+        gxtHarness!.resetSyncState();
+      }
     }
   }
 
