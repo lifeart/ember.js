@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-12T03:59:34.390Z",
+    "capturedAt": "2026-10-12T05:04:26.526Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "73b9aaa684",
-    "totalTests": 3123,
-    "totalModules": 224,
+    "emberCommit": "4f20ad0fab",
+    "totalTests": 6973,
+    "totalModules": 664,
     "quarantinedTests": 0,
-    "totalAssertions": 14149,
-    "totalAssertionsPassing": 14140
+    "totalAssertions": 34782,
+    "totalAssertionsPassing": 34773
   },
   "modules": {
     "<LinkTo /> component (rendering tests)": {
@@ -74,11 +74,137 @@
       "assertionsPassing": 39,
       "failingTests": []
     },
+    "@ember/-internals/deprecations": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
     "@ember/-internals/metal/alias": {
       "total": 11,
       "passing": 11,
       "assertionsTotal": 24,
       "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "@ember/-internals/metal/core/main": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "@ember/-internals/metal/nativeDescDecorator: in EmberObject.extend()": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 27,
+      "assertionsPassing": 27,
+      "failingTests": []
+    },
+    "@ember/-internals/metal/nativeDescDecorator: in EmberObject.extend() through a mixin": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 27,
+      "assertionsPassing": 27,
+      "failingTests": []
+    },
+    "@ember/-internals/metal/nativeDescDecorator: inherited from another EmberObject super class": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 27,
+      "assertionsPassing": 27,
+      "failingTests": []
+    },
+    "@ember/-internals/metal/nativeDescDecorator: using defineProperty on a prototype": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 38,
+      "assertionsPassing": 38,
+      "failingTests": []
+    },
+    "@ember/-internals/metal/nativeDescDecorator: using defineProperty on an object directly": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 38,
+      "assertionsPassing": 38,
+      "failingTests": []
+    },
+    "@ember/-internals/runtime/mixins/container_proxy": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "@ember/-internals/runtime/system/object/destroy_test": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "@ember/-internals/utils Trackable Object": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "@ember/-internals/utils getDebugName": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "@ember/-internals/utils isProxy": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "@ember/-internals/utils toString": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "@ember/test-helpers emulation test": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "@ember/test-helpers emulation test > v1.6.1": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "@ember/test-helpers emulation test > v1.6.1 > setupRenderingContext": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "@glimmer/compiler - compiling source to wire format": {
+      "total": 199,
+      "passing": 199,
+      "assertionsTotal": 199,
+      "assertionsPassing": 199,
+      "failingTests": []
+    },
+    "@glimmer/constants": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
       "failingTests": []
     },
     "@glimmer/validator: meta": {
@@ -263,6 +389,34 @@
       "assertionsPassing": 15,
       "failingTests": []
     },
+    "A new EmberObject instance": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "Adapter Errors: .then callback": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "Adapter Errors: Promise Contructor": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "Adapter Errors: Promise chain .then callback": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
     "AngleBracket Invocation": {
       "total": 40,
       "passing": 40,
@@ -284,11 +438,74 @@
       "assertionsPassing": 0,
       "failingTests": []
     },
+    "Application": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 19,
+      "assertionsPassing": 19,
+      "failingTests": []
+    },
+    "Application - instance tracking": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "Application - resetting": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
+      "failingTests": []
+    },
+    "Application Dependency Injection": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "Application Lifecycle": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
     "Application Lifecycle - Helper Registration": {
       "total": 4,
       "passing": 4,
       "assertionsTotal": 4,
       "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "Application Lifecycle - route hooks": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "Application initializers": {
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
+      "failingTests": []
+    },
+    "Application instance initializers": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "Application readiness": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
       "failingTests": []
     },
     "Application test: debug render tree": {
@@ -318,11 +535,480 @@
       "assertionsPassing": 47,
       "failingTests": []
     },
+    "Application when LOG_ACTIVE_GENERATION=false": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "Application with LOG_ACTIVE_GENERATION=true": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "Application with LOG_VIEW_LOOKUPS=false": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Application with LOG_VIEW_LOOKUPS=true": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "Application#buildRegistry": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "Application, autobooting": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "Application, autobooting multiple apps": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "ApplicationInstance": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 20,
+      "assertionsPassing": 20,
+      "failingTests": []
+    },
+    "ArrayProxy - arrangedContent": {
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "ArrayProxy - arrangedContent matching content": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "ArrayProxy - arrangedContent with transforms": {
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
+    "ArrayProxy - content change": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
+      "failingTests": []
+    },
+    "ArrayProxy - watching and listening": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "ArrayProxy - with transforms": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "ArrayProxy: addObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "ArrayProxy: any": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "ArrayProxy: clear": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "ArrayProxy: compact": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "ArrayProxy: every": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "ArrayProxy: filter": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "ArrayProxy: find": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "ArrayProxy: findBy": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "ArrayProxy: firstObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "ArrayProxy: forEach": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "ArrayProxy: includes": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "ArrayProxy: indexOf": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "ArrayProxy: instertAt": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 45,
+      "assertionsPassing": 45,
+      "failingTests": []
+    },
+    "ArrayProxy: invoke": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "ArrayProxy: isAny": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "ArrayProxy: isEvery": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "ArrayProxy: lastIndexOf": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
+    "ArrayProxy: lastObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "ArrayProxy: map": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "ArrayProxy: mapBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "ArrayProxy: objectAt": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "ArrayProxy: popObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 23,
+      "assertionsPassing": 23,
+      "failingTests": []
+    },
+    "ArrayProxy: pushObject": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "ArrayProxy: pushObjects": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "ArrayProxy: reduce": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "ArrayProxy: reject": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "ArrayProxy: rejectBy": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "ArrayProxy: removeAt": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 49,
+      "assertionsPassing": 49,
+      "failingTests": []
+    },
+    "ArrayProxy: removeObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 17,
+      "assertionsPassing": 17,
+      "failingTests": []
+    },
+    "ArrayProxy: removeObjects": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 43,
+      "assertionsPassing": 43,
+      "failingTests": []
+    },
+    "ArrayProxy: replace": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 43,
+      "assertionsPassing": 43,
+      "failingTests": []
+    },
+    "ArrayProxy: reverseObjects": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "ArrayProxy: setObjects": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "ArrayProxy: shiftObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "ArrayProxy: sortBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "ArrayProxy: toArray": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "ArrayProxy: uniq": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "ArrayProxy: uniqBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "ArrayProxy: unshiftObject": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "ArrayProxy: unshiftObjects": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
+      "failingTests": []
+    },
+    "ArrayProxy: without": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "Async Get Handler": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
     "Basic Custom Modifier Manager: 3.22": {
       "total": 14,
       "passing": 14,
       "assertionsTotal": 49,
       "assertionsPassing": 49,
+      "failingTests": []
+    },
+    "Basic Routing - Decoupled from global resolver": {
+      "total": 43,
+      "passing": 43,
+      "assertionsTotal": 134,
+      "assertionsPassing": 134,
+      "failingTests": []
+    },
+    "Basic introspection": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "BucketCache": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "CP Macro `intersect`": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "CP Macro `uniqBy`": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "CP macro `union`": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "CP macro `uniq`": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "CP macros": {
+      "total": 24,
+      "passing": 24,
+      "assertionsTotal": 156,
+      "assertionsPassing": 156,
+      "failingTests": []
+    },
+    "Cache": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 26,
+      "assertionsPassing": 26,
+      "failingTests": []
+    },
+    "Chaining array and reduced CPs": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "Comparable": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
       "failingTests": []
     },
     "Component Manager - Angle Invocation": {
@@ -393,6 +1079,27 @@
       "assertionsPassing": 10,
       "failingTests": []
     },
+    "Components test: web component fallback": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "Computed Properties - Number of times evaluated": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "Computed properties": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 39,
+      "assertionsPassing": 39,
+      "failingTests": []
+    },
     "Container": {
       "total": 30,
       "passing": 30,
@@ -442,6 +1149,13 @@
       "assertionsPassing": 3,
       "failingTests": []
     },
+    "Custom Helper test": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
     "Destroyables": {
       "total": 24,
       "passing": 24,
@@ -449,11 +1163,557 @@
       "assertionsPassing": 165,
       "failingTests": []
     },
+    "Dynamic content tests (attribute position)": {
+      "total": 147,
+      "passing": 147,
+      "assertionsTotal": 3125,
+      "assertionsPassing": 3125,
+      "failingTests": []
+    },
+    "Dynamic content tests (content concat)": {
+      "total": 147,
+      "passing": 147,
+      "assertionsTotal": 1774,
+      "assertionsPassing": 1774,
+      "failingTests": []
+    },
+    "Dynamic content tests (content position)": {
+      "total": 148,
+      "passing": 148,
+      "assertionsTotal": 1781,
+      "assertionsPassing": 1781,
+      "failingTests": []
+    },
+    "Dynamic content tests (inside an element)": {
+      "total": 147,
+      "passing": 147,
+      "assertionsTotal": 2687,
+      "assertionsPassing": 2687,
+      "failingTests": []
+    },
+    "Dynamic content tests (integration)": {
+      "total": 14,
+      "passing": 14,
+      "assertionsTotal": 199,
+      "assertionsPassing": 199,
+      "failingTests": []
+    },
+    "Dynamic content tests (trusted)": {
+      "total": 149,
+      "passing": 149,
+      "assertionsTotal": 775,
+      "assertionsPassing": 775,
+      "failingTests": []
+    },
     "Element modifiers on AngleBracket components": {
       "total": 6,
       "passing": 6,
       "assertionsTotal": 0,
       "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "Ember Instrumentation": {
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 30,
+      "assertionsPassing": 30,
+      "failingTests": []
+    },
+    "Ember Router": {
+      "total": 14,
+      "passing": 14,
+      "assertionsTotal": 26,
+      "assertionsPassing": 26,
+      "failingTests": []
+    },
+    "Ember Router DSL": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
+      "failingTests": []
+    },
+    "Ember Router DSL with engines": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 23,
+      "assertionsPassing": 23,
+      "failingTests": []
+    },
+    "Ember Type Checking": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "Ember.A": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "Ember.Array": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "Ember.ArrayProxy - content change (length)": {
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 73,
+      "assertionsPassing": 73,
+      "failingTests": []
+    },
+    "Ember.CoreObject": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
+    "Ember.Evented": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "Ember.Observable - Observing with @each": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "Ember.PromiseProxy - ObjectProxy": {
+      "total": 14,
+      "passing": 14,
+      "assertionsTotal": 115,
+      "assertionsPassing": 115,
+      "failingTests": []
+    },
+    "Ember.RSVP": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
+    "Ember.arrayComputed - chains": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "Ember.arrayComputed - mixed sugar": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "Ember.canInvoke": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "Ember.compare()": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 142,
+      "assertionsPassing": 142,
+      "failingTests": []
+    },
+    "Ember.deprecateProperty": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "Ember.generateGuid": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "Ember.get()": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "Ember.get() with paths": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Ember.inspect": {
+      "total": 19,
+      "passing": 19,
+      "assertionsTotal": 23,
+      "assertionsPassing": 23,
+      "failingTests": []
+    },
+    "Ember.isEmpty": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Ember.makeArray": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
+    "Ember.meta": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Ember.meta listeners": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 33,
+      "assertionsPassing": 33,
+      "failingTests": []
+    },
+    "Ember.test: rejection assertions": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "EmberArray.@each support": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 18,
+      "assertionsPassing": 18,
+      "failingTests": []
+    },
+    "EmberArray: any": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "EmberArray: compact": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "EmberArray: every": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "EmberArray: filter": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "EmberArray: find": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "EmberArray: findBy": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "EmberArray: firstObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "EmberArray: forEach": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "EmberArray: includes": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "EmberArray: indexOf": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "EmberArray: invoke": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "EmberArray: isAny": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "EmberArray: isEvery": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "EmberArray: lastIndexOf": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
+    "EmberArray: lastObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "EmberArray: map": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "EmberArray: mapBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "EmberArray: objectAt": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "EmberArray: reduce": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "EmberArray: reject": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "EmberArray: rejectBy": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "EmberArray: sortBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "EmberArray: toArray": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "EmberArray: uniq": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "EmberArray: uniqBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "EmberArray: without": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "EmberInternalsString.classify": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "EmberInternalsString.dasherize": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "EmberObject Concatenated Properties": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "EmberObject ES Compatibility": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 55,
+      "assertionsPassing": 55,
+      "failingTests": []
+    },
+    "EmberObject computed property": {
+      "total": 18,
+      "passing": 18,
+      "assertionsTotal": 92,
+      "assertionsPassing": 92,
+      "failingTests": []
+    },
+    "EmberObject observer": {
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 35,
+      "assertionsPassing": 35,
+      "failingTests": []
+    },
+    "EmberObject superclass and subclasses": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "EmberObject.create": {
+      "total": 18,
+      "passing": 18,
+      "assertionsTotal": 41,
+      "assertionsPassing": 41,
+      "failingTests": []
+    },
+    "EmberObject.extend": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 17,
+      "assertionsPassing": 17,
+      "failingTests": []
+    },
+    "Engine": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "Engine initializers": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 20,
+      "assertionsPassing": 20,
+      "failingTests": []
+    },
+    "Engine instance initializers": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 20,
+      "assertionsPassing": 20,
+      "failingTests": []
+    },
+    "EngineInstance": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "EngineParent": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Enumerable": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "FrameworkObject": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Glimmer OutletView": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "HashLocation": {
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
       "failingTests": []
     },
     "Helper Tracked Properties": {
@@ -652,11 +1912,81 @@
       "assertionsPassing": 0,
       "failingTests": []
     },
+    "HistoryLocation": {
+      "total": 17,
+      "passing": 17,
+      "assertionsTotal": 20,
+      "assertionsPassing": 20,
+      "failingTests": []
+    },
+    "Inline style tests": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 19,
+      "assertionsPassing": 19,
+      "failingTests": []
+    },
+    "Inline style tests - warnings": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
+    "Input element tests": {
+      "total": 16,
+      "passing": 16,
+      "assertionsTotal": 62,
+      "assertionsPassing": 62,
+      "failingTests": []
+    },
+    "Intermediate transitions (Async Get Handler)": {
+      "total": 17,
+      "passing": 17,
+      "assertionsTotal": 123,
+      "assertionsPassing": 123,
+      "failingTests": []
+    },
+    "Intermediate transitions (Sync Get Handler)": {
+      "total": 17,
+      "passing": 17,
+      "assertionsTotal": 123,
+      "assertionsPassing": 123,
+      "failingTests": []
+    },
     "Keys behavior with observers": {
       "total": 7,
       "passing": 7,
       "assertionsTotal": 14,
       "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "Libraries registry": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "Loading/Error Substates": {
+      "total": 15,
+      "passing": 15,
+      "assertionsTotal": 45,
+      "assertionsPassing": 45,
+      "failingTests": []
+    },
+    "Loading/Error Substates - nested routes": {
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 51,
+      "assertionsPassing": 51,
+      "failingTests": []
+    },
+    "Location Utilities": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
       "failingTests": []
     },
     "Managers": {
@@ -687,9 +2017,807 @@
       "assertionsPassing": 11,
       "failingTests": []
     },
-    "Owner": {
+    "Method Conflicts": {
       "total": 1,
       "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Mixin Accessors": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "Mixin Computed Properties": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
+    "Mixin Methods": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "Mixin concatenatedProperties": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "Mixin mergedProperties": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "Mixin observer": {
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 23,
+      "assertionsPassing": 23,
+      "failingTests": []
+    },
+    "Mixin#reopen": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "Mixin.apply": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "Mixin.detect": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "Multiple dynamic segments per route (Async Get Handler)": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "Multiple dynamic segments per route (Sync Get Handler)": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "MutableArray: addObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "MutableArray: any": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "MutableArray: clear": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "MutableArray: compact": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "MutableArray: every": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "MutableArray: filter": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "MutableArray: find": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "MutableArray: findBy": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "MutableArray: firstObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "MutableArray: forEach": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "MutableArray: includes": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "MutableArray: indexOf": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "MutableArray: instertAt": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 45,
+      "assertionsPassing": 45,
+      "failingTests": []
+    },
+    "MutableArray: invoke": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "MutableArray: isAny": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "MutableArray: isEvery": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "MutableArray: lastIndexOf": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
+    "MutableArray: lastObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "MutableArray: map": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "MutableArray: mapBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "MutableArray: objectAt": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "MutableArray: popObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 23,
+      "assertionsPassing": 23,
+      "failingTests": []
+    },
+    "MutableArray: pushObject": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "MutableArray: pushObjects": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "MutableArray: reduce": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "MutableArray: reject": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "MutableArray: rejectBy": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "MutableArray: removeAt": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 49,
+      "assertionsPassing": 49,
+      "failingTests": []
+    },
+    "MutableArray: removeObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 17,
+      "assertionsPassing": 17,
+      "failingTests": []
+    },
+    "MutableArray: removeObjects": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 43,
+      "assertionsPassing": 43,
+      "failingTests": []
+    },
+    "MutableArray: replace": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 43,
+      "assertionsPassing": 43,
+      "failingTests": []
+    },
+    "MutableArray: reverseObjects": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "MutableArray: setObjects": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "MutableArray: shiftObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "MutableArray: sortBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "MutableArray: toArray": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "MutableArray: uniq": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "MutableArray: uniqBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "MutableArray: unshiftObject": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "MutableArray: unshiftObjects": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
+      "failingTests": []
+    },
+    "MutableArray: without": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "MutableEnumerable": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Namespace": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 19,
+      "assertionsPassing": 19,
+      "failingTests": []
+    },
+    "NamespaceSearch": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "NativeArray.replace": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "NativeArray: addObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "NativeArray: any": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "NativeArray: clear": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "NativeArray: compact": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "NativeArray: every": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "NativeArray: filter": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "NativeArray: find": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "NativeArray: findBy": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "NativeArray: firstObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "NativeArray: forEach": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "NativeArray: includes": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "NativeArray: indexOf": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "NativeArray: instertAt": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 45,
+      "assertionsPassing": 45,
+      "failingTests": []
+    },
+    "NativeArray: invoke": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "NativeArray: isAny": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "NativeArray: isEvery": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "NativeArray: lastIndexOf": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
+    "NativeArray: lastObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "NativeArray: map": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "NativeArray: mapBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "NativeArray: objectAt": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "NativeArray: popObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 23,
+      "assertionsPassing": 23,
+      "failingTests": []
+    },
+    "NativeArray: pushObject": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "NativeArray: pushObjects": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "NativeArray: reduce": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "NativeArray: reject": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "NativeArray: rejectBy": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "NativeArray: removeAt": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 49,
+      "assertionsPassing": 49,
+      "failingTests": []
+    },
+    "NativeArray: removeObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 17,
+      "assertionsPassing": 17,
+      "failingTests": []
+    },
+    "NativeArray: removeObjects": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 43,
+      "assertionsPassing": 43,
+      "failingTests": []
+    },
+    "NativeArray: replace": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 43,
+      "assertionsPassing": 43,
+      "failingTests": []
+    },
+    "NativeArray: reverseObjects": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "NativeArray: setObjects": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "NativeArray: shiftObject": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "NativeArray: sortBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "NativeArray: toArray": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "NativeArray: uniq": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "NativeArray: uniqBy": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "NativeArray: unshiftObject": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "NativeArray: unshiftObjects": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
+      "failingTests": []
+    },
+    "NativeArray: without": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "NoneLocation": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "Object events": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 21,
+      "assertionsPassing": 21,
+      "failingTests": []
+    },
+    "ObjectProxy": {
+      "total": 14,
+      "passing": 14,
+      "assertionsTotal": 59,
+      "assertionsPassing": 59,
+      "failingTests": []
+    },
+    "Observable objects & object properties ": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 20,
+      "assertionsPassing": 20,
+      "failingTests": []
+    },
+    "Owner": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "Preservation of params between redirects (Async Get Handler)": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "Preservation of params between redirects (Sync Get Handler)": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 24,
+      "assertionsPassing": 24,
+      "failingTests": []
+    },
+    "Property Brace Expansion Test": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "Query Params (Async Get Handler)": {
+      "total": 15,
+      "passing": 15,
+      "assertionsTotal": 76,
+      "assertionsPassing": 76,
+      "failingTests": []
+    },
+    "Query Params (Sync Get Handler)": {
+      "total": 15,
+      "passing": 15,
+      "assertionsTotal": 76,
+      "assertionsPassing": 76,
+      "failingTests": []
+    },
+    "Query Params - async get handler": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 33,
+      "assertionsPassing": 33,
+      "failingTests": []
+    },
+    "Query Params - main": {
+      "total": 62,
+      "passing": 62,
+      "assertionsTotal": 221,
+      "assertionsPassing": 221,
+      "failingTests": []
+    },
+    "Query Params - model-dependent state": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 119,
+      "assertionsPassing": 119,
+      "failingTests": []
+    },
+    "Query Params - model-dependent state (nested & more than 1 dynamic segment)": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 265,
+      "assertionsPassing": 265,
+      "failingTests": []
+    },
+    "Query Params - model-dependent state (nested)": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 119,
+      "assertionsPassing": 119,
+      "failingTests": []
+    },
+    "Query Params - overlapping query param property names": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 26,
+      "assertionsPassing": 26,
+      "failingTests": []
+    },
+    "Query Params - paramless link-to": {
+      "total": 2,
+      "passing": 2,
       "assertionsTotal": 2,
       "assertionsPassing": 2,
       "failingTests": []
@@ -769,6 +2897,160 @@
       "passing": 1,
       "assertionsTotal": 1,
       "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "Route": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 19,
+      "assertionsPassing": 19,
+      "failingTests": []
+    },
+    "Route - model loading": {
+      "total": 20,
+      "passing": 20,
+      "assertionsTotal": 65,
+      "assertionsPassing": 65,
+      "failingTests": []
+    },
+    "Route injected properties": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "Route interaction": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "Route serialize": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "Route with engines": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
+    "RouteInfo": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 17,
+      "assertionsPassing": 17,
+      "failingTests": []
+    },
+    "Router Service - events": {
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 157,
+      "assertionsPassing": 157,
+      "failingTests": []
+    },
+    "Router Service - main": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 33,
+      "assertionsPassing": 33,
+      "failingTests": []
+    },
+    "Router Service - recognize": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 17,
+      "assertionsPassing": 17,
+      "failingTests": []
+    },
+    "Router Service - recognizeAndLoad": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 20,
+      "assertionsPassing": 20,
+      "failingTests": []
+    },
+    "Router Service - refresh": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 26,
+      "assertionsPassing": 26,
+      "failingTests": []
+    },
+    "Router Service - replaceWith": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "Router Service - urlFor": {
+      "total": 16,
+      "passing": 16,
+      "assertionsTotal": 17,
+      "assertionsPassing": 17,
+      "failingTests": []
+    },
+    "Router.map": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "Routing query parameter utils - normalizeControllerQueryParams": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "SVG element tests": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "SafeString": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "SafeString isHTMLSafe": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "Service Injection": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "Service Injection with ES5 Getters": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "Static content tests": {
+      "total": 247,
+      "passing": 247,
+      "assertionsTotal": 863,
+      "assertionsPassing": 863,
       "failingTests": []
     },
     "Strict Mode": {
@@ -867,6 +3149,34 @@
       "passing": 3,
       "assertionsTotal": 15,
       "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "StrictResolver": {
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 59,
+      "assertionsPassing": 59,
+      "failingTests": []
+    },
+    "StrictResolver > #addModules + normalization": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 27,
+      "assertionsPassing": 27,
+      "failingTests": []
+    },
+    "StrictResolver > #resolve + #addModules": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 21,
+      "assertionsPassing": 21,
+      "failingTests": []
+    },
+    "StrictResolver > weird scenarios": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
       "failingTests": []
     },
     "Syntax test: Multiple {{#let as}} helpers": {
@@ -1058,6 +3368,13 @@
       "assertionsPassing": 591,
       "failingTests": []
     },
+    "TargetActionSupport": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 23,
+      "assertionsPassing": 23,
+      "failingTests": []
+    },
     "The <LinkTo /> component - loading states and warnings": {
       "total": 1,
       "passing": 1,
@@ -1070,6 +3387,27 @@
       "passing": 30,
       "assertionsTotal": 96,
       "assertionsPassing": 96,
+      "failingTests": []
+    },
+    "The example renders correctly": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "The router (Async Get Handler)": {
+      "total": 120,
+      "passing": 120,
+      "assertionsTotal": 727,
+      "assertionsPassing": 727,
+      "failingTests": []
+    },
+    "The router (Sync Get Handler)": {
+      "total": 118,
+      "passing": 118,
+      "assertionsTotal": 723,
+      "assertionsPassing": 723,
       "failingTests": []
     },
     "The {{link-to}} component - loading states and warnings": {
@@ -1086,6 +3424,195 @@
       "assertionsPassing": 85,
       "failingTests": []
     },
+    "Top Level DOM Structure": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "TransitionIntent (Async Get Handler)": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 34,
+      "assertionsPassing": 34,
+      "failingTests": []
+    },
+    "TransitionIntent (Sync Get Handler)": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 27,
+      "assertionsPassing": 27,
+      "failingTests": []
+    },
+    "TransitionState": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "URL-less routes (Async Get Handler)": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "URL-less routes (Sync Get Handler)": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "View Instrumentation": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "[glimmer-syntax] (Legacy) Traversal - Walker": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "[glimmer-syntax] AST Builders": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "[glimmer-syntax] AST nodes legacy interop": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 20,
+      "assertionsPassing": 20,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Code generation": {
+      "total": 75,
+      "passing": 75,
+      "assertionsTotal": 75,
+      "assertionsPassing": 75,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Code generation - override": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Code generation - source -> source": {
+      "total": 81,
+      "passing": 81,
+      "assertionsTotal": 81,
+      "assertionsPassing": 81,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Parser - AST": {
+      "total": 73,
+      "passing": 73,
+      "assertionsTotal": 89,
+      "assertionsPassing": 89,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Parser - Location Info": {
+      "total": 30,
+      "passing": 30,
+      "assertionsTotal": 221,
+      "assertionsPassing": 221,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Parser - backslash escape sequences": {
+      "total": 19,
+      "passing": 19,
+      "assertionsTotal": 19,
+      "assertionsPassing": 19,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Parser - parse error regression fixtures": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Parser - whitespace control (tilde and standalone)": {
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 21,
+      "assertionsPassing": 21,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Plugins - AST Transforms": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 21,
+      "assertionsPassing": 21,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Public API is unchanged": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 28,
+      "assertionsPassing": 28,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Source - hbsPosFor / charPosFor boundaries": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 46,
+      "assertionsPassing": 46,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Traversal - manipulating": {
+      "total": 20,
+      "passing": 20,
+      "assertionsTotal": 26,
+      "assertionsPassing": 26,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Traversal - manipulating (edge cases)": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Traversal - visiting": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Traversal - visiting - paths": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "[glimmer-syntax] Traversal - visiting keys": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "[glimmer-syntax] getTemplateLocals": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
     "addObserver": {
       "total": 12,
       "passing": 12,
@@ -1100,11 +3627,25 @@
       "assertionsPassing": 28,
       "failingTests": []
     },
+    "buildRouteInfoMetadata": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 40,
+      "assertionsPassing": 40,
+      "failingTests": []
+    },
     "changeProperties - sync observers": {
       "total": 2,
       "passing": 2,
       "assertionsTotal": 9,
       "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "collect": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
       "failingTests": []
     },
     "computed": {
@@ -1205,6 +3746,13 @@
       "assertionsPassing": 3,
       "failingTests": []
     },
+    "computed macros - decorators - assertions": {
+      "total": 30,
+      "passing": 30,
+      "assertionsTotal": 30,
+      "assertionsPassing": 30,
+      "failingTests": []
+    },
     "computed should inherit through prototype": {
       "total": 1,
       "passing": 1,
@@ -1212,11 +3760,179 @@
       "assertionsPassing": 8,
       "failingTests": []
     },
+    "controllerFor": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "dasherize-component-name": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
     "debounce": {
       "total": 4,
       "passing": 4,
       "assertionsTotal": 4,
       "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "debug-to-string tests": {
+      "total": 16,
+      "passing": 16,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "defineProperty": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "dependentKeyCompat": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "ember-debug": {
+      "total": 20,
+      "passing": 20,
+      "assertionsTotal": 31,
+      "assertionsPassing": 31,
+      "failingTests": []
+    },
+    "ember-debug: registerHandler": {
+      "total": 8,
+      "passing": 8,
+      "assertionsTotal": 21,
+      "assertionsPassing": 21,
+      "failingTests": []
+    },
+    "ember-template-compiler: Embroider-like compilation": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "ember-template-compiler: assert against attrs": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "ember-template-compiler: assert-against-named-outlets": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "ember-template-compiler: assert-array-test": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
+    "ember-template-compiler: assert-input-helper-without-block": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "ember-template-compiler: assert-reserved-named-arguments": {
+      "total": 20,
+      "passing": 20,
+      "assertionsTotal": 63,
+      "assertionsPassing": 63,
+      "failingTests": []
+    },
+    "ember-template-compiler: assert-splattribute-expression": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "ember-template-compiler: input type syntax": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "ember-template-compiler: not asserting against block params named \"attrs\"": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "ember-template-compiler: transforms component invocation": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": []
+    },
+    "ember-testing Adapter": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "ember-testing Adapters": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "ember-testing: waiters": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
+    "error_handler": {
+      "total": 22,
+      "passing": 22,
+      "assertionsTotal": 32,
+      "assertionsPassing": 32,
+      "failingTests": []
+    },
+    "filter": {
+      "total": 13,
+      "passing": 13,
+      "assertionsTotal": 29,
+      "assertionsPassing": 29,
+      "failingTests": []
+    },
+    "filterBy": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 17,
+      "assertionsPassing": 17,
+      "failingTests": []
+    },
+    "generateController": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
       "failingTests": []
     },
     "get": {
@@ -1238,6 +3954,13 @@
       "passing": 1,
       "assertionsTotal": 7,
       "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "guidFor": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 29,
+      "assertionsPassing": 29,
       "failingTests": []
     },
     "gxt-native | ApplicationTestCase: loose route templates (this = controller)": {
@@ -1394,6 +4117,20 @@
       "assertionsPassing": 30,
       "failingTests": []
     },
+    "immediate encoding tests": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "inject": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 8,
+      "assertionsPassing": 8,
+      "failingTests": []
+    },
     "inject - decorator": {
       "total": 2,
       "passing": 2,
@@ -1408,11 +4145,179 @@
       "assertionsPassing": 0,
       "failingTests": []
     },
+    "internal-test-helpers": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "isActive (Async Get Handler)": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 47,
+      "assertionsPassing": 47,
+      "failingTests": []
+    },
+    "isActive (Sync Get Handler)": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 47,
+      "assertionsPassing": 47,
+      "failingTests": []
+    },
+    "isBlank": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
+    "isEmpty": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "isEqual": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "isNone": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 10,
+      "assertionsPassing": 10,
+      "failingTests": []
+    },
+    "isPresent": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "locations - location": {
+      "total": 22,
+      "passing": 22,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
+      "failingTests": []
+    },
+    "locations - position": {
+      "total": 22,
+      "passing": 22,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
+      "failingTests": []
+    },
+    "map": {
+      "total": 9,
+      "passing": 9,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
+      "failingTests": []
+    },
+    "mapBy": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "max": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "min": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "mixins/array/arrayContent[Will|Did]Change": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "mixins/observable": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 12,
+      "assertionsPassing": 12,
+      "failingTests": []
+    },
+    "notify array observers (internal)": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 14,
+      "assertionsPassing": 14,
+      "failingTests": []
+    },
+    "notify observers of length": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 15,
+      "assertionsPassing": 15,
+      "failingTests": []
+    },
     "notifyPropertyChange": {
       "total": 4,
       "passing": 4,
       "assertionsTotal": 2,
       "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "object-utils tests": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "object.addObserver()": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "object.get()": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 6,
+      "assertionsPassing": 6,
+      "failingTests": []
+    },
+    "object.removeObserver()": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "object.set()": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 13,
+      "assertionsPassing": 13,
+      "failingTests": []
+    },
+    "production builds": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
       "failingTests": []
     },
     "props/observer_test - setting identical values": {
@@ -1443,6 +4348,13 @@
       "assertionsPassing": 8,
       "failingTests": []
     },
+    "renderSettled": {
+      "total": 5,
+      "passing": 5,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
     "runloop `later`": {
       "total": 6,
       "passing": 6,
@@ -1455,6 +4367,13 @@
       "passing": 3,
       "assertionsTotal": 5,
       "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "runtime: Mixin Accessors": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
       "failingTests": []
     },
     "service - decorator": {
@@ -1490,6 +4409,132 @@
       "passing": 3,
       "assertionsTotal": 3,
       "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "setDiff": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "setProperties": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
+      "failingTests": []
+    },
+    "sort - concurrency": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 17,
+      "assertionsPassing": 17,
+      "failingTests": []
+    },
+    "sort - sort function": {
+      "total": 12,
+      "passing": 12,
+      "assertionsTotal": 26,
+      "assertionsPassing": 26,
+      "failingTests": []
+    },
+    "sort - sortProperties - Ember.Object": {
+      "total": 24,
+      "passing": 24,
+      "assertionsTotal": 51,
+      "assertionsPassing": 51,
+      "failingTests": []
+    },
+    "sort - sortProperties - Native Class": {
+      "total": 24,
+      "passing": 24,
+      "assertionsTotal": 87,
+      "assertionsPassing": 87,
+      "failingTests": []
+    },
+    "sort - stability": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "strict mode tests": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "strict-resolver | Application with modules": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "sum": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 7,
+      "assertionsPassing": 7,
+      "failingTests": []
+    },
+    "syntax refinements": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "system/core_object/reopen": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "system/mixin/method_test BUGS": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "system/object/detect": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "system/object/detectInstance": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 16,
+      "assertionsPassing": 16,
+      "failingTests": []
+    },
+    "system/object/reopenClass": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "system/object/toString": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "system/props/events_test": {
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
       "failingTests": []
     },
     "system/run_loop/once_test": {
@@ -1532,6 +4577,41 @@
       "passing": 2,
       "assertionsTotal": 4,
       "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "template": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "transition-aborted-error": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "unrecognized-url-error": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "utils": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
+      "failingTests": []
+    },
+    "without": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
       "failingTests": []
     },
     "{{in-element}}": {
