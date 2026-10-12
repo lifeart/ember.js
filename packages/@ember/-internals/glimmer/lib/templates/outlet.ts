@@ -208,15 +208,10 @@ if (__GXT_MODE__) {
             // If this outlet element is an immediate child of a classic-component
             // wrapper (`{{#x-toggle id="root-9"}}{{outlet}}{{/x-toggle}}`), push
             // that wrapper's view on the parent-view stack so nested components
-            // end up with the correct parentView.
-            //
-            // IMPORTANT: we only push when this outlet element's enclosing wrapper
-            // view matches the CURRENTLY-ACTIVE outlet template chain. Specifically,
-            // if the direct-parent view belongs to a route that is no longer the
-            // one this outlet is rendering (stale leftover DOM from a previous
-            // route), we skip the push. Otherwise root views from a sibling route
-            // (e.g. index.hbs's `root-5`) get a dangling parentView pointer when
-            // the old route's component is destroyed.
+            // end up with the correct parentView. Classic Ember does the same for
+            // every owner: the outlet manager leaves `dynamicScope.view` alone,
+            // so an engine route's components also get the enclosing app
+            // component as their parentView.
             let _parentViewPushed = false;
             try {
               const viewUtils = getGxtRenderer()?.viewUtils;
@@ -225,17 +220,8 @@ if (__GXT_MODE__) {
                 if (directParent) {
                   const v = viewUtils.getElementView(directParent) as any;
                   if (v && !v.isDestroyed && !v.isDestroying) {
-                    // Only push if the owner of this view matches the owner of the
-                    // render we are about to do. If owners match, the wrapper is in
-                    // the same route chain as our nested template; otherwise it's
-                    // leftover from a prior route and pushing it would leave stale
-                    // parentView pointers on nested instances.
-                    const renderOwner = nestedOutlet?.render?.owner;
-                    const viewOwner = (v as any)[Symbol.for('OWNER')] || (v as any).__owner;
-                    if (!renderOwner || !viewOwner || renderOwner === viewOwner) {
-                      viewUtils.pushParentView(v);
-                      _parentViewPushed = true;
-                    }
+                    viewUtils.pushParentView(v);
+                    _parentViewPushed = true;
                   }
                 }
               }
