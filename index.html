@@ -7,9 +7,12 @@
   </head>
   <body>
     <script type="module">
-      // Ensure decorator-transforms runtime is available globally
+      // GXT builds: the gxt compiler lowers decorators in .gjs/.gts to the
+      // `dt7948` global. `__GXT_MODE__` is inlined per build by replaceGxtModeFlag.
       import * as _dt from 'decorator-transforms/runtime';
-      globalThis.dt7948 = _dt;
+      if (__GXT_MODE__) {
+        globalThis.dt7948 = _dt;
+      }
     </script>
     <script type="module">
       import 'qunit/qunit/qunit.js';
@@ -52,79 +55,63 @@
         label: 'Skip tests w/ target _blank',
       });
 
-      // Set a test timeout to prevent individual tests from hanging forever
-      // This is especially important in GXT mode where some rendering operations
-      // can cause infinite backburner loops
-      QUnit.config.testTimeout = 10000; // 10 seconds per test
+      if (__GXT_MODE__) {
+        // GXT test-harness setup. None of it runs in the classic build.
 
-      // --- GXT global test hooks ---
-      // These run for EVERY test, regardless of which test-case base class is used.
-      // They ensure GXT state is clean at the start of each test and cleaned up
-      // after each test, preventing phantom failures from leaked state.
+        // Per-test timeout: some GXT rendering operations can loop in
+        // backburner, and a hung test would otherwise stall the whole run.
+        QUnit.config.testTimeout = 10000;
 
-      QUnit.testStart(function () {
-        // Reset the operation counter so each test gets a fresh budget
-        if (globalThis.__gxtOpCount !== undefined) {
-          globalThis.__gxtOpCount = 0;
-        }
-        // A mid-render throw in a prior test can leave the live-render signal
-        // set (see the templateFn.call catch in compile.ts); a stale truthy
-        // value makes every later {{unbound}} deferred pass look live and
-        // silently un-freezes unbound values. Always start a test clear.
-        globalThis.__gxtCurrentTemplateThis = undefined;
-      });
-
-      QUnit.testDone(function () {
-        // Reset op counter
-        if (globalThis.__gxtOpCount !== undefined) {
-          globalThis.__gxtOpCount = 0;
-        }
-        // Periodically force GC when the harness exposes it (the GXT test
-        // runner launches Chromium with --js-flags=--expose-gc). The
-        // cumulative single-page run accumulates renderer GC debt across ~10k
-        // tests; without this the realm eventually fails allocations outright
-        // (RangeError: Array buffer allocation failed).
-        globalThis.__gxtTestDoneCount = (globalThis.__gxtTestDoneCount || 0) + 1;
-        if (typeof window.gc === 'function' && globalThis.__gxtTestDoneCount % 50 === 0) {
-          try {
-            window.gc();
-          } catch (_e) {
-            /* ignore */
+        // Loop guard: renderer.ts and metal/property_events.ts call
+        // `__gxtOpCheck()` (GXT + DEBUG only); it throws once a test exceeds
+        // the operation budget, breaking an infinite synchronous loop.
+        globalThis.__gxtOpCount = 0;
+        globalThis.__gxtOpLimit = 500000;
+        globalThis.__gxtOpCheck = function () {
+          if (++globalThis.__gxtOpCount > globalThis.__gxtOpLimit) {
+            globalThis.__gxtOpCount = 0;
+            throw new Error('[GXT] Operation limit exceeded - breaking infinite loop');
           }
+        };
+
+        // Skip the nested each-body proxy wrap for self-reactive wrapper
+        // instances (e.g. RFC#1071 cells) whose reads entangle their own native
+        // reactivity. Only this test page sets the flag; see
+        // `_isSelfReactiveWrapper` in compile.ts.
+        if (typeof globalThis.__gxtR6SkipSelfReactive === 'undefined') {
+          globalThis.__gxtR6SkipSelfReactive = true;
         }
-      });
-    </script>
 
-    <script>
-      // Set GXT mode flag BEFORE any modules load so renderer.ts can check it
-      // during module initialization (before compile.ts sets it)
-      globalThis.__GXT_MODE__ = true;
-
-      // Skip the nested each-body proxy wrap for self-reactive wrapper
-      // instances (e.g. RFC#1071 cells) whose reads entangle their own native
-      // reactivity. Only this test page sets the flag; see
-      // `_isSelfReactiveWrapper` in compile.ts.
-      if (typeof globalThis.__gxtR6SkipSelfReactive === 'undefined') {
-        globalThis.__gxtR6SkipSelfReactive = true;
-      }
-
-      // Global operation counter to detect infinite synchronous loops
-      // Any tight loop will increment this. When it exceeds the limit,
-      // we throw to break out of the loop.
-      globalThis.__gxtOpCount = 0;
-      globalThis.__gxtOpLimit = 500000; // 500K operations before we break
-      globalThis.__gxtOpCheck = function () {
-        if (++globalThis.__gxtOpCount > globalThis.__gxtOpLimit) {
+        QUnit.testStart(function () {
+          // Each test gets a fresh operation budget.
           globalThis.__gxtOpCount = 0;
-          throw new Error('[GXT] Operation limit exceeded - breaking infinite loop');
-        }
-      };
+          // A mid-render throw in a prior test can leave the live-render signal
+          // set (see the templateFn.call catch in compile.ts); a stale truthy
+          // value makes every later {{unbound}} deferred pass look live and
+          // silently un-freezes unbound values. Always start a test clear.
+          globalThis.__gxtCurrentTemplateThis = undefined;
+        });
+
+        QUnit.testDone(function () {
+          globalThis.__gxtOpCount = 0;
+          // Periodically force GC when the harness exposes it (the GXT test
+          // runner launches Chromium with --js-flags=--expose-gc). The
+          // cumulative single-page run accumulates renderer GC debt across ~10k
+          // tests; without this the realm eventually fails allocations outright
+          // (RangeError: Array buffer allocation failed).
+          globalThis.__gxtTestDoneCount = (globalThis.__gxtTestDoneCount || 0) + 1;
+          if (typeof window.gc === 'function' && globalThis.__gxtTestDoneCount % 50 === 0) {
+            window.gc();
+          }
+        });
+      }
     </script>
 
     <script type="module">
-      // Import GXT compat layer FIRST to register runtime compiler before templates load
-      // This must happen before any @ember modules are imported
-      import './packages/@ember/-internals/gxt-backend/ember-template-compiler.ts';
+      // GXT builds: registers the gxt runtime template compiler before any
+      // template module loads. Classic builds resolve it to an empty module (see
+      // the gxtTestSetup plugin in vite.config.mjs).
+      import 'virtual:gxt-test-setup';
 
       import setupQUnit from './packages/internal-test-helpers/lib/ember-dev/setup-qunit.ts';
       import { setTesting } from './packages/@ember/debug/index.ts';
@@ -160,6 +147,9 @@
           eager: true,
         }
       );
+
+      // GXT builds: gxt-backend's own tests (an empty module in classic builds).
+      import 'virtual:gxt-tests';
     </script>
 
     <div id="qunit"></div>

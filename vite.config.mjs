@@ -84,6 +84,15 @@ export default defineConfig(({ mode }) => {
           output: {
             preserveModules: true,
           },
+          // As in rollup.config.mjs: the GXT bridge is a side-effect-free
+          // registry and every classic use of it is `__GXT_MODE__`-gated, so
+          // the classic test build drops it once its exports are unused. The
+          // same holds for @lifeart/gxt, which classic tests only reference
+          // from `__GXT_MODE__` branches.
+          treeshake: {
+            moduleSideEffects: (id) =>
+              !id.includes('gxt-backend/gxt-bridge') && !id.includes('/@lifeart/gxt/'),
+          },
         },
         minify: mode === 'production',
       };
@@ -105,6 +114,9 @@ export default defineConfig(({ mode }) => {
       // harness keeps full classic-component support unless a run sets
       // GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0. See types/gxt-ambient.d.ts.
       replaceGxtClassicComponentsFlag(),
+      // `virtual:gxt-test-setup` / `virtual:gxt-tests` (imported by
+      // index.html): GXT-only test-page modules, empty in classic builds.
+      gxtTestSetup(useGxt),
       // Deduplicate GXT internal modules so they share one reactive core.
       // Vite's dev server already follows symlinks for /@fs/ serving, but
       // this plugin ensures consistency in environments where that doesn't work.
@@ -302,6 +314,42 @@ export default defineConfig(({ mode }) => {
       : undefined,
   };
 });
+
+/**
+ * The compat test page's (index.html) two GXT-only modules:
+ * - `virtual:gxt-test-setup`, the first import of the setup script: the gxt
+ *   runtime template compiler, which must register before any template module
+ *   loads;
+ * - `virtual:gxt-tests`, imported by the test script: gxt-backend's own QUnit
+ *   tests (`gxt-backend/__tests__/*-test.ts`).
+ * In classic builds both are empty modules, so the classic test page loads no
+ * gxt-backend code.
+ */
+function gxtTestSetup(useGxt) {
+  const compiler = resolve(
+    projectRoot,
+    'packages/@ember/-internals/gxt-backend/ember-template-compiler.ts'
+  );
+  const modules = {
+    'virtual:gxt-test-setup': `import ${JSON.stringify(compiler)};\n`,
+    'virtual:gxt-tests':
+      "import.meta.glob('/packages/@ember/-internals/gxt-backend/__tests__/*-test.ts', { eager: true });\n",
+  };
+  return {
+    name: 'gxt-test-setup',
+    // Before resolvePackages, which rejects every specifier it does not know.
+    enforce: 'pre',
+    resolveId(source) {
+      return Object.hasOwn(modules, source) ? '\0' + source : null;
+    },
+    load(id) {
+      if (!id.startsWith('\0virtual:gxt-test')) return null;
+      const name = id.slice(1);
+      if (!Object.hasOwn(modules, name)) return null;
+      return useGxt ? modules[name] : 'export {};\n';
+    },
+  };
+}
 
 /**
  * Vite plugin that redirects $_tag, $_maybeHelper, $_dc imports from @lifeart/gxt

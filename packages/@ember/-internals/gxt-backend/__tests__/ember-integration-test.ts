@@ -1,8 +1,7 @@
 /**
  * Ember Integration Tests for GXT
  *
- * This file imports a subset of the main Ember tests to verify
- * the GXT rendering integration works correctly.
+ * GXT rendering-integration tests built on the Ember test infrastructure.
  */
 
 // Import test infrastructure
@@ -14,24 +13,6 @@ import { moduleFor, RenderingTestCase, runTask } from 'internal-test-helpers';
 declare const __GXT_MODE__: boolean;
 const gxtModuleFor: typeof moduleFor = __GXT_MODE__ ? moduleFor : ((() => {}) as any);
 
-// Import full Ember curly-components tests
-import '../../../@ember/-internals/glimmer/tests/integration/components/curly-components-test';
-// Import custom helper tests
-import '../../../@ember/-internals/glimmer/tests/integration/helpers/custom-helper-test';
-// Import helper manager tests
-import '../../../@ember/-internals/glimmer/tests/integration/helpers/helper-manager-test';
-// Import {{get}} helper tests
-import '../../../@ember/-internals/glimmer/tests/integration/helpers/get-test';
-// Import Helper Tracked Properties tests
-import '../../../@ember/-internals/glimmer/tests/integration/helpers/tracked-test';
-// Import {{log}} helper tests
-import '../../../@ember/-internals/glimmer/tests/integration/helpers/log-test';
-// Import {{input}} tests
-import '../../../@ember/-internals/glimmer/tests/integration/components/input-curly-test';
-// Import {{textarea}} tests
-import '../../../@ember/-internals/glimmer/tests/integration/components/textarea-curly-test';
-// Import View tree tests
-import '../../../@ember/-internals/glimmer/tests/integration/components/utils-test';
 import { set } from '@ember/object';
 import Component from '@ember/component';
 import { setComponentTemplate } from '@ember/component';

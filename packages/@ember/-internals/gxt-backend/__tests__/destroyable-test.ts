@@ -17,8 +17,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
   // -------------------------------------------------------- registerDestructor
   QUnit.module('registerDestructor()', function () {
     QUnit.test('registers a destructor that is called on destroy', async function (assert: any) {
-      const { registerDestructor, destroy } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { registerDestructor, destroy } = await import('../destroyable');
       let called = false;
       const obj = {};
       registerDestructor(obj, () => {
@@ -30,8 +29,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
     });
 
     QUnit.test('destructor receives the object as argument', async function (assert: any) {
-      const { registerDestructor, destroy } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { registerDestructor, destroy } = await import('../destroyable');
       let received: any = null;
       const obj = {};
       registerDestructor(obj, (o: any) => {
@@ -42,8 +40,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
     });
 
     QUnit.test('multiple destructors all run', async function (assert: any) {
-      const { registerDestructor, destroy } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { registerDestructor, destroy } = await import('../destroyable');
       const order: number[] = [];
       const obj = {};
       registerDestructor(obj, () => order.push(1));
@@ -58,8 +55,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
     QUnit.test(
       'third argument (eager flag) does not break registration',
       async function (assert: any) {
-        const { registerDestructor, destroy } =
-          await import('../../../@ember/-internals/gxt-backend/destroyable');
+        const { registerDestructor, destroy } = await import('../destroyable');
         let called = false;
         const obj = {};
         // Ember sometimes passes a boolean third arg; it must not be treated as a callback
@@ -79,8 +75,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
   // ----------------------------------------------------------------- destroy()
   QUnit.module('destroy()', function () {
     QUnit.test('marks the object as destroyed', async function (assert: any) {
-      const { registerDestructor, destroy, isDestroyed } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { registerDestructor, destroy, isDestroyed } = await import('../destroyable');
       const obj = {};
       registerDestructor(obj, () => {});
       assert.notOk(isDestroyed(obj), 'not destroyed before');
@@ -89,8 +84,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
     });
 
     QUnit.test('runs destructors synchronously', async function (assert: any) {
-      const { registerDestructor, destroy } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { registerDestructor, destroy } = await import('../destroyable');
       let called = false;
       const obj = {};
       registerDestructor(obj, () => {
@@ -105,15 +99,14 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
   // -------------------------------------------------------------- isDestroyed()
   QUnit.module('isDestroyed()', function () {
     QUnit.test('returns false for a fresh object', async function (assert: any) {
-      const { isDestroyed } = await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { isDestroyed } = await import('../destroyable');
       assert.notOk(isDestroyed({}), 'fresh object is not destroyed');
     });
 
     QUnit.test(
       'returns false DURING willDestroy (destructor execution)',
       async function (assert: any) {
-        const { registerDestructor, destroy, isDestroyed } =
-          await import('../../../@ember/-internals/gxt-backend/destroyable');
+        const { registerDestructor, destroy, isDestroyed } = await import('../destroyable');
         let duringDestroy: boolean | null = null;
         const obj = {};
         registerDestructor(obj, () => {
@@ -133,13 +126,12 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
   // ------------------------------------------------------------ isDestroying()
   QUnit.module('isDestroying()', function () {
     QUnit.test('returns false for a fresh object', async function (assert: any) {
-      const { isDestroying } = await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { isDestroying } = await import('../destroyable');
       assert.notOk(isDestroying({}), 'fresh object is not destroying');
     });
 
     QUnit.test('returns true DURING destructor execution', async function (assert: any) {
-      const { registerDestructor, destroy, isDestroying } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { registerDestructor, destroy, isDestroying } = await import('../destroyable');
       let duringDestruction: boolean | null = null;
       const obj = {};
       registerDestructor(obj, () => {
@@ -150,8 +142,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
     });
 
     QUnit.test('returns true after destroy completes', async function (assert: any) {
-      const { registerDestructor, destroy, isDestroying } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { registerDestructor, destroy, isDestroying } = await import('../destroyable');
       const obj = {};
       registerDestructor(obj, () => {});
       destroy(obj);
@@ -166,7 +157,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
   QUnit.module('nested destruction', function () {
     QUnit.test('destroying parent also destroys children', async function (assert: any) {
       const { registerDestructor, destroy, isDestroyed, associateDestroyableChild } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+        await import('../destroyable');
       let parentDestroyed = false;
       let childDestroyed = false;
       const parent = {};
@@ -190,7 +181,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
 
     QUnit.test('grandchild is also destroyed', async function (assert: any) {
       const { registerDestructor, destroy, isDestroyed, associateDestroyableChild } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+        await import('../destroyable');
       const log: string[] = [];
       const grandparent = {};
       const parent = {};
@@ -215,8 +206,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
   // --------------------------------------------------------- double-destroy
   QUnit.module('double-destroy', function () {
     QUnit.test('second destroy call is a no-op', async function (assert: any) {
-      const { registerDestructor, destroy } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { registerDestructor, destroy } = await import('../destroyable');
       let callCount = 0;
       const obj = {};
       registerDestructor(obj, () => {
@@ -234,8 +224,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
   // ---------------------------------------- enableDestroyableTracking / assertDestroyablesDestroyed
   QUnit.module('tracking stubs', function () {
     QUnit.test('enableDestroyableTracking is a no-op function', async function (assert: any) {
-      const { enableDestroyableTracking } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { enableDestroyableTracking } = await import('../destroyable');
       if (typeof enableDestroyableTracking !== 'function') {
         // Production parity: upstream @glimmer/destroyable defines the
         // tracking helpers only in debug builds — undefined is the correct
@@ -250,8 +239,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
     });
 
     QUnit.test('assertDestroyablesDestroyed is a no-op function', async function (assert: any) {
-      const { assertDestroyablesDestroyed } =
-        await import('../../../@ember/-internals/gxt-backend/destroyable');
+      const { assertDestroyablesDestroyed } = await import('../destroyable');
       if (typeof assertDestroyablesDestroyed !== 'function') {
         // Production parity — see enableDestroyableTracking above.
         assert.strictEqual(assertDestroyablesDestroyed, undefined, 'undefined in production');
