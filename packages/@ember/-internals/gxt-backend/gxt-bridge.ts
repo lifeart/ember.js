@@ -210,6 +210,9 @@ export interface GxtCompilePipelineCapabilities {
   /**
    * Compile a template string into a GXT template factory. Contributed by
    * compile.ts, which also publishes it as `globalThis.__gxtCompileTemplate`.
+   * Besides Ember's compile options it takes `plugins.ast` (AST plugins, run
+   * in the gxt compiler's transform hook) and `throwOnCompileError` (throw the
+   * compiler's errors instead of logging them).
    */
   compileTemplate?(templateString: string, options?: unknown): unknown;
 

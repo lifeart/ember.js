@@ -12528,6 +12528,13 @@ export function precompileTemplate(
     scope?: () => Record<string, unknown>;
     moduleName?: string;
     scopeValues?: Record<string, unknown>;
+    // Ember's `plugins.ast`: AST plugins (`ASTPluginBuilder`s). They run in the
+    // gxt compiler's `transforms` hook, before the Ember-dialect transforms, as
+    // classic Ember runs user plugins before its built-in ones.
+    plugins?: { ast?: ReadonlyArray<ReturnType<typeof buildGxtDialectTransforms>[number]> };
+    // Throw the gxt compiler's errors (parse errors, errors thrown by an AST
+    // plugin) instead of only logging them.
+    throwOnCompileError?: boolean;
   }
 ) {
   // Strict-mode `precompileTemplate(..., { scope: () => ({ Foo, bar }) })`
@@ -12603,8 +12610,12 @@ export function precompileTemplate(
     }
   }
 
-  // Check cache first — skip cache when scopeValues are provided (they contain unique references)
-  const hasScopeValues = options?.scopeValues && Object.keys(options.scopeValues).length > 0;
+  // Check cache first — skip cache when scopeValues or AST plugins are provided
+  // (both are per-call references the source string does not capture)
+  const userAstPlugins = options?.plugins?.ast ?? [];
+  const hasScopeValues =
+    (options?.scopeValues && Object.keys(options.scopeValues).length > 0) ||
+    userAstPlugins.length > 0;
   // Debug tracking removed to avoid unbounded memory growth in long test suites
   // Include strictMode in cache key so the same source string compiled under
   // both modes (strict vs loose) is cached separately — otherwise a loose
@@ -12967,12 +12978,15 @@ export function precompileTemplate(
     // glimmer-next build that exposes `CompileOptions.transforms` (PR #217 /
     // next publish); the currently published 0.0.63 ignores this field — see
     // the file-footer landing note.
-    transforms: buildGxtDialectTransforms(
-      _includeOnExtTransform,
-      options?.scopeValues,
-      _gxtDialectBlockParamNames,
-      _gxtDialectFindings
-    ),
+    transforms: [
+      ...userAstPlugins,
+      ...buildGxtDialectTransforms(
+        _includeOnExtTransform,
+        options?.scopeValues,
+        _gxtDialectBlockParamNames,
+        _gxtDialectFindings
+      ),
+    ],
     flags: {
       IS_GLIMMER_COMPAT_MODE: true,
       WITH_EMBER_INTEGRATION: true,
@@ -13065,6 +13079,11 @@ export function precompileTemplate(
   }
 
   if (compilationResult.errors && compilationResult.errors.length > 0) {
+    if (options?.throwOnCompileError) {
+      throw new Error(
+        compilationResult.errors.map((e: { message: string }) => e.message).join('\n')
+      );
+    }
     console.warn('[gxt-compile] Compilation errors:', compilationResult.errors);
     console.warn('[gxt-compile] Template:', transformedTemplate.slice(0, 200));
   }

@@ -11,6 +11,7 @@ import { VERSION } from '@ember/version';
 import * as templateCompiler from 'ember-template-compiler';
 import { CustomComponentManager, componentCapabilities } from '../manager';
 import { destroy } from '../destroyable';
+import { getGxtRenderer } from '../gxt-bridge';
 
 declare const QUnit: any;
 
@@ -70,6 +71,48 @@ QUnit.module('GXT correctness: ember-template-compiler shim', function () {
 
   QUnit.test('VERSION is the Ember version', function (assert: any) {
     assert.strictEqual((templateCompiler as any).VERSION, VERSION);
+  });
+
+  QUnit.test('compile runs the AST plugins of plugins.ast', function (assert: any) {
+    const removeDataTest = () => ({
+      name: 'remove-data-test',
+      visitor: {
+        ElementNode(node: { attributes: Array<{ name: string }> }) {
+          node.attributes = node.attributes.filter((attr) => attr.name !== 'data-test');
+        },
+      },
+    });
+    const factory = (templateCompiler as any).compile('<p data-test="x" class="y">z</p>', {
+      plugins: { ast: [removeDataTest] },
+    });
+    const element = document.createElement('div');
+    factory().render({}, element);
+    assert.strictEqual(element.innerHTML, '<p class="y">z</p>');
+  });
+});
+
+QUnit.module('GXT correctness: compile pipeline throwOnCompileError', function () {
+  function compile(source: string, options: object) {
+    return getGxtRenderer()!.compilePipeline.compileTemplate!(source, options);
+  }
+
+  QUnit.test('throws a parse error', function (assert: any) {
+    assert.throws(() => compile('<div>{{#if this.x}}</div>', { throwOnCompileError: true }));
+  });
+
+  QUnit.test('throws the error of an AST plugin', function (assert: any) {
+    const failingPlugin = () => ({
+      name: 'failing-plugin',
+      visitor: {
+        ElementNode() {
+          throw new Error('plugin failed');
+        },
+      },
+    });
+    assert.throws(
+      () => compile('<p></p>', { plugins: { ast: [failingPlugin] }, throwOnCompileError: true }),
+      /plugin failed/
+    );
   });
 });
 
