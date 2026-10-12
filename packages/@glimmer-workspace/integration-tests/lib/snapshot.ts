@@ -130,9 +130,7 @@ function stripMarkers(tokens: Token[]): Token[] {
     .map((token) => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
       if (token.type === 'StartTag' && 'attributes' in token && token.attributes) {
-        token.attributes = token.attributes.filter(
-          (a) => a[0] !== 'data-node-id' && a[0] !== 'data-gxt-cid' && a[0] !== 'data-gxt-id'
-        );
+        token.attributes = token.attributes.filter((a) => a[0] !== 'data-node-id');
       }
       return token;
     });

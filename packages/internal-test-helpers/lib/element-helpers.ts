@@ -27,14 +27,7 @@ export function isMarker(node: unknown): node is Comment | typeof TextNode {
     // Empty comments are Glimmer VM markers
     if (text === '') return true;
     // GXT internal placeholder comments
-    if (
-      __GXT_MODE__ &&
-      (text.includes('placeholder') ||
-        text.includes('if-entry') ||
-        text.includes('each-entry') ||
-        text.includes('list-target') ||
-        text === '/htmlRaw')
-    ) {
+    if (__GXT_MODE__ && (text.includes('placeholder') || text === '/htmlRaw')) {
       return true;
     }
   }

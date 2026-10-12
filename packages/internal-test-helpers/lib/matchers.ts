@@ -165,25 +165,15 @@ export function equalsElement(
     });
 
     if (content !== null) {
-      // GXT: strip its internal comments (if-entry placeholders, each-entry markers)
-      // from innerHTML before comparison. These are used by GXT's control flow
-      // for DOM manipulation and should not affect content assertions.
-      //
-      // In a production gxt build (IS_DEV_MODE === false, the deployed dist) the
-      // control-flow placeholder comments are created with an EMPTY body
-      // (`createComment('')` -> `<!---->`) rather than a named body like
-      // `if-entry-placeholder`. A reactive `{{#if}}`/`{{#each}}` keeps its
+      // GXT: strip its empty control-flow marker comments (`<!---->`) from
+      // innerHTML before comparison. A reactive `{{#if}}`/`{{#each}}` keeps its
       // placeholder live so the branch can re-enter the DOM, so the empty marker
-      // remains interleaved with the rendered content (e.g. `true<!---->`). These
-      // empty comments are GXT control-flow artifacts, never user content, so
-      // strip them too. No `assertComponentElement`/`assertElement` content
-      // assertion expects a literal comment node, so this only ever removes
-      // framework markers.
+      // remains interleaved with the rendered content (e.g. `true<!---->`).
+      // These are framework markers, never user content: no
+      // `assertComponentElement`/`assertElement` content assertion expects a
+      // literal comment node.
       const actualContent = __GXT_MODE__
-        ? element.innerHTML.replace(
-            /<!--[^>]*?(?:if-entry|each-entry|ember-if)[^>]*?-->|<!---->/g,
-            ''
-          )
+        ? element.innerHTML.replace(/<!---->/g, '')
         : element.innerHTML;
       assert.pushResult({
         result: actualContent === content,

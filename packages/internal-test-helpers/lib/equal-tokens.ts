@@ -5,11 +5,8 @@ function stripGxtArtifacts(html: string): string {
   if (!__GXT_MODE__) return html;
   return (
     html
-      // Remove GXT placeholder comments (including if-entry)
-      .replace(
-        /<!--(?:placeholder|if-entry|each-entry|list-target|list item|list bottom marker|list fragment target marker|sync-each-placeholder|htmlRaw|\/htmlRaw|curried-start|curried-end)[^>]*-->/g,
-        ''
-      )
+      // Remove GXT placeholder, raw-HTML and curried-component boundary comments
+      .replace(/<!--(?:placeholder|\/htmlRaw|curried-start|curried-end)[^>]*-->/g, '')
       // Remove empty comments left by Glimmer VM (<!---->)
       .replace(/<!---->/g, '')
       // Remove data-node-id attributes

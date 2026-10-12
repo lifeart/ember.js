@@ -7410,11 +7410,9 @@ const _gxtListMarkers = new WeakSet<Comment>();
 }
 
 /**
- * Remove GXT internal artifacts from a DOM container.
- * GXT uses:
- * - Comments like <!--if-entry-placeholder--> for internal bookkeeping
- * - data-node-id attributes for debugging/tracking
- * These should be removed before test assertions.
+ * Remove GXT internal artifacts from a DOM container:
+ * - empty marker comments and `placeholder` comments (except live list markers)
+ * - data-node-id attributes (gxt SSR)
  */
 function removeGxtArtifacts(container: Element | DocumentFragment): void {
   // Remove placeholder comments
@@ -7424,18 +7422,6 @@ function removeGxtArtifacts(container: Element | DocumentFragment): void {
   let node: Comment | null;
   while ((node = walker.nextNode() as Comment | null)) {
     const text = node.textContent || '';
-    // Remove GXT internal placeholder comments, EXCEPT those used by
-    // IfCondition for branch switching (they need to stay in the DOM
-    // so IfCondition.renderBranch can insert content relative to them).
-    // IfCondition placeholders contain 'if-entry' in their text.
-    if (
-      text.includes('if-entry') ||
-      text.includes('each-entry') ||
-      text.includes('dc-placeholder')
-    ) {
-      // Keep these — they're needed by GXT's control flow for DOM manipulation
-      continue;
-    }
     // Never strip live list top/bottom/item markers — the syncList opcode
     // mutates DOM relative to them on later updates.
     if (_gxtListMarkers.has(node)) {
