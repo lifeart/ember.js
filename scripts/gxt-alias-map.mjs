@@ -562,7 +562,9 @@ export const GXT_NATIVE_FORBIDDEN = [
     'template compiler',
   ],
   [
-    /(glimmer-next|@lifeart\/gxt)\/dist\/(compile-|gxt\.runtime-compiler|rehydration-)/,
+    // `flags-*`: the shared compiler chunk (gxt.compiler + gxt.runtime-compiler)
+    // is named after its first module; it was `compile-*` up to 0.0.81.
+    /(glimmer-next|@lifeart\/gxt)\/dist\/(compile-|flags-|gxt\.runtime-compiler|rehydration-)/,
     'gxt runtime compiler / rehydration',
   ],
 ];

@@ -411,7 +411,10 @@ const RULES = [
   [/^gxt:dist\/dom-/, 'gxt: dom chunk (render core, $_tag/$_c/$_if/$_each, list)', M],
   [/^gxt:dist\/vm-/, 'gxt: vm chunk (cells/formulas/opcodes reactivity)', M],
   [
-    /^gxt:dist\/(compile-|gxt\.runtime-compiler)/,
+    // The compiler chunk shared by gxt.compiler / gxt.runtime-compiler is named
+    // after its first module: `compile-*` up to 0.0.81, `flags-*` (plugins/flags.ts)
+    // in the ember-vm-replacement builds.
+    /^gxt:dist\/(compile-|flags-|gxt\.runtime-compiler)/,
     'gxt: RUNTIME template compiler (compile chunk + runtime-compiler entry)',
     L,
   ],
