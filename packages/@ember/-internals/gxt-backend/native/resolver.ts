@@ -1,10 +1,10 @@
-// gxt NATIVE layer — loose-mode (resolver-mode) name resolution (Inc 8; design
-// §2.4, gxt G10 / G11). The native twin of classic `glimmer/lib/resolver.ts`
-// (`lookupComponent` / `lookupHelper` / `lookupModifier`) plus Glimmer's
-// resolution-time assertions (opcode-compiler `resolution.ts`).
+// gxt NATIVE layer — loose-mode (resolver-mode) name resolution. The native
+// twin of classic `glimmer/lib/resolver.ts` (`lookupComponent` /
+// `lookupHelper` / `lookupModifier`) plus Glimmer's resolution-time assertions
+// (opcode-compiler `resolution.ts`).
 //
 // Where names come from: a LOOSE template (a build-time `precompileTemplate(…)`
-// with `strictMode: false` — G10 — or a runtime-compiled loose template) is
+// with `strictMode: false`, or a runtime-compiled loose template) is
 // compiled under NATIVE_FLAGS.EMBER_LOOSE_COMPONENTS, so a free name reaches the
 // host as a STRING:
 //   - `<FooBar>` / `<Foo::Bar>` / `{{#foo-bar}}` / `{{component "foo-bar"}}` →

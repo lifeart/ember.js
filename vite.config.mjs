@@ -138,11 +138,9 @@ export default defineConfig(({ mode }) => {
           // GXT subpath exports need explicit entries for resolvePackages
           '@lifeart/gxt/glimmer-compatibility': '@lifeart/gxt',
           '@lifeart/gxt/runtime-compiler': '@lifeart/gxt',
-          // Previously mapped to bare 'decorator-transforms' (a string, not a
-          // path) which caused vite to 404 on /@id/decorator-transforms and
-          // the test file failed to load, producing "No tests matched the
-          // module" false-hangs. Now both /runtime and the bare root resolve
-          // to real file paths from hiddenDependencies.
+          // `decorator-transforms` (bare and /runtime) resolves to real file
+          // paths via hiddenDependencies: a bare-string mapping here makes vite
+          // 404 on /@id/decorator-transforms.
           // GXT compile chunk externals — only used at build time by the compiler plugin
           '@babel/core': '@lifeart/gxt',
           typescript: '@lifeart/gxt',
@@ -215,9 +213,10 @@ export default defineConfig(({ mode }) => {
             WITH_DYNAMIC_EVAL: 'false',
             WITH_TYPE_CHECKER_HINTS: 'false',
             // Native-layer flags (gxt-native only). EMBER_NATIVE is also a gxt
-            // RUNTIME build constant since Inc 5 (G4 / G9 / G-kw branches in
-            // the gxt dom / helpers / list chunks): `false` folds them away
-            // here, like the WITH_* flags above (design §2.6).
+            // RUNTIME build constant (the host helper manager, curried values
+            // and Ember keyword-helper branches in the gxt dom / helpers / list
+            // chunks): `false` folds them away here, like the WITH_* flags
+            // above.
             EMBER_NATIVE: 'false',
             EMBER_OUTLET: 'false',
             EMBER_PROPERTY_TAGS: 'false',
@@ -391,7 +390,7 @@ function gxtEmberWrapperRedirect() {
  * Vite config for `EMBER_RENDER_BACKEND=gxt-native` (the gxt NATIVE layer).
  * Kept as a separate function so the classic / compat configs above stay
  * byte-for-byte what they were. Shares the gxt-alias-map table with rollup
- * (Inc 10) and the native runtime compiler (Inc 7).
+ * and the native runtime compiler.
  */
 function nativeConfig(mode) {
   return {
@@ -433,7 +432,7 @@ function nativeConfig(mode) {
       version(),
     ],
     // Separate prebundle cache so compat (.vite) and native prebundles can never
-    // cross-contaminate (design §4).
+    // cross-contaminate.
     cacheDir: 'node_modules/.vite-native',
     optimizeDeps: {
       noDiscovery: true,
@@ -530,7 +529,7 @@ function gxtNativeRelativeRedirect() {
 }
 
 /**
- * Native test page support (`native.html`, design §6). Serves
+ * Native test page support (`native.html`). Serves
  * `virtual:gxt-native-tests`: the test-module loaders selected by the allow-list
  * `scripts/gxt-test-runner/native-modules.json` (root-relative globs, expanded
  * by vite's own `import.meta.glob`) and the skip map `native-skip.json`
@@ -597,9 +596,9 @@ function replaceGxtModeFlag(useGxt, gxtTrueFor = null) {
 
 // Mirror of rollup's `replaceGxtClassicComponentsFlag`. Default true; flipped
 // false by GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0 to exercise the compat build with
-// the classic-component emulation DCE'd (the pre-Inc-1 meaning of "gxt-native";
-// `EMBER_RENDER_BACKEND=gxt-native` now selects the native layer, see
-// nativeConfig(), where only the never-loaded manager.ts would read this flag).
+// the classic-component emulation DCE'd. Unrelated to
+// `EMBER_RENDER_BACKEND=gxt-native` (see nativeConfig(), where only the
+// never-loaded manager.ts would read this flag).
 function replaceGxtClassicComponentsFlag() {
   const classic = !(process.env.GXT_NATIVE === '1' || process.env.EMBER_GXT_CLASSIC === '0');
   const literal = classic ? 'true' : 'false';

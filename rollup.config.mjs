@@ -60,13 +60,13 @@ const RENDER_BACKEND = process.env.EMBER_RENDER_BACKEND || 'classic';
 //     GXT_NATIVE_ALIASES table vite uses, plus the resolved-path guard for
 //     relative edges),
 //   - the gxt template compiler under NATIVE_FLAGS over native/**/*.gts and the
-//     G10 `precompileTemplate` call sites (gxtNativeCompiler),
+//     build-time `precompileTemplate` call sites (gxtNativeCompiler),
 //   - the entry map re-pointed at the native modules / VM-only packages dropped
 //     (esmInputs), and
 //   - `@lifeart/gxt` external (resolvePackages, as in every flavor): the
 //     consuming app resolves it and compiles its own templates with the gxt
 //     vite plugin under the same NATIVE_FLAGS.
-// `node scripts/assert-native-dist.mjs` checks the result (DoD #2).
+// `node scripts/assert-native-dist.mjs` checks the result.
 const USE_GXT_BACKEND = RENDER_BACKEND === 'gxt';
 const USE_GXT_NATIVE = RENDER_BACKEND === 'gxt-native';
 
@@ -76,10 +76,10 @@ const USE_GXT_NATIVE = RENDER_BACKEND === 'gxt-native';
 // EMBER_GXT_CLASSIC=0 flip it FALSE, so the `if (__GXT_CLASSIC_COMPONENTS__)` /
 // `if (!__GXT_CLASSIC_COMPONENTS__)` guards in manager.ts const-fold and
 // terser/DCE strips the classic curly + custom-manager + LinkTo +
-// custom-element subtrees (the pre-Inc-1 meaning of "gxt-native", kept for
-// comparison as `EMBER_RENDER_BACKEND=gxt GXT_NATIVE=1` until P3 deletes it).
-// Mirrors the __GXT_MODE__ flag mechanism (replaceGxtClassicComponentsFlag
-// below).
+// custom-element subtrees (an older compat-based "native" build, kept for
+// comparison as `EMBER_RENDER_BACKEND=gxt GXT_NATIVE=1`; it is unrelated to
+// `EMBER_RENDER_BACKEND=gxt-native`). Mirrors the __GXT_MODE__ flag mechanism
+// (replaceGxtClassicComponentsFlag below).
 const GXT_CLASSIC_COMPONENTS = !(
   process.env.GXT_NATIVE === '1' || process.env.EMBER_GXT_CLASSIC === '0'
 );
@@ -184,11 +184,12 @@ function esmInputs() {
   }
   if (USE_GXT_NATIVE) {
     // An entry whose specifier is on the native boundary publishes the NATIVE
-    // module (`@glimmer/validator` → native/validator, `@ember/component` →
-    // the native barrel, `@ember/template-compilation` → the native G10
-    // runtime half, `@ember/template-compiler[/runtime]` → the native runtime
-    // compiler, …) — the module every intra-dist import of that specifier
-    // already resolves to. VM-only packages are not published at all.
+    // module (`@glimmer/validator` → native/validator, `@ember/component` → the
+    // native barrel, `@ember/template-compilation` → the runtime half of
+    // build-time `precompileTemplate`, `@ember/template-compiler[/runtime]` →
+    // the native runtime compiler, …) — the module every intra-dist import of
+    // that specifier already resolves to. VM-only packages are not published at
+    // all.
     for (const key of Object.keys(inputs)) {
       const specifier = key.replace(/^packages\//, '').replace(/\/index$/, '');
       if (GXT_NATIVE_DIST_DROPPED_ENTRIES.has(specifier)) {
@@ -216,17 +217,14 @@ function sharedESMConfig({ input, debugMacrosMode, includePackageMeta = false })
   // Production builds (`dist/prod`, debug macros stripped) drop JSDoc/line
   // comments. Comments carry zero runtime behavior and every consuming app's
   // minifier discards them anyway, so shipping them only inflates the published
-  // dist (and the bundle-size gate that measures it). This matters most for the
-  // GXT backend: the gxt-backend compat layer (manager.ts, compile.ts) is
-  // heavily annotated with design-rationale prose — over half of the raw
-  // `manager` chunk was comment bytes — which brotli compresses far worse than
-  // code, so stripping them is the single largest safe size win. We KEEP the
-  // `@__PURE__` / `@__NO_SIDE_EFFECTS__` / `@license` / `@preserve` annotations
-  // so a downstream minifier still gets its dead-code-elimination hints and any
-  // legal banners survive. Dev builds (`dist/dev`) keep every comment for
-  // debuggability. The `shouldPrintComment` predicate receives the comment body
-  // WITHOUT its `/* */` or `//` delimiters; `@rollup/plugin-babel` forwards it
-  // straight to babel's code generator.
+  // dist (and the bundle-size gate that measures it) — most of all for the
+  // heavily commented gxt-backend compat layer (manager.ts, compile.ts). We
+  // KEEP the `@__PURE__` / `@__NO_SIDE_EFFECTS__` / `@license` / `@preserve`
+  // annotations so a downstream minifier still gets its dead-code-elimination
+  // hints and any legal banners survive. Dev builds (`dist/dev`) keep every
+  // comment for debuggability. The `shouldPrintComment` predicate receives the
+  // comment body WITHOUT its `/* */` or `//` delimiters; `@rollup/plugin-babel`
+  // forwards it straight to babel's code generator.
   if (debugMacrosMode === false) {
     babelConfig.shouldPrintComment = (value) =>
       /@__PURE__|#__PURE__|@__NO_SIDE_EFFECTS__|@license|@preserve/.test(value);
@@ -248,13 +246,12 @@ function sharedESMConfig({ input, debugMacrosMode, includePackageMeta = false })
     resolveTS(),
     version(),
     // Inline the build-time `__GXT_MODE__` flag so the classic dist never
-    // branches on it at runtime. The vite test build does the equivalent via
-    // Vite's `define`; this plugin mirrors that for the rollup-emitted classic
-    // bundle that the published `dist/` ships.
+    // branches on it at runtime. The vite configs use a same-named plugin
+    // (Vite's `define` does not reach source there: `esbuild: false`).
     replaceGxtModeFlag(),
     // Inline the build-time `__GXT_CLASSIC_COMPONENTS__` flag (default true).
-    // A NATIVE build (GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0) flips it false so the
-    // classic-component subtree in manager.ts const-folds away under DCE.
+    // GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0 flips it false so the classic
+    // component subtree in the compat manager.ts const-folds away under DCE.
     replaceGxtClassicComponentsFlag(),
     resolvePackages({ ...exposedDependencies(), ...hiddenDependencies() }),
     pruneEmptyBundles(),
@@ -685,11 +682,10 @@ export function resolvePackages(deps, params) {
 
         // @lifeart/gxt and its subpath exports are always external — they're
         // resolved by the host runtime (vite alias, the published @lifeart/gxt
-        // npm package, or the demo's pnpm-managed copy). This is needed
-        // regardless of EMBER_RENDER_BACKEND because in-repo modules (e.g.
-        // @ember/-internals/metal/lib/tracked.ts) statically import
-        // @lifeart/gxt/glimmer-compatibility. Treating it as external keeps
-        // the classic rollup build able to run at all.
+        // npm package, or the demo's pnpm-managed copy). This applies
+        // regardless of EMBER_RENDER_BACKEND: the gxt-backend modules (compat
+        // shims, the native layer) and some vite-served test modules import
+        // @lifeart/gxt directly, and the vite configs reuse this resolver.
         if (GXT_EXTERNAL_PACKAGES.has(source) || pkgName === '@lifeart/gxt') {
           if (viteDevFallthrough) {
             // Let vite resolve via node_modules natively.
@@ -1013,15 +1009,15 @@ function gxtNativeResolve() {
 
 // The gxt template compiler (`@lifeart/gxt/compiler`) is a VITE plugin. Rollup
 // runs its `transform` hook but never the vite-only `config` hook — and that is
-// where the plugin merges `options.flags` (and returns its `define` map). Without
-// it the transform compiles with gxt's DEFAULT flags: a silent compat-shaped
-// miscompile (no `$_tpl` brand / `$_self` / `$__tag`, `{{on}}` called directly;
-// Inc 10 node rollup probe). So this adapter calls the documented
-// `config(userConfig, env)` hook once, verifies that every NATIVE_FLAGS value
-// reached the merged flag set, and exposes only `transform` (.gts/.gjs, plus the
-// G10 build-time `precompileTemplate` call sites). The dev dist compiles in
-// development mode without the HMR footer. The emitted templates import the gxt
-// runtime from `@lifeart/gxt` (external) and reference no build-flag identifier.
+// where the plugin merges `options.flags` (and returns its `define` map).
+// Without it the transform compiles with gxt's DEFAULT flags: a silent
+// compat-shaped miscompile (no `$_tpl` brand / `$_self` / `$__tag`, `{{on}}`
+// called directly). So this adapter calls the documented `config(userConfig,
+// env)` hook once, verifies that every NATIVE_FLAGS value reached the merged
+// flag set, and exposes only `transform` (.gts/.gjs, plus the build-time
+// `precompileTemplate` call sites). The dev dist compiles in development mode
+// without the HMR footer. The emitted templates import the gxt runtime from
+// `@lifeart/gxt` (external) and reference no build-flag identifier.
 function gxtNativeCompiler(mode) {
   const plugin = gxtCompiler(mode, { flags: { ...NATIVE_FLAGS }, disableHMR: true });
   const define = plugin.config({}, { mode, command: 'build' })?.define ?? {};
@@ -1036,12 +1032,13 @@ function gxtNativeCompiler(mode) {
   return { name: 'gxt-native-compiler', transform: plugin.transform };
 }
 
-// Emits `gxt-native-manifest.json` next to the native dist (dist/<mode>/, outside
-// the `packages/` tree the package exports map serves): per chunk, the source
-// modules it contains (repo-relative) and its static / dynamic imports. The
-// dist-level DoD #2 assertion (scripts/assert-native-dist.mjs) walks the import
-// graph from the SHIPPED files and uses this only to name the source modules
-// inside each reached chunk. JSON, so the *.js size gates never count it.
+// Emits `gxt-native-manifest.json` next to the native dist (dist/<mode>/,
+// outside the `packages/` tree the package exports map serves): per chunk, the
+// source modules it contains (repo-relative) and its static / dynamic imports.
+// The dist-level VM-free assertion (scripts/assert-native-dist.mjs) walks the
+// import graph from the SHIPPED files and uses this only to name the source
+// modules inside each reached chunk. JSON, so the *.js size gates never count
+// it.
 function gxtNativeDistManifest() {
   const rel = (id) => (id.startsWith(projectRoot + '/') ? id.slice(projectRoot.length + 1) : id);
   return {
@@ -1072,8 +1069,8 @@ function gxtNativeDistManifest() {
 // Replace the bare `__GXT_CLASSIC_COMPONENTS__` identifier with the boolean
 // literal for the CURRENT build. Default `true` (compat — classic component
 // emulation retained, byte-identical to an un-gated build because the guards
-// fold to `if (true)` / `if (false) throw`). A NATIVE build sets GXT_NATIVE=1
-// or EMBER_GXT_CLASSIC=0, making this `false` so the gated classic subtrees in
+// fold to `if (true)` / `if (false) throw`). GXT_NATIVE=1 or
+// EMBER_GXT_CLASSIC=0 makes this `false` so the gated classic subtrees in
 // manager.ts become unreferenced and DCE drops them. Mirrors
 // `replaceGxtModeFlag` exactly (same constrained `\b…\b` match, same no-extra-
 // dependency rationale). Applied in every build: the classic dist never

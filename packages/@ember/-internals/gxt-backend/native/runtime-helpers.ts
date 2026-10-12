@@ -4,7 +4,7 @@
 //   `@glimmer/runtime/lib/modifiers/on`     (@ember/modifier `on`)
 //   `@glimmer/runtime/lib/component/template-only` (@ember/component/template-only)
 //
-// The helpers keep Glimmer's own split (Inc 5):
+// The helpers keep Glimmer's own split:
 //   - `hash`, `array`, `concat`, `get`, `fn`, `and`, `or` are INTERNAL helpers
 //     (`internalHelper`: a `(capturedArgs, owner) => Reference` function set as
 //     the internal helper manager of a `{}` definition), ported verbatim onto the

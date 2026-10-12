@@ -4,32 +4,32 @@
 // Assembles a self-contained, consumable `ember-source-gxt` package directory
 // (`dist-gxt-package/` at the repo root, git-ignored) from the GXT Rollup build.
 //
-// This is mechanism (b) from docs-internal-gxt-packaging-design.md: a
-// script-assembled package directory that is `ember-source` built with the GXT
-// rendering backend, shaped so a consumer can `link:`/`file:` it (or scenario-
-// tester `{ target }`) it in place of `ember-source`.
+// A script-assembled package directory (see
+// docs-internal-gxt-packaging-design.md) that is `ember-source` built with the
+// GXT rendering backend, shaped so a consumer can `link:`/`file:` it (or
+// scenario-tester `{ target }`) it in place of `ember-source`.
 //
 // Pipeline (idempotent):
 //   1. clean   — rm -rf dist dist-gxt-package
-//                (the CRITICAL §1.3 trap: Rollup does NOT clean dist/, so a
-//                 GXT-over-classic build leaves ~53 stale classic VM files that
-//                 would fork the reactive runtime. We must start clean.)
+//                (Rollup does NOT clean dist/, so a GXT-over-classic build
+//                 leaves stale classic VM files that would fork the reactive
+//                 runtime. We must start clean.)
 //   2. snapshot the tracked root package.json (the packageMeta() Rollup plugin
 //      MUTATES it at build time; we restore it byte-identical afterwards).
 //   3. EMBER_RENDER_BACKEND=gxt rollup --config  → clean dist/{dev,prod}/packages/*
 //   4. capture the GXT `renamed-modules` map the build wrote into package.json.
 //   5. RESTORE root package.json from the snapshot (fail-loud if not byte-identical).
-//   6. build a CJS dist/ember-template-compiler.js (the §5.5 S-item) so the GXT
-//      addon-main can expose absolutePaths.templateCompiler.
+//   6. build a CJS dist/ember-template-compiler.js so the GXT addon-main can
+//      expose absolutePaths.templateCompiler (read by ember-cli-htmlbars@7).
 //   7. assemble dist-gxt-package/ (dist, lib (GXT-patched), blueprints, types,
 //      bin, build-metadata.json, derived package.json).
 //   8. self-verify (fail-loud seam checks), especially the no-stale-VM guard.
 //
-// Honesty note: the standalone dist/ember-template-compiler.js is the CLASSIC
-// Glimmer wire-format compiler even in GXT mode (design §1.5) — real GXT
-// template compilation is the Vite plugin's job (the open L-item). This entry
-// only exists to stop ember-cli-htmlbars@7 from crashing on
-// `findAddonByName('ember-source').absolutePaths.templateCompiler`.
+// Note: the standalone dist/ember-template-compiler.js is the CLASSIC Glimmer
+// wire-format compiler even in GXT mode (it is a direct rollup input, so the
+// GXT aliases do not apply) — real GXT template compilation is the gxt Vite
+// plugin's job. This entry only exists to stop ember-cli-htmlbars@7 from
+// crashing on `findAddonByName('ember-source').absolutePaths.templateCompiler`.
 
 import { spawnSync } from 'node:child_process';
 import {
@@ -61,7 +61,7 @@ const rootPkgPath = join(repoRoot, 'package.json');
 // from the canonical build contract (scripts/gxt-alias-map.mjs) so this leak
 // check can never drift from what rollup.config.mjs actually drops. Their
 // presence in the assembled dist would mean a stale classic build leaked
-// through (the §1.3 hazard).
+// through.
 const DROPPED_VM_PACKAGES = [...GXT_DROPPED_ENTRIES];
 
 // Symbols that only the real classic Glimmer VM re-exports. If any of these is
@@ -169,7 +169,7 @@ if (!restored.equals(rootPkgSnapshot)) {
 }
 log('restored root package.json byte-identical to pre-build snapshot');
 
-// ---- 6. build CJS dist/ember-template-compiler.js (the S-item) ----------- //
+// ---- 6. build CJS dist/ember-template-compiler.js ------------------------ //
 let templateCompilerBuilt = false;
 const templateCompilerOut = join(distDir, 'ember-template-compiler.js');
 try {
@@ -179,8 +179,8 @@ try {
     throw new Error(`missing rollup input ${input}`);
   }
   // The prod ember-template-compiler entry imports only RELATIVE shared-chunks
-  // (design §1.5 — it is the classic wire-format compiler, self-contained). Bare
-  // specifiers would be a surprise; surface them loudly instead of externalizing.
+  // (it is the classic wire-format compiler, self-contained). Bare specifiers
+  // would be a surprise; surface them loudly instead of externalizing.
   const sawBare = new Set();
   const bundle = await rollup({
     input,
@@ -227,8 +227,7 @@ try {
   templateCompilerBuilt = true;
   log('built + verified CJS dist/ember-template-compiler.js (exports precompile)');
 } catch (err) {
-  // S-item descope path (per task brief): keep the rest of the package green and
-  // document the gap rather than yak-shave. The addon-main still gets an
+  // Fallback: keep the rest of the package usable. The addon-main still gets an
   // absolutePaths.templateCompiler; it just points at a fail-loud stub.
   log(
     `WARNING: CJS template-compiler build failed, falling back to documented stub: ${err.message}`
@@ -348,7 +347,7 @@ log('DONE. Assembled consumable package at dist-gxt-package/');
 // Patch the classic lib/index.cjs into the GXT addon-main:
 //   (1) implicit-modules: drop the 10 VM packages, add @glimmer/application + utils.
 //   (2) add absolutePaths.templateCompiler.
-// Done as deterministic line ops with fail-loud anchors (global fail-loud rule).
+// Done as deterministic line ops with fail-loud anchors.
 function buildGxtAddonMain() {
   const srcPath = join(repoRoot, 'lib', 'index.cjs');
   let lines = readFileSync(srcPath, 'utf8').split('\n');
@@ -428,7 +427,8 @@ function buildGxtPackageJson() {
   delete pkg._originalVersion;
   delete pkg._versionPreviouslyCalculated;
 
-  // @lifeart/gxt MUST be an exact pin (lockstep, RFC §10) — never a range.
+  // @lifeart/gxt MUST be an exact pin — never a range: the dist is built
+  // against one gxt runtime and ships in lockstep with it.
   if (!pkg.dependencies || !pkg.dependencies['@lifeart/gxt']) {
     fail('derived package.json is missing the @lifeart/gxt dependency');
   }
@@ -537,7 +537,8 @@ function selfVerify() {
     log(`  ok: @glimmer/validator is the GXT shim (${relative(outDir, shimModule)})`);
   }
 
-  // (b) NO stale VM packages leaked (the §1.3 critical guard).
+  // (b) NO stale VM packages leaked (stale-VM guard, part 1: Rollup does not
+  // clean dist/).
   for (const mode of ['dev', 'prod']) {
     for (const vm of DROPPED_VM_PACKAGES) {
       const leaked = join(pkgDist, mode, 'packages', ...vm.split('/'), 'index.js');
@@ -551,15 +552,14 @@ function selfVerify() {
   log('  ok: no stale @glimmer/runtime|vm|opcode-compiler|... VM packages in dist');
 
   // (c) no SHIPPED, consumer-importable @glimmer/* package entry re-exports a
-  // real VM symbol. This is the faithful form of the design's "no real VM
-  // renderComponent/LowLevelVM re-exports" guard: the hazard is a consumer
-  // reaching a forked VM/reactive symbol through a published @glimmer/* subpath.
+  // real VM symbol: the hazard is a consumer reaching a forked VM/reactive
+  // symbol through a published @glimmer/* subpath.
   //
   // (We deliberately scope this to @glimmer/* PACKAGE ENTRIES, not shared-chunks
   // and not @ember/*: `renderComponent` is also a legitimate Ember public API
   // (@ember/renderer, @ember/-internals/glimmer), and the GXT build still bundles
   // classic VM code INTERNALLY inside @ember/-internals/glimmer's shared-chunk —
-  // that is pre-existing GXT-build behavior / the +payload L-item, not a
+  // that is pre-existing GXT-build behavior (payload), not a
   // consumer-importable forked surface. The single-sourced reactive core is
   // guaranteed by check (a) (@glimmer/validator is the GXT shim).)
   const distJsFiles = walkFiles(pkgDist, (f) => f.endsWith('.js'));
@@ -615,9 +615,7 @@ function selfVerify() {
   // either @lifeart/gxt(/*), a node builtin, a SELF-reference into ember-source's
   // own dist (a renamed-modules key — these resolve back into this very package
   // via ember-auto-import/Embroider), or a DECLARED dependency. Anything else is
-  // an undeclared/leaked external. (Design §1.2 stated "the only bare specifiers
-  // are @lifeart/gxt(/glimmer-compatibility)" meaning the only true THIRD-PARTY
-  // external; the @ember/*//@glimmer/* self-references resolve via renamed-modules.)
+  // an undeclared/leaked external.
   const builtins = require('node:module').builtinModules;
   const writtenPkgEarly = JSON.parse(readFileSync(join(outDir, 'package.json'), 'utf8'));
   const declaredDeps = new Set([
@@ -657,7 +655,7 @@ function selfVerify() {
       if (spec === '@lifeart/gxt' || spec.startsWith('@lifeart/gxt/')) {
         usedGxtSubpaths.add(spec.replace('@lifeart/gxt', '.'));
       }
-      // The §1.3 critical guard, second half: nothing may still IMPORT a dropped
+      // Stale-VM guard, part 2: nothing may still IMPORT a dropped
       // VM package (its renamed-modules key is gone → would be unresolvable, or
       // resolve to a forked classic copy).
       if (DROPPED_VM_PACKAGES.some((vm) => spec === vm || spec.startsWith(`${vm}/`))) {
@@ -678,7 +676,7 @@ function selfVerify() {
   log('  ok: every bare specifier is @lifeart/gxt(/*), a builtin, a self-ref, or a declared dep');
   log('  ok: no dist file imports any dropped @glimmer VM package');
 
-  // The §1.3 guard, third half: nothing may still INLINE the Glimmer VM
+  // Stale-VM guard, part 3: nothing may still INLINE the Glimmer VM
   // opcode core (an import-free chunk inclusion would pass the import scan
   // above). GXT_DIST_VM_STUBS severs the known pull chains (the classic
   // render fallback, the SSR builders, the bare-index UpdatingVM patch, and

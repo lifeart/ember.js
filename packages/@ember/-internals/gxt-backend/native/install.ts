@@ -1,8 +1,8 @@
-// gxt NATIVE layer — the one place the native layer wires itself into gxt
-// (design §2.2 `install.ts`). Imported for its side effect by native/renderer.ts
-// (the module every Ember render path and the application registry load, the
-// edge classic uses for its VM global context). Registers once; named imports
-// only, so nothing else of gxt is retained.
+// gxt NATIVE layer — the one place the native layer wires itself into gxt.
+// Imported for its side effect by native/renderer.ts (the module every Ember
+// render path and the application registry load, the edge classic uses for its
+// VM global context). Registers once; named imports only, so nothing else of
+// gxt is retained.
 import { DEBUG } from '@glimmer/env';
 import { _getProp } from '@ember/-internals/metal';
 import { registerHostHooks, registerHostManagers } from '@lifeart/gxt';
@@ -34,26 +34,26 @@ export function install(): void {
     // TrustingDynamicAttribute). Production has no warning and no marker.
     trustedAttrValue: DEBUG ? trustedAttrValue : undefined,
     resolveComponentName,
-    // `{{outlet}}` (G3: compiled to `$_outlet(ctx)` under NATIVE_FLAGS.EMBER_OUTLET)
+    // `{{outlet}}` (`$_outlet(ctx)` under NATIVE_FLAGS.EMBER_OUTLET)
     outletComponent: Outlet,
-    // Template property reads (G8: every member segment of a `this.*` /
+    // Template property reads (every member segment of a `this.*` /
     // `@arg.*` / block-param path compiles to `$__tag(obj, "key")` under
     // NATIVE_FLAGS.EMBER_PROPERTY_TAGS): Glimmer's global-context getProp —
     // consumes tagFor(obj, key) (+ the `[]` tag of an array value) and honours
     // `unknownProperty`, so `set()` / `notifyPropertyChange()` on untracked
     // properties re-render.
     getProp: _getProp,
-    // Loose-mode ambiguous append (G11: a content-position `{{name …}}` in a
+    // Loose-mode ambiguous append (a content-position `{{name …}}` in a
     // loose template compiles to `$_looseAppend` under
     // NATIVE_FLAGS.EMBER_LOOSE_COMPONENTS): component, else helper.
     resolveComponentOrHelper,
     // Loose-mode built-ins gxt lowers itself (`array` / `fn` / `hash` /
     // `unique-id`): the classic resolver's overwritten-built-in assertion.
     looseBuiltins: DEBUG ? assertLooseBuiltins : undefined,
-    // Glimmer dynamic content (G15): `{{value}}` renders trusted HTML /
+    // Glimmer dynamic content: `{{value}}` renders trusted HTML /
     // components / helpers by what the value is.
     classifyContent,
-    // `{{#each-in}}` entries (G5): Glimmer's toEachInIterator + tags.
+    // `{{#each-in}}` entries: Glimmer's toEachInIterator + tags.
     eachInEntries,
     // gxt's Glimmer-parity runtime assertions (in-element) via @ember/debug.
     assert: hostAssert,

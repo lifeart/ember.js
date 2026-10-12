@@ -5,11 +5,11 @@
 // code must never confuse them:
 //   - a gxt TEMPLATE FUNCTION: the compiled `<template>` of a template-only
 //     `.gjs`/`.gts` (a route template, `const Foo = <template>…</template>`).
-//     The gxt compiler brands it under NATIVE_FLAGS.EMBER_NATIVE (G14, `$_tpl`);
+//     The gxt compiler brands it (`$_tpl`) under NATIVE_FLAGS.EMBER_NATIVE;
 //     `isTemplateFn` reads the brand. gxt renders it directly.
 //   - an Ember TEMPLATE FACTORY (`factory(owner) -> template`): produced here.
 //     `templateFactory(gxtTemplateFn)` wraps a template function (the factory
-//     returns it for every owner); a G10 build-time `precompileTemplate` maker
+//     returns it for every owner); a build-time `precompileTemplate` maker
 //     gets a LAZY factory (template-compilation.ts); wire-format input (a stale
 //     pre-compiled addon — the native build has no wire format) and a
 //     `precompileTemplate` string that reached runtime get FAILING factories
@@ -46,9 +46,10 @@ export function factoryForTemplate(template: GxtTemplate): NativeTemplateFactory
 }
 
 /**
- * A TemplateFactory whose template is made on first use (`factory(owner)`): the G10 build-time `precompileTemplate` maker runs lazily, so its
- * `scope` values are read when the template is first needed, not when the
- * module evaluates (Glimmer reads `scope()` lazily too).
+ * A TemplateFactory whose template is made on first use (`factory(owner)`): the
+ * build-time `precompileTemplate` maker runs lazily, so its `scope` values are
+ * read when the template is first needed, not when the module evaluates
+ * (Glimmer reads `scope()` lazily too).
  */
 export function lazyFactoryForTemplate(make: () => GxtTemplate): NativeTemplateFactory {
   let template: GxtTemplate | undefined;
@@ -89,7 +90,7 @@ export function templateFor(value: unknown, owner: unknown): GxtTemplate | undef
 // A LOOSE template (runtime-compiled with `strictMode: false`: a test's
 // `this.render('…')`, an ApplicationTestCase / `.hbs` route template) is not a
 // component: `this` is an object the host supplies — the route's controller,
-// the test context. It is compiled with NATIVE_FLAGS.EMBER_SELF (G6), so its
+// the test context. It is compiled with NATIVE_FLAGS.EMBER_SELF, so its
 // `this` paths read `$_self(node)` = `node[$SELF]`, and it is rendered through
 // `selfComponent`: a fresh gxt render node carrying the self, so gxt never
 // writes args / tree ids / rendered nodes onto the controller or test context.
@@ -106,7 +107,7 @@ export function isLooseTemplate(value: unknown): value is GxtTemplate {
 
 /**
  * A gxt-constructible definition that renders `template` with `self` as the
- * self of its `this` paths (G6). gxt constructs it per invocation (`new
+ * self of its `this` paths. gxt constructs it per invocation (`new
  * SelfComponent(args)`), adds the returned node to the render tree and calls
  * `node[$template](args)` with `this` = the node.
  */

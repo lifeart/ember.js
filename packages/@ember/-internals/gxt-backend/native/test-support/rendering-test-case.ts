@@ -7,8 +7,9 @@
 // by the classic renderer — both dropped in native. Here the same API renders
 // natively:
 //   - the template string is runtime-compiled LOOSE under NATIVE_FLAGS
-//     (native/runtime-compile.ts): `this` paths read the template SELF (G6)
-//     and every member segment is a property-tag read (G8);
+//     (native/runtime-compile.ts): `this` paths read the template SELF
+//     (EMBER_SELF) and every member segment is a property-tag read
+//     (EMBER_PROPERTY_TAGS);
 //   - the self (`this.context`) is an EmberObject built from the context hash
 //     (`EmberObject.extend(ctx)` — the classic `Component.extend(ctx)` minus the
 //     view layer), so `set(this.context, 'a.b', …)` re-renders like Glimmer;

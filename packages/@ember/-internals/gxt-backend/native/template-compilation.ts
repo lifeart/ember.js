@@ -1,14 +1,15 @@
 // gxt NATIVE layer — alias target for `@ember/template-compilation`.
 //
 // `precompileTemplate()` is a BUILD-TIME macro. In the native build the gxt
-// compiler compiles every call at build time (G10, under NATIVE_FLAGS
+// compiler compiles every call at build time (under NATIVE_FLAGS
 // .EMBER_NATIVE): it replaces the template STRING with a template MAKER —
 // `(scopeValues) => $_tpl(function () {…})`, the template's lexical names bound
 // from the call's `scope: () => ({…})` — and leaves the call and its options in
 // place. At runtime this `precompileTemplate(maker, options)` returns a native
 // TemplateFactory that makes the template on first use (`scope()` read lazily,
 // like Glimmer) and marks it LOOSE unless `strictMode: true` (Ember's default
-// is loose: rendered with a host self — a route's controller — via G6).
+// is loose: rendered with a host self — a route's controller — via
+// NATIVE_FLAGS.EMBER_SELF).
 //
 // A call whose string survived the build (a non-static template / options, a
 // module the gxt compiler did not process) cannot be compiled without a
@@ -18,7 +19,7 @@
 //
 // `compileTemplate()` (runtime compilation) works once a runtime compiler has
 // been registered (`__registerTemplateCompiler`) — the native entry for that is
-// `native/runtime-compile.ts` (Inc 7, tests / @ember/template-compiler/runtime).
+// `native/runtime-compile.ts` (tests / @ember/template-compiler/runtime).
 import {
   lazyFactoryForTemplate,
   failingTemplateFactory,
@@ -52,7 +53,7 @@ interface PrecompileOptions {
   moduleName?: string;
 }
 
-/** The gxt G10 template maker that replaced a `precompileTemplate` string. */
+/** The gxt template maker that replaced a `precompileTemplate` string. */
 type TemplateMaker = (scopeValues: Record<string, unknown>) => GxtTemplate;
 
 const NO_SCOPE: Readonly<Record<string, unknown>> = Object.freeze({});

@@ -7,10 +7,10 @@
 // Glimmer's prototype-chain lookup, and classic modules call them at MODULE EVAL
 // (InternalComponent's `opaquify`, the `element`/`unique-id` internal helpers,
 // `on`, @glimmer/component's setComponentManager). The manager PROTOCOLS live
-// in the native `$_MANAGERS` tables (native/managers.ts) that gxt's
-// `_component` / `$_maybeHelper` / `$_maybeModifier` consult: component (Inc
-// 4a), helper / modifier (Inc 5) — design §2.3. `Custom*Manager` here only
-// records the public manager factory.
+// in the native `$_MANAGERS` slots (managers.ts, helper-manager.ts,
+// modifier-manager.ts) that gxt's `_component` / `$_maybeHelper` /
+// `$_maybeModifier` consult. `Custom*Manager` here only records the public
+// manager factory.
 import { DEBUG } from '@glimmer/env';
 import { isTemplateFn } from '@lifeart/gxt';
 import { NULL_REFERENCE } from './reference';
@@ -91,7 +91,7 @@ COMPONENT_MANAGERS.set(TemplateOnlyComponentDefinition.prototype, TEMPLATE_ONLY_
 // marks `templateOnly()` definitions. route.ts (`buildRenderState`) relies on
 // this to keep such a template UNINVOKED instead of calling it as
 // `factory(owner)`. The gxt compiler brands template functions under
-// NATIVE_FLAGS.EMBER_NATIVE (G14, `$_tpl`), so this is an exact check — a
+// NATIVE_FLAGS.EMBER_NATIVE (`$_tpl`), so this is an exact check — a
 // TemplateFactory or a plain function is not a template function. A
 // `templateOnly()` definition has TEMPLATE_ONLY_COMPONENT_MANAGER (above).
 export function hasInternalComponentManager(definition: object): boolean {

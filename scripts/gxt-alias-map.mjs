@@ -12,12 +12,11 @@
  *   - scripts/build-gxt-package.mjs                  → leak checks + addon-main
  *                                                       patching off GXT_DROPPED_ENTRIES
  *
- * The rebase onto upstream main proved the sync-fragility this module removes:
- * upstream's vendored `@glimmer/*` migration introduced deep-path imports
- * (e.g. `@glimmer/validator/lib/tracking`) that the vite dev tree must collapse
- * onto the single shim file, while the prefix-string aliases that existed in
- * only one config silently broke. Keeping both derivations off ONE table makes
- * that class of skew impossible.
+ * Separate lists drift: upstream's vendored `@glimmer/*` migration introduced
+ * deep-path imports (e.g. `@glimmer/validator/lib/tracking`) that the vite dev
+ * tree must collapse onto the single shim file, while prefix-string aliases
+ * that existed in only one config silently broke. Keeping both derivations off
+ * ONE table makes that class of skew impossible.
  */
 
 // Directory (repo-relative) holding the compat shims.
@@ -109,16 +108,6 @@ export const GXT_EXTERNAL_PACKAGES = new Set([
 ]);
 
 /**
- * The Glimmer VM packages dropped from the rollup top-level entry map in GXT
- * mode. They remain resolvable via exposedDependencies() (so stray imports
- * still succeed), but are no longer emitted as their own
- * dist/packages/@glimmer/* chunks; anything not reachable from the remaining
- * entry points gets tree-shaken. build-gxt-package.mjs uses the SAME list for
- * its leak checks (a dropped package present in the assembled dist means a
- * stale classic build leaked through — the §1.3 hazard) and for patching the
- * addon-main implicit-modules list, so the two sides cannot drift.
- */
-/**
  * Classic-VM modules stubbed out of the GXT ROLLUP DIST (and only there —
  * the vite test pipeline keeps the real VM for the [integration] jit suite).
  * These ids resolve to gxt-backend/glimmer-runtime-stubs.ts, whose unused
@@ -148,8 +137,8 @@ export const GXT_DIST_VM_STUBS = {
     '@glimmer/runtime/lib/vm/rehydrate-builder',
     '@glimmer/runtime/lib/dom/api',
     '@glimmer/runtime/lib/dom/helper',
-    // SSR builders re-exported by glimmer/lib/dom.ts — FastBoot/SSR is
-    // explicitly out of scope for the GXT preview (RFC §7).
+    // SSR builders re-exported by glimmer/lib/dom.ts — FastBoot/SSR is out of
+    // scope for the GXT backend.
     '@glimmer/node/lib/node-dom-helper',
     '@glimmer/node/lib/serialize-builder',
     // The Glimmer wire-format template compiler behind `template()` from
@@ -168,6 +157,16 @@ export const GXT_DIST_VM_STUBS = {
   ]),
 };
 
+/**
+ * The Glimmer VM packages dropped from the rollup top-level entry map in GXT
+ * mode. They remain resolvable via exposedDependencies() (so stray imports
+ * still succeed), but are no longer emitted as their own
+ * dist/packages/@glimmer/* chunks; anything not reachable from the remaining
+ * entry points gets tree-shaken. build-gxt-package.mjs uses the SAME list for
+ * its leak checks (a dropped package present in the assembled dist means a
+ * stale classic build leaked through) and for patching the addon-main
+ * implicit-modules list, so the two sides cannot drift.
+ */
 export const GXT_DROPPED_ENTRIES = new Set([
   '@glimmer/runtime',
   '@glimmer/opcode-compiler',
@@ -230,11 +229,10 @@ export function isGxtEnabled(env = process.env) {
 // / destroyable.ts / gxt-bridge.ts) is never loaded. AOT templates import the gxt
 // runtime directly (no gxtEmberWrapperRedirect).
 //
-// History: until Inc 1 `gxt-native` meant "compat + __GXT_CLASSIC_COMPONENTS__ =
-// false". That old build never booted and nothing in CI used it; it is still
-// reachable as `GXT_MODE=true GXT_NATIVE=1` (vite) / `EMBER_RENDER_BACKEND=gxt
-// GXT_NATIVE=1` (rollup) for comparison until P3 deletes the classic-component
-// gating.
+// The older "compat bridge + `__GXT_CLASSIC_COMPONENTS__ = false`" build is a
+// different thing: it is reachable as `GXT_MODE=true GXT_NATIVE=1` (vite) /
+// `EMBER_RENDER_BACKEND=gxt GXT_NATIVE=1` (rollup) for comparison only, and
+// nothing in CI builds it.
 
 // Directory (repo-relative) holding the native layer.
 export const GXT_NATIVE_DIR = 'packages/@ember/-internals/gxt-backend/native';
@@ -249,15 +247,14 @@ export function isGxtNative(env = process.env) {
 
 /**
  * gxt compiler flags for the native build. ONE constant shared by the vite
- * plugin (AOT) and — from Inc 7 — `native/runtime-compile.ts`, so AOT and
- * runtime-compiled templates cannot drift (design §7 risk 11).
+ * plugin (AOT) and `native/runtime-compile.ts`, so AOT and runtime-compiled
+ * templates cannot drift.
  *
- * Only flags that the pinned gxt (0.0.81, `plugins/flags.ts` defaultFlags())
- * understands are live keys. A key gxt does not know would be inlined by the
- * compiler plugin's `define` as a dead identifier at best and silently ignored at
- * worst, so the planned native flags stay commented until their gxt change lands
- * (each must ALSO be added to gxt `defaultFlags()` and to the classic `define:`
- * block in vite.config.mjs — design §7 risk 10).
+ * Only flags that the pinned gxt (`plugins/flags.ts` defaultFlags())
+ * understands may be keys here. A key gxt does not know would be inlined by
+ * the compiler plugin's `define` as a dead identifier at best and silently
+ * ignored at worst; a new flag must ALSO be added to gxt `defaultFlags()` and
+ * to the classic `define:` block in vite.config.mjs.
  */
 export const NATIVE_FLAGS = Object.freeze({
   WITH_EMBER_INTEGRATION: true,
@@ -270,46 +267,44 @@ export const NATIVE_FLAGS = Object.freeze({
   EMBER_IN_ELEMENT: true,
   EMBER_TRUSTED_HTML: true,
   WITH_DYNAMIC_EVAL: false,
-  // gxt ember-vm-replacement ec35076 / 4325c53 / 49f4929 — compile flag AND
-  // (since Inc 5) gxt runtime build constant:
-  //   compile: template-only templates get the `$_tpl` brand (G14) and
-  //   block-param member taps emit the non-defining `$__tag` (Inc 4a);
-  //   helper / modifier / curry call sites use literal-or-thunk arguments,
+  // A compile flag AND a gxt runtime build constant:
+  //   compile: template-only templates get the `$_tpl` brand and block-param
+  //   member taps emit the non-defining `$__tag`; helper / modifier / curry
+  //   call sites use literal-or-thunk arguments,
   //   `$_maybeHelper(ref, args, named, ctx, site)` / `$_maybeModifier(…, ctx)`,
-  //   unbound `{{on}}` = Ember's modifier, `<@comp />` = `$_dc` (Inc 5);
-  //   runtime: `$_maybeHelper` hands every helper to the host helper manager
-  //   (G4), curried values (G9), Ember keyword-helper semantics (G-kw),
-  //   `$_dc` nullish / definition objects, list entanglement with Ember
-  //   tracked collections (Inc 5).
+  //   unbound `{{on}}` = Ember's modifier, `<@comp />` = `$_dc`;
+  //   `{{#each-in}}` lowers to `$__eachIn`, whose entries come from the
+  //   `eachInEntries` host hook (native/content.ts);
+  //   runtime: `$_maybeHelper` hands every helper to the host helper manager,
+  //   curried `(component …)` / `(helper …)` / `(modifier …)` values, Ember
+  //   keyword-helper semantics, `$_dc` nullish / definition objects, list
+  //   entanglement with Ember tracked collections.
   EMBER_NATIVE: true,
-  // gxt ember-vm-replacement 575ca3f (compile-only flag, G3): `{{outlet}}`
-  // emits `$_outlet(ctx)`, which renders the native outlet component
-  // (native/outlet.ts, registered as the gxt `outletComponent` host hook). A
-  // block param / lexical binding named `outlet` shadows the keyword.
+  // Compile-only: `{{outlet}}` emits `$_outlet(ctx)`, which renders the
+  // native outlet component (native/outlet.ts, registered as the gxt
+  // `outletComponent` host hook). A block param / lexical binding named
+  // `outlet` shadows the keyword.
   EMBER_OUTLET: true,
-  // gxt ember-vm-replacement (Inc 7, compile-only flags):
-  //   G6: `this` path heads read the template SELF (`const $s = $_self(this)`)
-  //   while `this` stays the gxt render node — a loose route template renders
-  //   with self = its controller, a RenderingTestCase template with self = the
-  //   test context, and gxt never writes args / tree ids onto either.
+  // Compile-only: `this` path heads read the template SELF
+  // (`const $s = $_self(this)`) while `this` stays the gxt render node — a
+  // loose route template renders with self = its controller, a
+  // RenderingTestCase template with self = the test context, and gxt never
+  // writes args / tree ids onto either.
   EMBER_SELF: true,
-  //   G8: every member segment of a `this.*` / `@arg.*` / block-param /
-  //   let-binding path reads through `$__tag(obj, "key")` = the host `getProp`
-  //   hook (metal `_getProp`, native/install.ts): `set()` /
-  //   `notifyPropertyChange()` on untracked properties re-render (Glimmer
-  //   global-context getProp parity).
+  // Compile-only: every member segment of a `this.*` / `@arg.*` /
+  // block-param / let-binding path reads through `$__tag(obj, "key")` = the
+  // host `getProp` hook (metal `_getProp`, native/install.ts): `set()` /
+  // `notifyPropertyChange()` on untracked properties re-render (Glimmer
+  // global-context getProp parity).
   EMBER_PROPERTY_TAGS: true,
-  // gxt ember-vm-replacement (Inc 8, compile-only flag), G11: in a LOOSE
-  // template (`precompileTemplate(…)` with `strictMode: false` — compiled at
-  // build time by G10 under EMBER_NATIVE — or a runtime-compiled loose
-  // template) free names resolve BY NAME through the host (native/resolver.ts):
+  // Compile-only: in a LOOSE template (`precompileTemplate(…)` with
+  // `strictMode: false` — compiled at build time under EMBER_NATIVE — or a
+  // runtime-compiled loose template) free names resolve BY NAME through the
+  // host (native/resolver.ts):
   // `<FooBar>` / `<Foo::Bar>` / `{{#foo-bar}}` / `{{component "foo-bar"}}` →
   // `$_c("foo-bar", …)`, a content `{{foo-bar …}}` → `$_looseAppend(…)`
   // (component or helper). Strict templates are unaffected.
   EMBER_LOOSE_COMPONENTS: true,
-  // TODO (not understood by gxt yet — add as a live key when the gxt change
-  // lands on branch ember-vm-replacement, design §2.6):
-  //   EMBER_EACH_IN: true,          // G5  each-in lowering                    (Inc 9)
 });
 
 const nativeTarget = (name) => `${GXT_NATIVE_DIR}/${name}`;
@@ -333,12 +328,11 @@ const nativeTarget = (name) => `${GXT_NATIVE_DIR}/${name}`;
  * `../tracking`, LinkTo's `../templates/link-to`) is redirected identically, so
  * intra-package edges cannot bypass the boundary.
  *
- * `inc` = the increment that replaces the Inc-1 stub/placeholder with the real
- * implementation (design §5).
+ * `inc` is bookkeeping only; no build step reads it.
  */
 export const GXT_NATIVE_ALIASES = [
   // ---- deep-path redirects (more specific; must precede package aliases) ----
-  // VM-free vendored tracked collections stay REAL (design §2.2); their
+  // VM-free vendored tracked collections stay REAL; their
   // relative `../tracking` / `../validators` edges reach native/validator via
   // the resolved-path guard.
   {
@@ -416,7 +410,7 @@ export const GXT_NATIVE_ALIASES = [
     match: 'exact',
     inc: 4,
   },
-  // The BARE `@glimmer/runtime` entry (Inc 8): its public surface (`on`,
+  // The BARE `@glimmer/runtime` entry: its public surface (`on`,
   // `hash` / `array` / `concat` / `get` / `fn`, `invokeHelper`,
   // `templateOnlyComponent`) is exactly native/runtime-helpers. Ember source
   // never imports the bare entry in the native closure (`--assert-native`);
@@ -438,7 +432,7 @@ export const GXT_NATIVE_ALIASES = [
     match: 'exact',
     inc: 8,
   },
-  // The RUNTIME template compiler (Inc 7): the gxt runtime compiler under the
+  // The RUNTIME template compiler: the gxt runtime compiler under the
   // SAME NATIVE_FLAGS as the AOT vite plugin. Only tests and explicit runtime
   // compilation reach it — never an app closure (`--assert-native` forbids the
   // gxt compiler chunks, @glimmer/syntax, @handlebars, simple-html-tokenizer).
@@ -476,7 +470,7 @@ export const GXT_NATIVE_ALIASES = [
     inc: 7,
   },
   // Native barrel: cuts @glimmer/component -> @ember/component -> classic
-  // Component/CoreView/curly (L8) without editing shared source.
+  // Component/CoreView/curly without editing shared source.
   { find: '@ember/component', target: nativeTarget('component'), match: 'exact' },
 ];
 

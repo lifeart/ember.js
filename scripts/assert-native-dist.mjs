@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// scripts/assert-native-dist.mjs — DoD #2 / #3 on the ROLLUP gxt-native dist.
+// scripts/assert-native-dist.mjs — checks the ROLLUP gxt-native dist: a VM-free
+// app closure, contained template compilers, one reactive system.
 //
 //   rm -rf dist && EMBER_RENDER_BACKEND=gxt-native npx rollup --config
 //   node scripts/assert-native-dist.mjs [--dist dist] [--modes prod,dev] [--json out.json]
@@ -13,7 +14,7 @@
 // @glimmer/component package dist, whose bare `@ember/*` imports resolve into
 // the ember dist) and asserts:
 //
-//   1. VM-FREE (DoD #2): no chunk in that closure contains a module from
+//   1. VM-FREE: no chunk in that closure contains a module from
 //      GXT_NATIVE_FORBIDDEN (scripts/gxt-alias-map.mjs — the same list the vite
 //      harness `--assert-native` uses: Glimmer VM packages, the validator
 //      tag-revision protocol, the gxt compat bridge, the classic VM renderer,
@@ -28,7 +29,7 @@
 //   2. COMPILER CONTAINMENT: across EVERY dist entry, the template compilers
 //      (@glimmer/syntax / @glimmer/compiler / @handlebars / simple-html-tokenizer
 //      and gxt's runtime compiler) are reachable only from COMPILER_ENTRIES.
-//   3. SINGLE REACTIVE SYSTEM (DoD #3, grep level over the closure's code with
+//   3. SINGLE REACTIVE SYSTEM (grep level over the closure's code with
 //      comments stripped): no classic `$REVISION` tag-revision counter, no
 //      `setInterval` render pump, no compat tag<->cell bridge / bridge
 //      publishers / `__gxt*` globalThis wiring; the native validator is in the
@@ -56,10 +57,9 @@ const DIST = resolve(opt('--dist', join(ROOT, 'dist')));
 const modes = opt('--modes', 'prod,dev').split(',');
 const jsonOut = opt('--json', null);
 
-// The public modules a modern (strict or loose) Ember app imports — the
-// design's "modern Ember" scope (components, helpers, modifiers, reactivity,
-// routing / app infra, the renderComponent API) plus the framework base classes
-// routes / services / controllers still extend.
+// The public modules a modern (strict or loose) Ember app imports (components,
+// helpers, modifiers, reactivity, routing / app infra, the renderComponent API)
+// plus the framework base classes routes / services / controllers still extend.
 const APP_ENTRIES = [
   '@ember/application',
   '@ember/application/instance',
@@ -96,7 +96,7 @@ const APP_ENTRIES = [
   '@ember/runloop',
   '@ember/service',
   '@ember/template',
-  // The native runtime half of G10: build-time-compiled loose templates keep a
+  // Build-time-compiled loose templates keep a
   // `precompileTemplate(maker, options)` call that imports this entry.
   '@ember/template-compilation',
   '@ember/utils',
@@ -116,7 +116,8 @@ const COMPILER_REASONS = new Set(['template compiler', 'gxt runtime compiler / r
 const FORBIDDEN_EXTERNALS = new Set(['@lifeart/gxt/runtime-compiler', '@lifeart/gxt/compiler']);
 const GXT_BRIDGE = /gxt-backend\/gxt-bridge\.ts$/;
 
-// DoD #3 grep markers over the app closure's shipped code (comments stripped).
+// Single-reactive-system grep markers over the app closure's shipped code
+// (comments stripped).
 const ABSENT_MARKERS = [
   [/\$REVISION\b/, 'classic Glimmer tag-revision counter ($REVISION)'],
   [/\bsetInterval\s*\(/, 'setInterval render pump'],
@@ -364,7 +365,7 @@ function checkMode(mode) {
     errors.push(`template compiler reachable from non-compiler entries: ${uncontained.join(', ')}`);
   }
 
-  // ---- 3. DoD #3 markers
+  // ---- 3. single-reactive-system markers
   let markerText = appForbidden.text;
   const inert = [];
   for (const [re, why] of KNOWN_INERT) {

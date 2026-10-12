@@ -1,7 +1,7 @@
 // gxt NATIVE layer — the host manager tables gxt consults through
-// `registerHostManagers` (design §2.3): the COMPONENT slot (Inc 4a; Ember
-// internal components such as LinkTo, Inc 6). Helper and modifier slots live in
-// helper-manager.ts / modifier-manager.ts (Inc 5).
+// `registerHostManagers`: the COMPONENT slot (including Ember internal
+// components such as LinkTo). Helper and modifier slots live in
+// helper-manager.ts / modifier-manager.ts.
 //
 // How gxt renders a component: `$_c(Def, args, ctx)` → `_component` asks
 // `$_MANAGERS.component.canHandle(Def)`; when true, `handle(Def, args, fw, ctx)`
@@ -228,7 +228,7 @@ export function resolveComponentName(node: object): string | undefined {
 }
 
 // ---------------------------------------------------------------- curried
-// A curried component (`(component X a=1)`, gxt G9): Glimmer argument rules —
+// A curried component (`(component X a=1)`): Glimmer argument rules —
 // the curried layers' named arguments (inner → outer, later wins) under the
 // invocation's own arguments (which win); the invocation's blocks and
 // forwarded attributes. Values stay lazy (literal-or-thunk / gxt arg getters).
@@ -287,7 +287,7 @@ function handleCurried(curried: object, args: object, fw: unknown, ctx: object):
 
 // ---------------------------------------------------------------- by name
 /**
- * Loose mode (G11): the component registered as `component:<name>` for the
+ * Loose mode: the component registered as `component:<name>` for the
  * render tree's owner, or Glimmer's "nothing was found" error.
  */
 function resolveByName(name: string, ctx: object): object {
@@ -344,7 +344,7 @@ function curriedTemplate(template: GxtTemplate, merged: object): unknown {
 function canHandle(definition: unknown): boolean {
   if (definition === null || definition === undefined) return false;
   const type = typeof definition;
-  // A component NAME: a loose-mode by-name invocation (`$_c("foo-bar")`, G11)
+  // A component NAME: a loose-mode by-name invocation (`$_c("foo-bar")`)
   // or a dynamic component whose value is a name (`{{component this.name}}`).
   if (type === 'string') return (definition as string).length > 0;
   if (type !== 'object' && type !== 'function') return false;
@@ -402,7 +402,7 @@ function handle(
     // arguments as `args` — it is its own render node. Any other context (an
     // EmberObject whose `args` is the manager's `{named, positional}`, a
     // manager-returned POJO, `null`) renders on a fresh node whose self
-    // (`$SELF`, G6) is the context, so gxt never writes onto it.
+    // (`$SELF`) is the context, so gxt never writes onto it.
     const context = delegate.getContext(component);
     const hasContext =
       context !== null && (typeof context === 'object' || typeof context === 'function');

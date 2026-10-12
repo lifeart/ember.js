@@ -3,7 +3,7 @@
 // `lib/collections/*` stay real (they import `../tracking` / `../validators`,
 // which the native resolved-path guard redirects HERE) and are re-exported.
 //
-// ONE reactive system (design §3): an Ember tag IS a gxt cell.
+// ONE reactive system: an Ember tag IS a gxt cell.
 //   - Leaf tags (`tagFor`, `createTag`, `createUpdatableTag`) are gxt `Cell`s.
 //     `tagFor(obj, key)` is gxt's per-(obj, key) cell in `cellsMap` — the same
 //     store gxt `tracked`/`cellFor` use. `valueForTag(cell)` is `cell._revision`,
@@ -19,7 +19,7 @@
 //     chain tags), kept in a WeakMap with Glimmer's buffering semantics.
 //   - `@tracked` storage (`trackedData`) keeps the value IN the tag cell; the
 //     gxt `UNSET` sentinel marks "not initialized" so `tagFor` never has to read
-//     the property (the recursion hazard documented at metal tracked.ts:203).
+//     the property (the recursion hazard documented in metal's tracked.ts).
 // There is no separate revision counter, tag store or reactor list.
 import { DEBUG } from '@glimmer/env';
 import { assert } from '@ember/debug';

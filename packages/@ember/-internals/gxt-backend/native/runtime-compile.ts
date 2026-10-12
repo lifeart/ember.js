@@ -1,5 +1,4 @@
-// gxt NATIVE layer — the RUNTIME template compiler (design §2.2
-// `runtime-compile.ts`). Alias target for
+// gxt NATIVE layer — the RUNTIME template compiler. Alias target for
 //   - `internal-test-helpers/lib/compile`  (default export `compile(source,
 //     options, scopeValues)` → a TemplateFactory: RenderingTestCase /
 //     ApplicationTestCase templates), and
@@ -7,14 +6,13 @@
 //     public runtime `<template>` compiler, strict mode by default).
 //
 // It compiles with the gxt runtime compiler under the SAME `NATIVE_FLAGS`
-// object the AOT vite plugin uses (scripts/gxt-alias-map.mjs — one constant,
-// design §7 risk 11) through gxt `compileTemplateSource`, which shares the
-// AOT assembler's template-function wrapper: a template compiled here is the
-// exact function the AOT build would emit for it (the emission-equality probe
-// checks that). The source is evaluated with every free gxt runtime identifier
-// bound to the export of the same name from `@lifeart/gxt` — the AOT import
-// source — so nothing is installed on globalThis (no `setupGlobalScope`, no
-// Map/Set patching).
+// object the AOT vite plugin uses (scripts/gxt-alias-map.mjs, so the two cannot
+// drift) through gxt `compileTemplateSource`, which shares the AOT assembler's
+// template-function wrapper: a template compiled here is the exact function the
+// AOT build would emit for it. The source is evaluated with every free gxt
+// runtime identifier bound to the export of the same name from `@lifeart/gxt` —
+// the AOT import source — so nothing is installed on globalThis (no
+// `setupGlobalScope`, no Map/Set patching).
 //
 // NEVER part of an app closure: it pulls the gxt compiler + @glimmer/syntax.
 // Only tests and explicit runtime compilation import it (`--assert-native`
@@ -23,7 +21,7 @@
 // Template shapes:
 //   - strict (`strictMode: true`, the runtime `template()` default): a
 //     `$_tpl`-branded template-only component function, exactly like an AOT
-//     `.gjs` `<template>`; `this` = the component (G6: self === node);
+//     `.gjs` `<template>`; `this` = the component (self === node);
 //   - loose (`strictMode: false`, the test-helper `compile()` default): the same
 //     function, marked LOOSE (template-factory.ts): a host renders it with a
 //     self (`selfComponent`) — the test context, a route's controller.
@@ -109,7 +107,7 @@ function compileToFunction(
     moduleName: string;
     bindings: readonly string[];
     lexicalScope?: (name: string) => boolean;
-    /** `false`: a LOOSE template — free names resolve by name (G11). */
+    /** `false`: a LOOSE template — free names resolve by name. */
     strictMode: boolean;
     evaluate: Evaluator;
   }

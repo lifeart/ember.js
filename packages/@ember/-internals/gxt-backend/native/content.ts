@@ -1,22 +1,21 @@
 // gxt NATIVE layer — Glimmer content semantics gxt asks the host about
 // (registered as gxt host hooks by native/install.ts):
 //
-//   classifyContent (G15)  what a content-position `{{value}}` IS: trusted HTML
-//                          (SafeString — Glimmer's `isSafeString`: a `toHTML`
-//                          method), a component (a definition with a component
-//                          manager, `templateOnly()`, a curried component) or a
-//                          helper (an explicit helper manager, a curried
-//                          helper). Text and DOM nodes gxt recognizes itself;
-//                          plain functions keep gxt's call semantics.
-//   eachInEntries (G5)     `{{#each-in}}` entries with Glimmer's
-//                          `toEachInIterator` rules (utils/iterator.ts):
-//                          arrays / plain objects by own keys (consuming each
-//                          key's tag + an array value's `[]` tag), native
-//                          iterables of pairs (Maps), forEach-ables — plus the
-//                          object tag (`-each-in` helper parity: `set(obj,
-//                          'newKey', v)` re-iterates).
-//   assert                 gxt's host-parity runtime checks (in-element
-//                          destination / insertBefore) through `@ember/debug`.
+//   classifyContent  what a content-position `{{value}}` IS: trusted HTML
+//                    (SafeString — Glimmer's `isSafeString`: a `toHTML`
+//                    method), a component (a definition with a component
+//                    manager, `templateOnly()`, a curried component) or a
+//                    helper (an explicit helper manager, a curried helper).
+//                    Text and DOM nodes gxt recognizes itself; plain functions
+//                    keep gxt's call semantics.
+//   eachInEntries    `{{#each-in}}` entries with Glimmer's `toEachInIterator`
+//                    rules (utils/iterator.ts): arrays / plain objects by own
+//                    keys (consuming each key's tag + an array value's `[]`
+//                    tag), native iterables of pairs (Maps), forEach-ables —
+//                    plus the object tag (`-each-in` helper parity:
+//                    `set(obj, 'newKey', v)` re-iterates).
+//   assert           gxt's host-parity runtime checks (in-element destination /
+//                    insertBefore) through `@ember/debug`.
 import { assert } from '@ember/debug';
 import { get, tagForObject } from '@ember/-internals/metal';
 import { isProxy } from '@ember/-internals/utils';

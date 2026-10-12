@@ -4,7 +4,7 @@
 // InternalComponent / LinkTo (`createConstRef`, `isConstRef`, `valueForRef`) and
 // the `element` / `unique-id` helpers (`createComputeRef`, `createConstRef`,
 // `NULL_REFERENCE`). gxt itself never sees a Reference: the native managers
-// (Inc 4/5) adapt gxt args to these shapes at the InternalComponent boundary.
+// adapt gxt args to these shapes at the InternalComponent boundary.
 //
 // A compute ref is a native/validator `createCache` (so its tag is gxt cells);
 // a const / primitive ref carries CONSTANT_TAG. Child refs read and write

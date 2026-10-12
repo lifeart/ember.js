@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// scripts/bundle-modern-app.mjs — modern-app bundle harness (the GXT VM-replacement
-// project's primary metric) + per-source byte inventory.
+// scripts/bundle-modern-app.mjs — modern-app bundle-size harness + per-source
+// byte inventory.
 //
 // Builds smoke-tests/modern-app (a strict-mode `.gjs` Ember app: @glimmer/component
 // class + template-only components, @tracked, trackedArray, a plain-function helper,
@@ -17,30 +17,29 @@
 // everything the page loads before first render; dynamic-import chunks are listed
 // separately) as raw / gzip / brotli (Node zlib defaults, same as
 // scripts/bundle-size-check.mjs). Every number includes @lifeart/gxt's own runtime
-// (resolved from node_modules — link a local build with
-// scripts/gxt-test-runner/zz-gxt-link-local.sh) and the app's code.
+// (resolved from node_modules) and the app's code.
 //
 // Byte inventory: each boot file's (hidden) sourcemap attributes every MINIFIED
 // output byte to its original source file; sources are grouped (gxt runtime chunk,
 // @glimmer/<pkg>, gxt-backend file, metal area, runloop, routing, classic object
 // model, @ember/component classic, …) and classified MODERN-NEEDED / LEGACY /
-// VM-TO-REPLACE against the VM-replacement goal. Group brotli = brotli of the
-// concatenation of that group's minified bytes (not additive across groups).
+// VM-TO-REPLACE. Group brotli = brotli of the concatenation of that group's
+// minified bytes (not additive across groups).
 //
-// Usage (repo root; ONE build at a time, each under a hard timeout):
+// Usage (repo root):
 //   node scripts/bundle-modern-app.mjs                       # build + measure all 3
 //   node scripts/bundle-modern-app.mjs --variants gxt-native  # subset
 //   node scripts/bundle-modern-app.mjs --no-build             # measure existing dists
 //   node scripts/bundle-modern-app.mjs --boot                 # + boot-check each variant
 //   node scripts/bundle-modern-app.mjs --json out.json --inventory
 //   node scripts/bundle-modern-app.mjs --variants gxt-native --assert-native
-//                                     # DoD #2: fail if the native closure ships
+//                                     # fail if the native closure ships
 //                                     # any Glimmer-VM / compat-bridge / runtime-
 //                                     # template-compiler module (see FORBIDDEN_NATIVE)
 //
-// FROM-DIST variants (`--from-dist`; DoD #1 is measured from DIST): the same app
-// built against a ROLLUP dist snapshot of ember-source — how apps consume ember —
-// through smoke-tests/modern-app/vite.dist.config.mjs:
+// FROM-DIST variants (`--from-dist`): the same app built against a ROLLUP dist
+// snapshot of ember-source — how apps consume ember — through
+// smoke-tests/modern-app/vite.dist.config.mjs:
 //
 //   classic-dist     classic `npx rollup --config` dist; templates via content-tag
 //                    + babel-plugin-ember-template-compilation (the dist's
@@ -57,20 +56,6 @@
 //     --assert-native on gxt-native-dist: scripts/assert-native-dist.mjs on the
 //       snapshot, plus "every dist chunk the app's bundle pulled is inside the
 //       asserted app closure".
-//
-// gxt compiler seams (P0a) — FIXED in gxt, no app workaround any more:
-//   * G1 (glimmer-next ember-vm-replacement 9c46a76): gxt's template-tag babel
-//     pass is hermetic (configFile:false, babelrc:false) and resolves
-//     @babel/preset-typescript / decorator-transforms from gxt's own location.
-//     Before it, the host babel.config.mjs's TypeScript plugin elided imports
-//     referenced only inside <template> (lexical components became string
-//     `$_tag('Counter')` owner lookups) and the presets only resolved through
-//     pnpm's .bin/vite NODE_PATH. The app's `void [X];` keep-alives are gone.
-//   * G2 (2abe1bf): a lexically bound `<LinkTo>` stays `$_c(LinkTo, …)` instead
-//     of the compat kebab mapping `$_tag('link-to', …)`.
-//   Both need the LOCAL gxt link (scripts/gxt-test-runner/zz-gxt-link-local.sh)
-//   until a gxt release ships them: with published 0.0.81 the gxt variants
-//   silently lose their template-only imports again.
 import { spawnSync } from 'node:child_process';
 import {
   copyFileSync,
@@ -412,8 +397,8 @@ const RULES = [
   [/^gxt:dist\/vm-/, 'gxt: vm chunk (cells/formulas/opcodes reactivity)', M],
   [
     // The compiler chunk shared by gxt.compiler / gxt.runtime-compiler is named
-    // after its first module: `compile-*` up to 0.0.81, `flags-*` (plugins/flags.ts)
-    // in the ember-vm-replacement builds.
+    // after its first module: `compile-*` up to gxt 0.0.81, `flags-*`
+    // (plugins/flags.ts) since 0.0.82.
     /^gxt:dist\/(compile-|flags-|gxt\.runtime-compiler)/,
     'gxt: RUNTIME template compiler (compile chunk + runtime-compiler entry)',
     L,

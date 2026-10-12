@@ -4,10 +4,9 @@
 // Why a native barrel: `@glimmer/component` imports `setComponentManager` and
 // `capabilities` from `@ember/component`, and the classic barrel's default
 // export drags the whole classic Component / CoreView / curly manager /
-// TargetActionSupport subtree into every app (P0a lever L8, −3.1 KB br). Editing
-// the shared `@glimmer/component` source would also move the classic bar, so the
-// cut happens here (design §2.2/§4). Same export names as the classic barrel,
-// plus `templateOnly` (design §2.2).
+// TargetActionSupport subtree into every app. Editing the shared
+// `@glimmer/component` source would also change the classic build, so the cut
+// happens here. Same export names as the classic barrel, plus `templateOnly`.
 export { setComponentTemplate, getComponentTemplate } from './manager-api';
 export { componentCapabilities as capabilities } from './manager-api';
 export { setComponentManager } from '@ember/-internals/glimmer/lib/utils/managers';

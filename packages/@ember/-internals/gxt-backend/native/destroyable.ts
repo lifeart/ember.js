@@ -14,12 +14,12 @@
 // also runs gxt's destructors registered on `x` (unless gxt already started
 // tearing `x` down), so an Ember-destroyed object releases its gxt bindings in
 // the same eager phase. The opposite edge — gxt tearing down a component node
-// that has Ember destructors / children — is the native component manager's
-// gxt destructor calling Ember `destroy(instance)` (Inc 4; Glimmer's
-// `destroyComponent` already does exactly that). Ember keeps its own metadata
-// (parents / children / two queues / unregister / test tracking) because gxt's
-// registry is synchronous, append-only and parent-agnostic; destructors are
-// registered in exactly ONE of the two registries, never mirrored.
+// that has Ember destructors / children — is the native component manager's gxt
+// destructor calling Ember `destroy(instance)` (Glimmer's `destroyComponent`
+// does exactly that). Ember keeps its own metadata (parents / children / two
+// queues / unregister / test tracking) because gxt's registry is synchronous,
+// append-only and parent-agnostic; destructors are registered in exactly ONE of
+// the two registries, never mirrored.
 import { DEBUG } from '@glimmer/env';
 import { schedule } from '@ember/runloop';
 import getDebugName from '@ember/-internals/utils/lib/get-debug-name';

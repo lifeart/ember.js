@@ -1,6 +1,6 @@
 // gxt NATIVE layer — alias target for `@ember/-internals/glimmer/lib/renderer`
-// (the classic VM renderer + its `@glimmer/runtime` / opcode-compiler /
-// program residue: P0a lever L4, never imported in native).
+// (the classic VM renderer and the `@glimmer/runtime` / opcode-compiler /
+// program code it pulls in are never imported in native).
 //
 // A render ROOT is one gxt `Root` (createRoot) with the Ember owner provided as
 // gxt context (`OWNER`, read by the native component manager), rendered with

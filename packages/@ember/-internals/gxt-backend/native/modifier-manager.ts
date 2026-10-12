@@ -1,4 +1,4 @@
-// gxt NATIVE layer — the `$_MANAGERS.modifier` slot (design §2.3 "Modifier").
+// gxt NATIVE layer — the `$_MANAGERS.modifier` slot.
 //
 // Under NATIVE_FLAGS.EMBER_NATIVE every element modifier compiles to
 //   $n => $_maybeModifier(definition, $n, [args], {named}, ctx)
@@ -353,7 +353,7 @@ function handle(
       ? undefined
       : (getContext<object>(renderCtx as never, OWNER, false) ?? undefined);
 
-  // A modifier NAME (`{{on}}`, a loose-mode `<div {{foo-bar}}>` — G11):
+  // A modifier NAME (`{{on}}`, a loose-mode `<div {{foo-bar}}>`):
   // classic `lookupModifier` for the render tree's owner.
   let resolvedName: string | null = null;
   if (typeof definition === 'string') {

@@ -1,8 +1,8 @@
-// gxt NATIVE layer — the host hooks gxt calls (design §2.2 `host-hooks.ts`,
-// §3 "Scheduling" / "Backtracking"). Registered once by native/install.ts.
+// gxt NATIVE layer — the host hooks gxt calls (scheduling, backtracking,
+// attribute writes). Registered once by native/install.ts.
 //
 // SCHEDULING. gxt calls `scheduleRevalidate` for every cell change and for
-// every Ember tag dirty (G12 `dirtyCell` is the single DIRTY_TAG path), so it
+// every Ember tag dirty (gxt `dirtyCell` is the single DIRTY_TAG path), so it
 // IS Glimmer's global-context `scheduleRevalidate`. Like classic
 // environment.ts it ensures a backburner instance (async observers flush at the
 // end of that (auto)run loop; `settled()` waits for it) and, like the classic
@@ -22,7 +22,7 @@
 // BACKTRACKING (DEV). Every render — the initial render of a root and every
 // pass — runs inside the validator's `runInTrackingTransaction`, so
 // `trackedData` / `dirtyTagFor` assert "You attempted to update X, but it had
-// already been used previously in the same computation" (replaces G13).
+// already been used previously in the same computation".
 import { DEBUG } from '@glimmer/env';
 import { ENV } from '@ember/-internals/environment';
 import { constructStyleDeprecationMessage } from '@ember/-internals/views/lib/system/utils';

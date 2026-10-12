@@ -21,10 +21,10 @@
 // Pipeline (fail-loud at every step):
 //   1. preflight: the gxt the dist compiles against (version, local build?)
 //   2. rollup native build through rollup.config.mjs's own configs, written
-//      straight into an EMPTY <out>/dist (the stale-classic-file trap of
-//      docs-internal-gxt-packaging-design.md §1.3 cannot happen) — without the
-//      package-meta plugin, so the tracked package.json is never rewritten and
-//      dist/ (the classic build) is never touched
+//      straight into an EMPTY <out>/dist (Rollup does not clean its output
+//      directory, so stale classic VM files could otherwise survive) — without
+//      the package-meta plugin, so the tracked package.json is never rewritten
+//      and dist/ (the classic build) is never touched
 //   3. optional --compare: byte-identical to the measured dist snapshot
 //   4. prune the non-app entries that still reach Glimmer VM / wire-format
 //      compiler code (explicit list, with the reason the preset reports)

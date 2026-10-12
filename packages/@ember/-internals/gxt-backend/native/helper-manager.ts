@@ -1,4 +1,4 @@
-// gxt NATIVE layer — the `$_MANAGERS.helper` slot (design §2.3 "Helper", G4).
+// gxt NATIVE layer — the `$_MANAGERS.helper` slot.
 //
 // Under NATIVE_FLAGS.EMBER_NATIVE every helper invocation compiles to
 //   $_maybeHelper(definition, [args], {named}, ctx, site)
@@ -16,7 +16,7 @@
 // formula, so it stays subscribed.
 //
 // Definitions:
-//   - a curried helper (`(helper X 1)`, G9): resolved with Glimmer's rules —
+//   - a curried helper (`(helper X 1)`): resolved with Glimmer's rules —
 //     curried positional first, later named arguments win;
 //   - a public custom manager (`setHelperManager`, capabilities 3.23; the
 //     classic `Helper` class and `helper()` wrapper use it): delegate per owner,
@@ -34,7 +34,7 @@
 //     runtime-helpers.ts `valueForCallSite`), that form's value, with no
 //     references at all;
 //   - a string: a loose-mode helper NAME (`(foo-bar)`, `attr={{foo-bar}}`, a
-//     `{{foo-bar}}` the host resolved to a helper — G11) or an unbound Ember
+//     `{{foo-bar}}` the host resolved to a helper) or an unbound Ember
 //     keyword helper gxt does not compile natively (`neq`, `gt`, …; Ember
 //     auto-imports them in strict mode): resolved with classic `lookupHelper`
 //     (native/resolver.ts) when the call site's instance is created; a miss is

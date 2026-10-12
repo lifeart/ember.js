@@ -1,7 +1,7 @@
 // gxt NATIVE layer — alias target for `@ember/-internals/glimmer/lib/views/outlet`
 // (registered as `view:-outlet`), plus the two outlet pieces classic Ember keeps
 // in `syntax/outlet.ts` / `component-managers/{outlet,route-template}.ts` /
-// `templates/outlet.ts` (design §2.2 outlet.ts):
+// `templates/outlet.ts`:
 //
 //   OutletView     the router's top-level view. Holds the router's outlet state
 //                  in a gxt cell: `setOutletState` = one cell write, which
@@ -10,7 +10,7 @@
 //                  queue like classic; the renderer renders `Outlet` as an app
 //                  root (native/renderer.ts `renderRoot`).
 //   Outlet         the component gxt renders for `{{outlet}}` (`$_outlet(ctx)`,
-//                  G3 — registered as the gxt `outletComponent` host hook by
+//                  registered as the gxt `outletComponent` host hook by
 //                  install.ts). Reads the PARENT outlet state from the render
 //                  context (`OUTLET_STATE`), renders `outlets.main.render.template`
 //                  with `@model` / `@controller`, and provides its own state to
@@ -29,10 +29,10 @@
 // Route templates are COMPONENTS (`hasInternalComponentManager`: a strict
 // `.gjs`/`.gts` template (gxt template function), a component class, a
 // `templateOnly()` definition) or LOOSE templates (`this` = the controller,
-// rendered through `selfComponent` — G6 EMBER_SELF): runtime-compiled (Inc 7)
-// or a build-time `precompileTemplate(…)` compiled by gxt (G10, Inc 8). Anything
-// else (a wire-format template from a stale pre-compiled addon) fails loudly
-// instead of rendering wrongly.
+// rendered through `selfComponent`, NATIVE_FLAGS.EMBER_SELF): runtime-compiled
+// or a build-time `precompileTemplate(…)` compiled by gxt. Anything else (a
+// wire-format template from a stale pre-compiled addon) fails loudly instead of
+// rendering wrongly.
 //
 // The outlet manages its own region instead of gxt `$_dc` (`$_dc` leaves one
 // anchor comment behind per swap and treats object definitions
@@ -218,7 +218,7 @@ export function Outlet(this: GxtNode): unknown {
 
   const renderRoute = (definition: Definition): GxtNode => {
     const { template, render } = definition;
-    // A LOOSE route template (runtime-compiled, `this` = the controller; G6):
+    // A LOOSE route template (runtime-compiled, `this` = the controller):
     // rendered on a fresh gxt node whose self is the controller.
     const loose = isLooseTemplate(template);
     if (!loose && !hasInternalComponentManager(template)) {
