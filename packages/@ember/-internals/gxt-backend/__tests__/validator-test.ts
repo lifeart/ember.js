@@ -10,7 +10,7 @@ declare const QUnit: any;
 // GXT-only suite: under the classic VM backend these exercise gxt-backend
 // machinery that is intentionally inert there (the bridge registry reads
 // null) — register the whole file as skipped in classic builds. The bare
-// __GXT_MODE__ flag is inlined per build by replaceGxtModeFlag.
+// __GXT_MODE__ flag is inlined per build by replaceBuildConstant.
 declare const __GXT_MODE__: boolean;
 const gxtSuiteModule: any = __GXT_MODE__ ? QUnit.module : QUnit.module.skip;
 

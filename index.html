@@ -8,7 +8,7 @@
   <body>
     <script type="module">
       // GXT builds: the gxt compiler lowers decorators in .gjs/.gts to the
-      // `dt7948` global. `__GXT_MODE__` is inlined per build by replaceGxtModeFlag.
+      // `dt7948` global. `__GXT_MODE__` is inlined per build by replaceBuildConstant.
       import * as _dt from 'decorator-transforms/runtime';
       if (__GXT_MODE__) {
         globalThis.dt7948 = _dt;
@@ -24,7 +24,7 @@
       // Tests expect observers to fire synchronously during notifyPropertyChange.
       // Classic keeps upstream's async default (`true`) — flipping it changes
       // observer/CP timing and fails the classic observer suites. The bare
-      // flag is inlined per build by replaceGxtModeFlag.
+      // flag is inlined per build by replaceBuildConstant.
       EmberENV._DEFAULT_ASYNC_OBSERVERS = !__GXT_MODE__;
 
       // Handle testing feature flags

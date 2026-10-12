@@ -6,6 +6,7 @@ import glob from 'glob';
 import * as resolveExports from 'resolve.exports';
 import { babel } from '@rollup/plugin-babel';
 import sharedBabelConfig from './babel.config.mjs';
+import { replaceBuildConstant } from './scripts/replace-build-constant.mjs';
 import {
   GXT_SHIM_DIR,
   GXT_SHIM_ALIASES,
@@ -79,7 +80,7 @@ const USE_GXT_NATIVE = RENDER_BACKEND === 'gxt-native';
 // custom-element subtrees (an older compat-based "native" build, kept for
 // comparison as `EMBER_RENDER_BACKEND=gxt GXT_NATIVE=1`; it is unrelated to
 // `EMBER_RENDER_BACKEND=gxt-native`). Mirrors the __GXT_MODE__ flag mechanism
-// (replaceGxtClassicComponentsFlag below).
+// (`replaceBuildConstant` in the plugin list below).
 const GXT_CLASSIC_COMPONENTS = !(
   process.env.GXT_NATIVE === '1' || process.env.EMBER_GXT_CLASSIC === '0'
 );
@@ -245,14 +246,19 @@ function sharedESMConfig({ input, debugMacrosMode, includePackageMeta = false })
     }),
     resolveTS(),
     version(),
-    // Inline the build-time `__GXT_MODE__` flag so the classic dist never
-    // branches on it at runtime. The vite configs use a same-named plugin
-    // (Vite's `define` does not reach source there: `esbuild: false`).
-    replaceGxtModeFlag(),
+    // Inline the build-time `__GXT_MODE__` flag: `false` for the classic and
+    // gxt-native dists, `true` for the EMBER_RENDER_BACKEND=gxt dist. Modules
+    // shared by both backends branch on it (e.g. templates/root.ts and
+    // templates/outlet.ts export the classic precompiled template vs the GXT
+    // factory), and terser/DCE then drops the dead branch. The vite configs
+    // use the same plugin.
+    replaceBuildConstant('__GXT_MODE__', () => USE_GXT_BACKEND),
     // Inline the build-time `__GXT_CLASSIC_COMPONENTS__` flag (default true).
     // GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0 flips it false so the classic
     // component subtree in the compat manager.ts const-folds away under DCE.
-    replaceGxtClassicComponentsFlag(),
+    // The classic dist never imports manager.ts, so there it is a no-op that
+    // only guarantees no bare identifier survives into an emitted chunk.
+    replaceBuildConstant('__GXT_CLASSIC_COMPONENTS__', () => GXT_CLASSIC_COMPONENTS),
     resolvePackages({ ...exposedDependencies(), ...hiddenDependencies() }),
     pruneEmptyBundles(),
   ];
@@ -923,33 +929,6 @@ const allowedCycles = [
   'packages/@ember/-internals/gxt-backend/native/managers',
 ];
 
-// Replace the bare `__GXT_MODE__` identifier with the boolean literal for the
-// CURRENT rollup backend: `false` for the classic dist, `true` for the
-// EMBER_RENDER_BACKEND=gxt dist (mirroring what the vite GXT harness defines).
-// Modules shared by both backends branch on this flag — e.g.
-// templates/root.ts and templates/outlet.ts export the classic precompiled
-// template vs the GXT factory — so hardcoding `false` here shipped the wrong
-// branch into whichever dist runs the other backend. After this transform,
-// terser/DCE collapses `if (__GXT_MODE__) { ... }` to the live branch.
-//
-// `@rollup/plugin-replace` is avoided to skip a new dependency. The match is
-// trivially constrained to the literal identifier (\b__GXT_MODE__\b) and the
-// produced source matches what plugin-replace would emit.
-function replaceGxtModeFlag() {
-  const GXT_MODE_RE = /\b__GXT_MODE__\b/g;
-  const literal = String(USE_GXT_BACKEND);
-  return {
-    name: 'replace-gxt-mode-flag',
-    transform(code, id) {
-      if (id.includes('/node_modules/')) return null;
-      if (!code.includes('__GXT_MODE__')) return null;
-      const replaced = code.replace(GXT_MODE_RE, literal);
-      if (replaced === code) return null;
-      return { code: replaced, map: null };
-    },
-  };
-}
-
 // ---------------------------------------------------------------------------
 // gxt NATIVE dist (EMBER_RENDER_BACKEND=gxt-native)
 // ---------------------------------------------------------------------------
@@ -1062,31 +1041,6 @@ function gxtNativeDistManifest() {
         fileName: 'gxt-native-manifest.json',
         source: JSON.stringify({ nativeFlags: NATIVE_FLAGS, chunks }, null, 1) + '\n',
       });
-    },
-  };
-}
-
-// Replace the bare `__GXT_CLASSIC_COMPONENTS__` identifier with the boolean
-// literal for the CURRENT build. Default `true` (compat — classic component
-// emulation retained, byte-identical to an un-gated build because the guards
-// fold to `if (true)` / `if (false) throw`). GXT_NATIVE=1 or
-// EMBER_GXT_CLASSIC=0 makes this `false` so the gated classic subtrees in
-// manager.ts become unreferenced and DCE drops them. Mirrors
-// `replaceGxtModeFlag` exactly (same constrained `\b…\b` match, same no-extra-
-// dependency rationale). Applied in every build: the classic dist never
-// imports manager.ts, so this is a no-op there, but replacing universally
-// guarantees no bare identifier ever survives into any emitted chunk.
-function replaceGxtClassicComponentsFlag() {
-  const RE = /\b__GXT_CLASSIC_COMPONENTS__\b/g;
-  const literal = String(GXT_CLASSIC_COMPONENTS);
-  return {
-    name: 'replace-gxt-classic-components-flag',
-    transform(code, id) {
-      if (id.includes('/node_modules/')) return null;
-      if (!code.includes('__GXT_CLASSIC_COMPONENTS__')) return null;
-      const replaced = code.replace(RE, literal);
-      if (replaced === code) return null;
-      return { code: replaced, map: null };
     },
   };
 }

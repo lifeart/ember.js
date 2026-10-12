@@ -1,7 +1,7 @@
 // Build-time constants for the GXT rendering backend.
 
 // `__GXT_MODE__` is replaced with a boolean literal by the vite and rollup
-// builds (`replaceGxtModeFlag`), so the identifier never survives into a
+// builds (`scripts/replace-build-constant.mjs`), so the identifier never survives into a
 // bundle. Read it as the bare identifier (not `globalThis.__GXT_MODE__`) so the
 // substitution const-folds and dead-code elimination drops the unused branch.
 declare const __GXT_MODE__: boolean;

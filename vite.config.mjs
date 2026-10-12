@@ -26,6 +26,7 @@ import {
   matchGxtNativeAlias,
 } from './scripts/gxt-alias-map.mjs';
 import { templateTag } from '@embroider/vite';
+import { replaceBuildConstant } from './scripts/replace-build-constant.mjs';
 
 const localRequire = createRequire(import.meta.url);
 const projectRoot = dirname(fileURLToPath(import.meta.url));
@@ -105,15 +106,15 @@ export default defineConfig(({ mode }) => {
       // run via esbuild's source transformer. (The `define` block elsewhere in
       // this config still works for node_modules dep prebundling because
       // optimizeDeps uses esbuild independently of the source-transform
-      // pipeline.) This mirrors the rollup build's `replaceGxtModeFlag` plugin
-      // so source files using the bare identifier work in both bundlers. See
-      // types/gxt-ambient.d.ts for the TS declaration.
-      replaceGxtModeFlag(useGxt),
-      // Inline the build-time `__GXT_CLASSIC_COMPONENTS__` flag (default true).
-      // Mirrors the rollup `replaceGxtClassicComponentsFlag` plugin so the test
-      // harness keeps full classic-component support unless a run sets
-      // GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0. See types/gxt-ambient.d.ts.
-      replaceGxtClassicComponentsFlag(),
+      // pipeline.) The rollup build uses the same plugin, so source files using
+      // the bare identifier work in both bundlers. See types/gxt-ambient.d.ts
+      // for the TS declaration.
+      replaceBuildConstant('__GXT_MODE__', () => useGxt, 'pre'),
+      // Inline the build-time `__GXT_CLASSIC_COMPONENTS__` flag (default true),
+      // as the rollup build does, so the test harness keeps full
+      // classic-component support unless a run sets GXT_NATIVE=1 /
+      // EMBER_GXT_CLASSIC=0. See types/gxt-ambient.d.ts.
+      replaceBuildConstant('__GXT_CLASSIC_COMPONENTS__', () => GXT_CLASSIC_COMPONENTS, 'pre'),
       // `virtual:gxt-test-setup` / `virtual:gxt-tests` (imported by
       // index.html): GXT-only test-page modules, empty in classic builds.
       gxtTestSetup(useGxt),
@@ -200,7 +201,7 @@ export default defineConfig(({ mode }) => {
     // source code, but this config sets `esbuild: false` (see below), so
     // `define:` only covers what Vite's dep prebundler (optimizeDeps) walks
     // — i.e. node_modules. Source-level replacement of `__GXT_MODE__` is
-    // performed by the `replaceGxtModeFlag` plugin above.
+    // performed by the `replaceBuildConstant` plugin above.
     ...(useGxt
       ? {}
       : {
@@ -450,10 +451,14 @@ function nativeConfig(mode) {
       // renderer exactly as to the compat one. Its other two `__GXT_MODE__`
       // branches (lib/compile.ts, lib/test-cases/rendering.ts) are replaced
       // wholesale by native aliases (runtime-compile, test-support).
-      replaceGxtModeFlag(false, (id) => id.includes('/packages/internal-test-helpers/')),
+      replaceBuildConstant(
+        '__GXT_MODE__',
+        (id) => id.includes('/packages/internal-test-helpers/'),
+        'pre'
+      ),
       // Irrelevant in native (only the compat manager.ts reads it, and that file
       // is never loaded) — kept so a stray reference still const-folds.
-      replaceGxtClassicComponentsFlag(),
+      replaceBuildConstant('__GXT_CLASSIC_COMPONENTS__', () => GXT_CLASSIC_COMPONENTS, 'pre'),
       gxtModuleDedup(),
       gxtNativeRelativeRedirect(),
       gxtNativeTestModules(),
@@ -610,60 +615,14 @@ function gxtNativeTestModules() {
   };
 }
 
-// Replace the bare `__GXT_MODE__` identifier with the boolean literal so
-// source code that writes `if (__GXT_MODE__) { ... }` const-folds at bundle
-// time. Mirrors the same-named helper in rollup.config.mjs (which always
-// inlines `false` for the classic dist).
-//
-// Vite's built-in `define:` is not used for this: `define:` is implemented via
-// esbuild's source transform, which is disabled here (`esbuild: false`), so it
-// only applies through optimizeDeps' dep prebundling — i.e. to node_modules
-// code, not the ember source files where `__GXT_MODE__` actually appears.
-//
-// Skip GXT vendor chunks: their `IS_DEV_MODE`/`TRY_CATCH_ERROR_HANDLING` usage
-// is handled separately (TRY_CATCH_ERROR_HANDLING is left as a runtime
-// identifier, falsy at runtime). The `__GXT_MODE__` identifier is unique to
-// ember-source files; @lifeart/gxt dist chunks don't reference it.
-function replaceGxtModeFlag(useGxt, gxtTrueFor = null) {
-  const literal = useGxt ? 'true' : 'false';
-  const GXT_MODE_RE = /\b__GXT_MODE__\b/g;
-  return {
-    name: 'replace-gxt-mode-flag',
-    enforce: 'pre',
-    transform(code, id) {
-      const cleanId = id.split('?')[0].split('#')[0];
-      if (cleanId.includes('/node_modules/')) return null;
-      if (!code.includes('__GXT_MODE__')) return null;
-      const value = gxtTrueFor !== null && gxtTrueFor(cleanId) ? 'true' : literal;
-      const replaced = code.replace(GXT_MODE_RE, value);
-      if (replaced === code) return null;
-      return { code: replaced, map: null };
-    },
-  };
-}
-
-// Mirror of rollup's `replaceGxtClassicComponentsFlag`. Default true; flipped
-// false by GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0 to exercise the compat build with
-// the classic-component emulation DCE'd. Unrelated to
+// `__GXT_CLASSIC_COMPONENTS__` (see rollup.config.mjs): true unless a run sets
+// GXT_NATIVE=1 / EMBER_GXT_CLASSIC=0 to exercise the compat build with the
+// classic-component emulation DCE'd. Unrelated to
 // `EMBER_RENDER_BACKEND=gxt-native` (see nativeConfig(), where only the
 // never-loaded manager.ts would read this flag).
-function replaceGxtClassicComponentsFlag() {
-  const classic = !(process.env.GXT_NATIVE === '1' || process.env.EMBER_GXT_CLASSIC === '0');
-  const literal = classic ? 'true' : 'false';
-  const RE = /\b__GXT_CLASSIC_COMPONENTS__\b/g;
-  return {
-    name: 'replace-gxt-classic-components-flag',
-    enforce: 'pre',
-    transform(code, id) {
-      const cleanId = id.split('?')[0].split('#')[0];
-      if (cleanId.includes('/node_modules/')) return null;
-      if (!code.includes('__GXT_CLASSIC_COMPONENTS__')) return null;
-      const replaced = code.replace(RE, literal);
-      if (replaced === code) return null;
-      return { code: replaced, map: null };
-    },
-  };
-}
+const GXT_CLASSIC_COMPONENTS = !(
+  process.env.GXT_NATIVE === '1' || process.env.EMBER_GXT_CLASSIC === '0'
+);
 
 function gxtModuleDedup() {
   // Ensure all GXT internal module imports resolve to the same real filesystem

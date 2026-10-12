@@ -7509,9 +7509,6 @@ function _gxtCleanupActiveComponents(): void {
   _gxtCurrentFw = undefined;
 }
 
-// Set GXT mode flag
-(globalThis as any).__GXT_MODE__ = true;
-
 // Patch QUnit.equiv and Assert.prototype.deepEqual to tolerate the whitespace
 // differences produced by GXT's AST compiler, which strips whitespace-only text
 // nodes between element siblings and trims leading/trailing whitespace around
