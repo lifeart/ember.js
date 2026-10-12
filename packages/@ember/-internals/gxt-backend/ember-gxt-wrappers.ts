@@ -873,13 +873,8 @@ function createEmberMaybeHelper(original: Function) {
                   try {
                     const _inst = (bucket as any).instance;
                     if (_inst && typeof _inst === 'object') {
-                      const _syms = Object.getOwnPropertySymbols(_inst);
-                      for (const _s of _syms) {
-                        if (_s.toString().includes('RECOMPUTE_TAG')) {
-                          _gxtRecomputeTag = _inst[_s];
-                          break;
-                        }
-                      }
+                      _gxtRecomputeTag =
+                        getGxtRenderer()!.compilePipeline.getHelperRecomputeTag!(_inst) ?? null;
                     }
                   } catch {
                     /* ignore */
@@ -1080,17 +1075,11 @@ function createEmberMaybeHelper(original: Function) {
 
             // Consume the RECOMPUTE_TAG so GXT formulas re-evaluate on recompute().
             // The tag is a custom object with a cell-backed `value` getter.
-            const symKeys = Object.getOwnPropertySymbols(instance);
-            for (const sym of symKeys) {
-              if (sym.toString().includes('RECOMPUTE_TAG')) {
-                const tag = instance[sym];
-                if (tag && typeof tag === 'object' && 'value' in tag) {
-                  // Read the cell to establish tracking in the enclosing formula
-                  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-                  tag.value;
-                }
-                break;
-              }
+            const tag: any = getGxtRenderer()!.compilePipeline.getHelperRecomputeTag!(instance);
+            if (tag && typeof tag === 'object' && 'value' in tag) {
+              // Read the cell to establish tracking in the enclosing formula
+              // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+              tag.value;
             }
 
             return result;

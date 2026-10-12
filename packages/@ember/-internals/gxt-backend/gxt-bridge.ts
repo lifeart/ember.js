@@ -561,6 +561,12 @@ export interface GxtCompilePipelineCapabilities {
   setHelperInstancePushHook?(hook: (inst: any) => void): void;
 
   /**
+   * The tag a classic `Helper` instance keeps under glimmer's `RECOMPUTE_TAG`
+   * (dirtied by `recompute()`); `undefined` for anything else.
+   */
+  getHelperRecomputeTag?(instance: object): unknown;
+
+  /**
    * Recompute the cached computed properties of `obj` that depend on
    * `changedKey` and return their new values; returns `[]` inside a
    * property-change batch. Contributed by metal's property_events.ts.

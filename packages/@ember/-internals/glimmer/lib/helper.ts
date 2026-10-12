@@ -17,7 +17,7 @@ import type { DirtyableTag } from '@glimmer/interfaces';
 import { consumeTag } from '@glimmer/validator/lib/tracking';
 import { createTag, DIRTY_TAG as dirtyTag } from '@glimmer/validator/lib/validators';
 
-const RECOMPUTE_TAG = Symbol('RECOMPUTE_TAG');
+export const RECOMPUTE_TAG = Symbol('RECOMPUTE_TAG');
 
 // Signature type utilities
 type GetOr<T, K, Else> = K extends keyof T ? T[K] : Else;

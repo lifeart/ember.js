@@ -461,16 +461,10 @@ function _installHelperRecomputeBridge(instance: any): void {
   if (!instance || typeof instance !== 'object') return;
   if ((instance as any).__gxtHelperRecomputeBridgeInstalled) return;
 
-  // Find Glimmer's RECOMPUTE_TAG symbol on the instance (classic Helper only).
+  // Glimmer's RECOMPUTE_TAG on the instance (classic Helper only).
   let recomputeTag: any = null;
   try {
-    const symKeys = Object.getOwnPropertySymbols(instance);
-    for (const sym of symKeys) {
-      if (sym.toString().includes('RECOMPUTE_TAG')) {
-        recomputeTag = (instance as any)[sym];
-        break;
-      }
-    }
+    recomputeTag = getGxtRenderer()!.compilePipeline.getHelperRecomputeTag!(instance);
   } catch {
     /* ignore */
   }

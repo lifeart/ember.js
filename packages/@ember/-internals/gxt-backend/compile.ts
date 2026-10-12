@@ -537,6 +537,8 @@ function hasAttrsInBlockParams(str: string): boolean {
 // `hasDynamicHelper` / `hasDynamicModifier` source scanners were deleted here.
 
 import { buildUntouchableThis } from '@glimmer/debug-util';
+// The key of a classic `Helper` instance's recompute tag.
+import { RECOMPUTE_TAG } from '@ember/-internals/glimmer/lib/helper';
 // Import the GXT runtime compiler
 // @ts-ignore - direct path to avoid GXT Babel plugin
 import {
@@ -10158,14 +10160,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
                 } else {
                   try {
                     helperInstance = helperFactory.create();
-                    // Find RECOMPUTE_TAG symbol on the instance
-                    const symKeys = Object.getOwnPropertySymbols(helperInstance);
-                    for (const sym of symKeys) {
-                      if (sym.toString().includes('RECOMPUTE_TAG')) {
-                        recomputeTag = helperInstance[sym];
-                        break;
-                      }
-                    }
+                    recomputeTag = helperInstance[RECOMPUTE_TAG] ?? null;
                     _tagHelperInstanceCache.set(kebabName, {
                       instance: helperInstance,
                       recomputeTag,
@@ -15434,9 +15429,13 @@ installCompilePipelinePart({
   // `(globalThis as any).__gxtSyncDomNow` slot is also dual-published for the
   // harness probes and dev-debug scripts that read/wrap it.
   syncDomNow: _gxtSyncDomNow,
+  // manager.ts and ember-gxt-wrappers.ts cannot import glimmer/lib/helper.ts
+  // (it imports the manager shim), so they read the tag through here.
+  getHelperRecomputeTag: (instance: object) => (instance as any)[RECOMPUTE_TAG],
 });
 // manager.ts calls these members without a fallback.
 assertCompilePipelineInstalled([
+  'getHelperRecomputeTag',
   'withSyncing',
   'withSuppressDirtyInRcSet',
   'isSyncIsPropertyDriven',
