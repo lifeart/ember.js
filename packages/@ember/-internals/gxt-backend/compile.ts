@@ -2297,6 +2297,42 @@ function _touchCurriedArgGetters(curried: any): void {
   }
 }
 
+// Append a template child value to `target`, flattening the shapes that the
+// custom-element and namespaced-element `$_tag` fallbacks share: `null`/`false`
+// render nothing, a node is appended, an array is flattened, an argument thunk
+// is called (its errors, and errors appending its result, are ignored), and a
+// primitive becomes a text node. Other objects go to the caller's
+// `appendObject`, which gets the recursive append for nested values.
+function _appendChildValue(
+  target: Node,
+  value: any,
+  appendObject: (obj: any, append: (v: any) => void) => void
+): void {
+  const append = (v: any): void => _appendChildValue(target, v, appendObject);
+  if (value == null || value === false) return;
+  if (value instanceof Node) {
+    target.appendChild(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) append(item);
+    return;
+  }
+  if (typeof value === 'function') {
+    try {
+      append(value());
+    } catch {
+      /* ignore errors in child evaluation */
+    }
+    return;
+  }
+  if (typeof value === 'object') {
+    appendObject(value, append);
+    return;
+  }
+  target.appendChild(document.createTextNode(String(value)));
+}
+
 // Remove the nodes strictly between two sibling markers; returns them in order.
 function _removeNodesBetween(parent: Node, start: Node, end: Node): Node[] {
   const removed: Node[] = [];
@@ -10901,100 +10937,74 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
           }
         }
         if (children && children.length > 0) {
-          // Recursive child-flattener for the custom-element fallback. Mirrors
-          // the tree shapes itemToNode handles inside the top-level render but
-          // is duplicated here so this global $_tag override doesn't reach
-          // into precompileTemplate's closure. Handles:
-          //   - Node
-          //   - string / number / boolean
-          //   - Array (flatten)
+          // Flatten the children into the custom element (see
+          // `_appendChildValue`). Objects:
+          //   - SafeString (.toHTML()) is parsed as HTML
           //   - GXT list context with topMarker/bottomMarker (e.g. {{#if}})
-          //   - SafeString (.toHTML())
-          const appendCustomChild = (item: any): void => {
-            if (item == null || item === false) return;
-            if (item instanceof Node) {
-              ceEl.appendChild(item);
+          //   - `$nodes` / `nodes`, a cell's `fn`, Symbol-keyed node arrays
+          //   - anything else is stringified
+          const appendCustomObject = (item: any, appendCustomChild: (v: any) => void): void => {
+            // SafeString ({ toHTML(): string })
+            if (typeof (item as any).toHTML === 'function') {
+              const tpl = document.createElement('template');
+              tpl.innerHTML = String((item as any).toHTML());
+              while (tpl.content.firstChild) ceEl.appendChild(tpl.content.firstChild);
               return;
             }
-            if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
-              ceEl.appendChild(document.createTextNode(String(item)));
+            // GXT list context from $_if / $_each — move the markers and
+            // everything between them into the custom element.
+            if ((item as any).topMarker && (item as any).bottomMarker) {
+              const topMarker = (item as any).topMarker as Node;
+              const bottomMarker = (item as any).bottomMarker as Node;
+              let node: Node | null = topMarker;
+              while (node) {
+                const next: Node | null = node.nextSibling;
+                ceEl.appendChild(node);
+                if (node === bottomMarker) break;
+                node = next;
+              }
               return;
             }
-            if (typeof item === 'function') {
+            // $nodes / nodes array on a component-ish wrapper
+            const nodesProp = (item as any).$nodes || (item as any).nodes;
+            if (Array.isArray(nodesProp)) {
+              for (const n of nodesProp) appendCustomChild(n);
+              return;
+            }
+            // GXT reactive cell w/ fn getter
+            if (typeof (item as any).fn === 'function' && 'isConst' in (item as any)) {
               try {
-                appendCustomChild(item());
+                appendCustomChild((item as any).fn());
               } catch {
-                /* ignore getter error */
+                /* ignore */
               }
               return;
             }
-            if (Array.isArray(item)) {
-              for (const sub of item) appendCustomChild(sub);
-              return;
+            // GXT IfCondition / list component: node storage lives under a
+            // Symbol-keyed array. Recurse through any such array we find.
+            // The `placeholder` Comment sits inside the array when the
+            // branch is empty (false branch), so we don't need a separate
+            // placeholder fallback — the Symbol walk covers both cases.
+            const syms = Object.getOwnPropertySymbols(item);
+            let foundFromSym = false;
+            for (const sym of syms) {
+              const v = (item as any)[sym];
+              if (Array.isArray(v) && v.length > 0) {
+                const hasNodes = v.some(
+                  (x: any) =>
+                    x instanceof Node ||
+                    typeof x === 'string' ||
+                    typeof x === 'number' ||
+                    typeof x === 'function' ||
+                    (x && typeof x === 'object')
+                );
+                if (hasNodes) {
+                  for (const n of v) appendCustomChild(n);
+                  foundFromSym = true;
+                }
+              }
             }
-            if (typeof item === 'object') {
-              // SafeString ({ toHTML(): string })
-              if (typeof (item as any).toHTML === 'function') {
-                const tpl = document.createElement('template');
-                tpl.innerHTML = String((item as any).toHTML());
-                while (tpl.content.firstChild) ceEl.appendChild(tpl.content.firstChild);
-                return;
-              }
-              // GXT list context from $_if / $_each — move the markers and
-              // everything between them into the custom element.
-              if ((item as any).topMarker && (item as any).bottomMarker) {
-                const topMarker = (item as any).topMarker as Node;
-                const bottomMarker = (item as any).bottomMarker as Node;
-                let node: Node | null = topMarker;
-                while (node) {
-                  const next: Node | null = node.nextSibling;
-                  ceEl.appendChild(node);
-                  if (node === bottomMarker) break;
-                  node = next;
-                }
-                return;
-              }
-              // $nodes / nodes array on a component-ish wrapper
-              const nodesProp = (item as any).$nodes || (item as any).nodes;
-              if (Array.isArray(nodesProp)) {
-                for (const n of nodesProp) appendCustomChild(n);
-                return;
-              }
-              // GXT reactive cell w/ fn getter
-              if (typeof (item as any).fn === 'function' && 'isConst' in (item as any)) {
-                try {
-                  appendCustomChild((item as any).fn());
-                } catch {
-                  /* ignore */
-                }
-                return;
-              }
-              // GXT IfCondition / list component: node storage lives under a
-              // Symbol-keyed array. Recurse through any such array we find.
-              // The `placeholder` Comment sits inside the array when the
-              // branch is empty (false branch), so we don't need a separate
-              // placeholder fallback — the Symbol walk covers both cases.
-              const syms = Object.getOwnPropertySymbols(item);
-              let foundFromSym = false;
-              for (const sym of syms) {
-                const v = (item as any)[sym];
-                if (Array.isArray(v) && v.length > 0) {
-                  const hasNodes = v.some(
-                    (x: any) =>
-                      x instanceof Node ||
-                      typeof x === 'string' ||
-                      typeof x === 'number' ||
-                      typeof x === 'function' ||
-                      (x && typeof x === 'object')
-                  );
-                  if (hasNodes) {
-                    for (const n of v) appendCustomChild(n);
-                    foundFromSym = true;
-                  }
-                }
-              }
-              if (foundFromSym) return;
-            }
+            if (foundFromSym) return;
             // Fallback: stringify
             try {
               ceEl.appendChild(document.createTextNode(String(item)));
@@ -11002,7 +11012,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
               /* ignore */
             }
           };
-          for (const child of children) appendCustomChild(child);
+          for (const child of children) _appendChildValue(ceEl, child, appendCustomObject);
         }
         return ceEl;
       }
@@ -11425,64 +11435,36 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
 
         // Render children inside the SVG namespace
         if (children && children.length > 0) {
-          // Helper: flatten a child value into appended DOM nodes.
-          // Handles: Node, Array, function-wrapped children, and GXT's
-          // $_if/$_each block results (which expose nodes via `nodes` or
-          // `RENDERED_NODES_PROPERTY`).
-          const appendChildValue = (v: any): void => {
-            if (v == null || v === false) return;
-            if (v instanceof Node) {
-              el.appendChild(v);
+          // Flatten the children into the element (see `_appendChildValue`).
+          // Objects are GXT `$_if`/`$_each` block results, which expose their
+          // nodes as `nodes`, as `RENDERED_NODES_PROPERTY` or by iteration;
+          // any other object renders nothing (not `[object Object]`).
+          const appendObjectNodes = (v: any, appendChildValue: (v: any) => void): void => {
+            const nodesArray = (v as any).nodes;
+            if (Array.isArray(nodesArray)) {
+              for (const n of nodesArray) appendChildValue(n);
               return;
             }
-            if (Array.isArray(v)) {
-              for (const item of v) appendChildValue(item);
-              return;
-            }
-            if (typeof v === 'function') {
-              try {
-                appendChildValue(v());
-              } catch {
-                /* ignore errors in child evaluation */
-              }
-              return;
-            }
-            if (typeof v === 'object') {
-              // GXT block result: look for `nodes` array, `node` single, or
-              // the RENDERED_NODES_PROPERTY symbol. These are emitted by
-              // $_if/$_each when their branch evaluates to content.
-              const nodesArray = (v as any).nodes;
-              if (Array.isArray(nodesArray)) {
-                for (const n of nodesArray) appendChildValue(n);
+            if (RENDERED_NODES_PROPERTY && (v as any)[RENDERED_NODES_PROPERTY as any]) {
+              const renderedNodes = (v as any)[RENDERED_NODES_PROPERTY as any];
+              if (Array.isArray(renderedNodes)) {
+                for (const n of renderedNodes) appendChildValue(n);
                 return;
               }
-              if (RENDERED_NODES_PROPERTY && (v as any)[RENDERED_NODES_PROPERTY as any]) {
-                const renderedNodes = (v as any)[RENDERED_NODES_PROPERTY as any];
-                if (Array.isArray(renderedNodes)) {
-                  for (const n of renderedNodes) appendChildValue(n);
-                  return;
-                }
-              }
-              // Symbol.iterator: iterate and recurse
-              if (typeof (v as any)[Symbol.iterator] === 'function') {
-                try {
-                  for (const n of v as any) appendChildValue(n);
-                  return;
-                } catch {
-                  /* fall through */
-                }
-              }
-              // Fall-through: avoid writing `[object Object]` as a text
-              // node. Prefer an empty text node so rehydration serializer
-              // produces empty content rather than junk.
-              return;
             }
-            // Primitive (string/number/boolean): convert to text.
-            el.appendChild(document.createTextNode(String(v)));
+            // Symbol.iterator: iterate and recurse
+            if (typeof (v as any)[Symbol.iterator] === 'function') {
+              try {
+                for (const n of v as any) appendChildValue(n);
+                return;
+              } catch {
+                /* fall through */
+              }
+            }
           };
 
           for (const child of children) {
-            appendChildValue(child);
+            _appendChildValue(el, child, appendObjectNodes);
           }
         }
 
