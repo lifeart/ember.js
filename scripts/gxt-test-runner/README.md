@@ -68,9 +68,11 @@ node scripts/gxt-test-runner/runner.mjs --full \
   --baseline test-results/gxt-baseline.json
 ```
 
-The runner exits 1 on any test that was passing in the baseline and is
-failing now (green -> red). Add `--allow <category>` on `diff.mjs` for known
-gaps.
+The runner prints `baseline ok` or `BASELINE REGRESSION: N` (the tests that
+were passing in the baseline and are failing now, green -> red). Its exit code
+is 1 whenever any test fails, the baseline's known reds included; for a
+pass/fail verdict on a baseline run use `baseline-gate.mjs` (see CI below).
+Add `--allow <category>` on `diff.mjs` for known gaps.
 
 ### Standalone diff
 
@@ -133,6 +135,18 @@ git add test-results/gxt-baseline.json
   check. Should finish in under 5 minutes.
 - `.github/workflows/gxt-full.yml` — nightly, compares against
   `test-results/gxt-baseline.json`, files an issue on regression.
+- `.github/workflows/gxt-native.yml` — every PR: the native suite
+  (`--url http://localhost:5181/native.html`, `EMBER_RENDER_BACKEND=gxt-native`)
+  against `test-results/native-baseline.json`. The runner exits 1 on any
+  failing test, known reds included, so the job's verdict comes from
+  `baseline-gate.mjs`: no green->red test, no baseline module missing, no
+  timeout or harness error.
+
+```bash
+status=0
+node scripts/gxt-test-runner/runner.mjs … --baseline <file> || status=$?
+node scripts/gxt-test-runner/baseline-gate.mjs --baseline <file> --runner-exit "$status"
+```
 
 ## Exit codes
 
