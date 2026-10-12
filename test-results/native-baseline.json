@@ -1,14 +1,27 @@
 {
+  "_comment": [
+    "Captured against the published @lifeart/gxt 0.0.82: 8 known red.",
+    "These 7 need @lifeart/gxt with lifeart/glimmer-next#266 ({{#if}} renders Glimmer block bounds: no anchor comment while the branch has content); regenerate this baseline after pinning that release:",
+    "  Application test: debug render tree :: template-only components",
+    "  Application test: debug render tree :: custom components",
+    "  Application test: debug render tree :: <LinkTo> components",
+    "  gxt-native | {{#if}} block bounds (Glimmer DOM) :: a branch with content has no anchor comment; an empty branch is <!---->",
+    "  gxt-native | {{#if}} block bounds (Glimmer DOM) :: {{else}} and {{else if}}: the next branch renders in place, never with an anchor",
+    "  gxt-native | {{#if}} block bounds (Glimmer DOM) :: a branch that is itself an empty block shows one <!---->",
+    "  gxt-native | {{#if}} block bounds (Glimmer DOM) :: {{#each}} rows that start and end with {{#if}}: move, swap, remove, clear",
+    "The 8th is the pre-existing native red, unrelated to #266:",
+    "  Component Tracked Properties w/ Args Proxy :: downstream property changes do not invalidate upstream component getters/arguments"
+  ],
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-12T13:38:30.732Z",
-    "gxtVersion": "0.0.81",
-    "emberCommit": "398561380d",
+    "capturedAt": "2026-10-12T14:22:31.942Z",
+    "gxtVersion": "0.0.82",
+    "emberCommit": "afe6750ab3",
     "totalTests": 6983,
     "totalModules": 665,
     "quarantinedTests": 0,
     "totalAssertions": 34863,
-    "totalAssertionsPassing": 34861
+    "totalAssertionsPassing": 34838
   },
   "modules": {
     "<LinkTo /> component (rendering tests)": {
@@ -510,10 +523,23 @@
     },
     "Application test: debug render tree": {
       "total": 10,
-      "passing": 10,
+      "passing": 7,
       "assertionsTotal": 595,
-      "assertionsPassing": 595,
-      "failingTests": []
+      "assertionsPassing": 591,
+      "failingTests": [
+        {
+          "name": " template-only components",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " custom components",
+          "category": "gxt:triage"
+        },
+        {
+          "name": " <LinkTo> components",
+          "category": "gxt:triage"
+        }
+      ]
     },
     "Application test: rendering": {
       "total": 18,
@@ -4099,10 +4125,27 @@
     },
     "gxt-native | {{#if}} block bounds (Glimmer DOM)": {
       "total": 4,
-      "passing": 4,
+      "passing": 0,
       "assertionsTotal": 22,
-      "assertionsPassing": 22,
-      "failingTests": []
+      "assertionsPassing": 3,
+      "failingTests": [
+        {
+          "name": "a branch with content has no anchor comment; an empty branch is <!---->",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "{{else}} and {{else if}}: the next branch renders in place, never with an anchor",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "a branch that is itself an empty block shows one <!---->",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "{{#each}} rows that start and end with {{#if}}: move, swap, remove, clear",
+          "category": "gxt:triage"
+        }
+      ]
     },
     "gxt-native | {{on}}": {
       "total": 12,
@@ -4673,6 +4716,6 @@
     }
   },
   "categories": {
-    "gxt:triage": 1
+    "gxt:triage": 8
   }
 }
