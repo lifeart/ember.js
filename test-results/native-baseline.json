@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-12T07:09:27.270Z",
+    "capturedAt": "2026-10-12T13:38:30.732Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "6ba5ba3c8f",
-    "totalTests": 6977,
-    "totalModules": 664,
+    "emberCommit": "398561380d",
+    "totalTests": 6983,
+    "totalModules": 665,
     "quarantinedTests": 0,
-    "totalAssertions": 34789,
-    "totalAssertionsPassing": 34780
+    "totalAssertions": 34863,
+    "totalAssertionsPassing": 34861
   },
   "modules": {
     "<LinkTo /> component (rendering tests)": {
@@ -510,23 +510,10 @@
     },
     "Application test: debug render tree": {
       "total": 10,
-      "passing": 7,
-      "assertionsTotal": 563,
-      "assertionsPassing": 556,
-      "failingTests": [
-        {
-          "name": " template-only components",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " custom components",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " <LinkTo> components",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 10,
+      "assertionsTotal": 595,
+      "assertionsPassing": 595,
+      "failingTests": []
     },
     "Application test: rendering": {
       "total": 18,
@@ -4041,10 +4028,10 @@
       "failingTests": []
     },
     "gxt-native | debugRenderTree": {
-      "total": 2,
-      "passing": 2,
-      "assertionsTotal": 9,
-      "assertionsPassing": 9,
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 29,
+      "assertionsPassing": 29,
       "failingTests": []
     },
     "gxt-native | destroy": {
@@ -4108,6 +4095,13 @@
       "passing": 6,
       "assertionsTotal": 9,
       "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "gxt-native | {{#if}} block bounds (Glimmer DOM)": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 22,
+      "assertionsPassing": 22,
       "failingTests": []
     },
     "gxt-native | {{on}}": {
@@ -4679,6 +4673,6 @@
     }
   },
   "categories": {
-    "gxt:triage": 4
+    "gxt:triage": 1
   }
 }
