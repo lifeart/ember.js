@@ -1,13 +1,5 @@
 import type { Renderer } from '@ember/-internals/glimmer';
 import { _resetRenderers, helper, Helper } from '@ember/-internals/glimmer';
-// Slice-36 (Cluster B) test-helper writer for
-// `__gxtPendingSyncFromPropertyChange` — routes flag clears through the
-// bridge setter (canonical state migrated to module-local
-// `_gxtPendingSyncFromPropertyChangeFlag` in
-// `@ember/-internals/gxt-backend/compile.ts`). See
-// `setPendingSyncFromPropertyChange` doc in gxt-bridge.ts. Establishes
-// the test-helper-bridge-writer pattern for flag 1 (`__gxtPendingSync`)
-// in slice 37.
 import {
   getGxtRenderer,
   getAmbientOwner,
@@ -95,14 +87,7 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
   afterEach() {
     try {
       // Clean up GXT active components first (if using GXT).
-      // Slice-107 (Cluster B): routes through bridge — see
-      // `cleanupActiveComponents` doc in gxt-bridge.ts. Reuses the existing
-      // `getGxtRenderer` import. The optional-chain provides the same
-      // null-tolerant guard as the pre-slice-107 `typeof === 'function'`
-      // check for classic-Ember builds (where gxt-backend was never loaded).
       getGxtRenderer()?.compilePipeline.cleanupActiveComponents?.();
-      // (Cluster B slice 5 orphan cleanup) __gxtSyncScheduled reset removed —
-      // flag had no readers anywhere in source.
 
       if (this.component) {
         runDestroy(this.component);
@@ -139,13 +124,6 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
           modMgr._updatedInstances.clear();
         }
         // Clear pending destroys without processing (already handled above)
-        // Slice-39 (Cluster B): canonical state graduated from
-        // `globalThis.__gxtPendingModifierDestroys` to the module-local
-        // `_pendingModifierDestroys` Array in `gxt-backend/manager.ts`.
-        // The cross-package clearer here routes through the new read-only
-        // Array-getter `compilePipeline.getPendingModifierDestroys?.()`
-        // and mutates the returned array reference (`length = 0`) — same
-        // mutate-by-reference contract as slice-32's `_allPoolArrays` Set.
         const pendingDestroys = getGxtRenderer()?.compilePipeline.getPendingModifierDestroys?.();
         if (pendingDestroys) pendingDestroys.length = 0;
       } catch {
@@ -158,17 +136,9 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
       }
     } finally {
       _resetRenderers();
-      // Reset pending sync AFTER destroy
-      // Slice-37 (Cluster B): `__gxtPendingSync` canonical state migrated
-      // to module-local `_gxtPendingSyncFlag` in `compile.ts`. Test-
-      // helper writer-contract — routes through the bridge setter
-      // (reuses slice-36 test-helper-bridge-writer pattern).
+      // Reset the GXT pending-sync flags AFTER destroy
       const _cpRC = getGxtRenderer()?.compilePipeline;
       _cpRC?.setPendingSync?.(false);
-      // Slice-36 (Cluster B): `__gxtPendingSyncFromPropertyChange`
-      // canonical state migrated to module-local
-      // `_gxtPendingSyncFromPropertyChangeFlag` in `compile.ts`.
-      // Test-helper writer-contract — routes through the bridge setter.
       _cpRC?.setPendingSyncFromPropertyChange?.(false);
       // Replace #qunit-fixture element to drop accumulated event listeners
       // (EventDispatcher.setup adds listeners that aren't always cleaned up)
@@ -203,23 +173,15 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
 
     this.component = owner.lookup('component:-top-level');
 
-    // Increment render pass ID before starting a new render transaction
-    // This ensures all components in this render share the same pass ID
-    // Slice-124 (Cluster B): test-helper writer routes through the bridge
-    // incrementer (canonical state migrated to module-local
-    // `_emberRenderPassId` in `@ember/-internals/glimmer/lib/renderer.ts`).
-    // See `incrementRenderPassId` doc in gxt-bridge.ts.
+    // Increment the render pass ID before starting a new render transaction
+    // so all components in this render share the same pass ID.
     getGxtRenderer()?.viewUtils.incrementRenderPassId?.();
 
     runAppend(this.component);
 
-    // After the initial render, reset pendingSyncFromPropertyChange to prevent
-    // the setInterval fallback from triggering a morph (Phase 2b). Property
-    // change notifications during the initial render (e.g., from EmberObject.create
-    // in modifier managers) should NOT cause a morph — the DOM is already correct.
-    // Slice-36 (Cluster B): canonical state migrated to module-local
-    // `_gxtPendingSyncFromPropertyChangeFlag` in `compile.ts`. Test-helper
-    // writer-contract — routes through the bridge setter.
+    // Property changes made during the initial render (e.g. from
+    // EmberObject.create in modifier managers) must not trigger a fallback
+    // re-sync; the DOM is already correct.
     getGxtRenderer()?.compilePipeline.setPendingSyncFromPropertyChange?.(false);
   }
 
@@ -233,9 +195,6 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
   rerender() {
     this.#assertNotAwaiting('rerender');
     // Increment render pass ID for re-renders too
-    // Slice-124 (Cluster B): test-helper writer routes through the bridge
-    // incrementer (canonical state migrated to module-local
-    // `_emberRenderPassId` in `@ember/-internals/glimmer/lib/renderer.ts`).
     getGxtRenderer()?.viewUtils.incrementRenderPassId?.();
     this.component!.rerender();
   }

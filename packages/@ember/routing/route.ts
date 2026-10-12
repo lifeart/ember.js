@@ -5,9 +5,6 @@ import { descriptorForProperty } from '@ember/-internals/metal/lib/decorator';
 import { meta as metaFor } from '@ember/-internals/meta/lib/meta';
 import type Owner from '@ember/owner';
 import { getOwner } from '@ember/-internals/owner';
-// Slice-120 (Cluster B): cross-file reader for `compilePipeline.getComponentContextsMap?.()`.
-// Sibling `@ember/routing/router.ts` already imports `getGxtRenderer` (slice-65
-// precedent); route.ts gains the import here.
 import { getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
 import type { default as BucketCache } from './lib/cache';
 import computed from '@ember/-internals/metal/lib/computed';
@@ -927,15 +924,8 @@ class Route<Model = unknown> extends EmberObject.extend(ActionHandler, Evented) 
     if (__GXT_MODE__) {
       try {
         let controller = this.controller;
-        // Slice-120 (Cluster B): cross-file reader graduates to
-        // `compilePipeline.getComponentContextsMap?.()` (single get-only with
-        // internal lazy-init — slice-100 stable-reference precedent). The
-        // bridge returns the same WeakMap that `root.ts`'s lazy-init writers
-        // populated at outlet render time. The optional-chain handles the
-        // bridge-not-yet-installed edge (impossible in practice — see slice
-        // 120 docs in `gxt-bridge.ts`); the `ctxsMap?.has(controller)` short-
-        // circuit handles the no-render-yet-happened edge (matches pre-slice-
-        // 120 semantics where the globalThis slot was undefined).
+        // controller -> live render contexts, populated by the outlet root
+        // template (`templates/root.ts`) at render time.
         let ctxsMap = getGxtRenderer()?.compilePipeline.getComponentContextsMap?.();
         if (controller && ctxsMap && ctxsMap.has(controller)) {
           // SAFETY: Since `_qp` is protected we can't infer the type
@@ -958,12 +948,9 @@ class Route<Model = unknown> extends EmberObject.extend(ActionHandler, Evented) 
           }
         }
       } catch (e) {
-        // Best-effort: a throw here must not break `refresh()`. But a failure
-        // means the GXT query-param render-context → controller sync wiring
-        // broke (e.g. `getComponentContextsMap()` returned an unexpected shape),
-        // which would otherwise silently leave the controller's QP values out
-        // of sync. Surface it (DEBUG-gated console.warn, which does not trip
-        // QUnit's `warn()`/deprecation assertion helpers) instead of masking it.
+        // Best-effort: a throw here must not break `refresh()`, but it would
+        // leave the controller's QP values out of sync, so surface it in DEBUG
+        // (a console.warn does not trip QUnit's warn/deprecation assertions).
         if (DEBUG) {
           // eslint-disable-next-line no-console
           console.warn('[gxt] query-param controller sync failed during refresh', e);
@@ -1012,11 +999,11 @@ class Route<Model = unknown> extends EmberObject.extend(ActionHandler, Evented) 
       let m = metaFor(controller);
       const correctProto = Object.getPrototypeOf(controller);
       if (correctProto && correctProto !== controller) {
-        // Pin meta.proto to the real class prototype. Without this, GXT's
-        // outlet.gts builds `renderContext = Object.create(controller)` and the
+        // Pin meta.proto to the real class prototype. Without this, the GXT
+        // outlet render builds `renderContext = Object.create(controller)` and the
         // first `peekMeta(renderContext)` walks up to `controller`, sees
-        // `meta.proto !== controller`, and mutates `meta.proto = controller`
-        // (meta.ts:662). That makes `isPrototypeMeta(controller)` return true,
+        // `meta.proto !== controller`, and mutates `meta.proto = controller`.
+        // That makes `isPrototypeMeta(controller)` return true,
         // which short-circuits `ComputedProperty.get` to return `undefined` for
         // every `@computed` getter on the controller — breaking templates that
         // read things like `this.allSitesAllArticles`.
@@ -1962,33 +1949,15 @@ function buildRenderState(route: Route): RenderState {
         );
       }
 
-      // GXT mode: a route whose `template:<name>` was compiled at build time
-      // from a bare-top-level `<template>` `.gjs`/`.gts` resolves to a RAW GXT
-      // template function — a plain `function` that calls
-      // `$_GET_ARGS(this, arguments)` and returns `$_fin(roots, this)`. It is
-      // NOT an Ember `TemplateFactory` (no `asLayout`) and carries none of the
-      // gxt wrapper brands (`__gxtCompiled` / `__gxtFactory`). Invoking it
-      // here as `factory(owner)` crashes ("Cannot read properties of undefined
-      // (reading 'args')") because no GXT root context / args object is
-      // established at `buildRenderState` time.
-      //
-      // The faithful GXT render path is the gxt-backend root-template
-      // (`@ember/-internals/glimmer/lib/templates/root.ts`) →
-      // `renderTemplateWithContext`, which establishes the ambient owner, the
-      // GXT root context, the `$_GET_ARGS` args/`$fw`/`$SLOTS` symbols, and the
-      // `__gxtComponentContexts` registration BEFORE invoking the raw fn (its
-      // PRIORITY-2 branch calls `tpl.call(ctx, owner)`). Storing the raw fn
-      // here UNINVOKED lets that path render the route template; wrapping it in
-      // a `.render`-bearing factory instead would route through a simplified
-      // render. (NOTE: a runtime-compiled `precompileTemplate` factory — which
-      // carries `__gxtCompiled`, so it is NOT matched by the raw-fn check below
-      // and falls through to the `(factory)(owner)` branch — is the more robust
-      // shape for non-trivial route templates; see the benchmark-app's
-      // `templates/application.js`.)
-      //
-      // This branch is additive: it only fires for the previously-crashing
-      // raw-GXT-fn case; Ember `TemplateFactory`s and already-wrapped gxt
-      // factories fall through to the existing `(factory)(owner)` call.
+      // GXT mode: a route template compiled at build time from a bare
+      // top-level `<template>` in a `.gjs`/`.gts` file resolves to a raw GXT
+      // template function. It is not an Ember `TemplateFactory` (no
+      // `asLayout`) and carries none of the gxt wrapper brands (`__gxtCompiled`
+      // / `__gxtFactory`). Calling it as `factory(owner)` here would crash
+      // because no GXT root context or args exist yet, so store it uninvoked:
+      // the outlet root template (`templates/root.ts`) sets up the owner, root
+      // context and args before calling it. Ember `TemplateFactory`s and
+      // wrapped gxt factories still go through `factory(owner)`.
       let isRawGxtFn =
         __GXT_MODE__ &&
         typeof templateFactoryOrComponent === 'function' &&

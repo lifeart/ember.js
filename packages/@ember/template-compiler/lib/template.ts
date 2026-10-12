@@ -5,7 +5,6 @@ import { setComponentTemplate } from '@glimmer/manager/lib/public/template';
 import templateFactory from '@glimmer/opcode-compiler/lib/template';
 import compileOptions, { keywords, RUNTIME_KEYWORDS_NAME } from './compile-options';
 import type { EmberPrecompileOptions } from './types';
-// (Cluster B slice 6) Bridge reader for `compileTemplate`.
 import { getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
 
 type ComponentClass = abstract new (...args: any[]) => object;
@@ -303,12 +302,8 @@ function _extractScopeFromEval(
   // tag names (e.g. `a`, `p`, `li`) BUT only when they appear in actual HTML
   // element-name position (right after `<` or `</`). Inside `{{...}}` or
   // `(...)` mustaches/subexpressions, the same identifier IS a real variable
-  // reference and must be resolved via eval.
-  //
-  // Without this position-aware check, templates like
-  // `{{if (and a b) "yes" "no"}}` would never have `a` extracted to scope
-  // because `a` is in the HTML-tag-name set, causing the `implicit scope (eval)`
-  // tests for the and/or/eq/gt/.../neq keyword families to fail.
+  // reference and must be resolved via eval (e.g. `a` in
+  // `{{if (and a b) "yes" "no"}}`).
   const bareIdentPattern = /\b([a-z][a-zA-Z0-9_]*)\b/g;
   while ((m = bareIdentPattern.exec(templateString)) !== null) {
     const name = m[1]!;
@@ -370,16 +365,11 @@ function _extractScopeFromEval(
 // alone does not exclude them).
 const _JS_LITERAL_NAMES = new Set<string>(['true', 'false', 'null', 'undefined', 'this']);
 
-// GXT/Ember strict-mode keywords whose names are reserved for the curried
-// helper / modifier syntactic forms (`{{helper foo "x"}}`,
-// `{{modifier foo "x"}}`). These are never imported as bindings in
-// idiomatic Ember code — the user invokes them as keywords instead — but
-// the bundled test runtime can expose same-named module-level `let`
-// declarations (e.g. `let helper;` from the in-element-null-check helper
-// scaffolding) that direct `eval()` will resolve to. Skipping them in the
-// implicit-form scope extraction prevents the leaked binding from silently
-// shadowing the keyword. Users who genuinely want to shadow them can do so
-// via the explicit `scope: () => ({ helper: myHelper })` form.
+// Strict-mode keywords reserved for the curried helper / modifier forms
+// (`{{helper foo "x"}}`, `{{modifier foo "x"}}`). Direct `eval()` can resolve
+// them to an unrelated same-named binding in the surrounding bundle, so the
+// implicit form skips them; shadow them via the explicit
+// `scope: () => ({ helper: myHelper })` form instead.
 const _GXT_KEYWORD_NAMES = new Set<string>(['helper', 'modifier']);
 
 // HBS syntax words that should not be treated as variable references

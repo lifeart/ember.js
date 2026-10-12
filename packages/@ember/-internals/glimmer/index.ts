@@ -12,7 +12,7 @@
   API documentation for Template-only or Glimmer components, it is [available
   here](/ember/release/modules/@glimmer%2Fcomponent).
 
-  Note: Prior to Ember 6.8, by default, components were authored in paired .hbs and .js
+  Note: Prior to Ember 6.8, by default, components were authored in paired `.hbs` and `.js`
   files. This is still supported, but the default authoring format is now `.gjs` or "template tag".
   The documentation for `@ember/component` still refers to the older authoring format. To read about
   the new authoring format, see the
@@ -491,22 +491,16 @@
 import _templateFactory, { templateCacheCounters } from '@glimmer/opcode-compiler/lib/template';
 export { templateCacheCounters };
 
-// (Cluster B slice 6) Bridge reader for `compileTemplate` and
-// `instrumentFactory`. Both are contributed by gxt-backend's compile.ts /
-// ember-template-compiler.ts via `installCompilePipelinePart`. Classic
-// builds never load gxt-backend so `getGxtRenderer()` returns null and
-// the optional-chain DCEs away under `__GXT_MODE__ = false`.
+// `compileTemplate` and `instrumentFactory` are contributed to the bridge by
+// gxt-backend. Classic builds never load gxt-backend, and the GXT branch below
+// is dropped under `__GXT_MODE__ = false`.
 import { getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
 
-// GXT-aware `template` shim. In GXT mode, the ember-template-compiler's
-// `precompile()` returns a JSON marker string containing `{__gxtTemplate,
-// source, moduleName}` rather than the classic Glimmer block-spec. Passing
-// that marker to the classic `templateFactory` crashes with "undefined is
-// not valid JSON" on first render because `block` is absent. When we
-// detect a GXT marker, delegate to the GXT runtime compiler instead so
-// the resulting factory behaves like any other GXT-compiled template, and
-// wrap it with the same cache counter instrumentation used by
-// `ember-template-compiler.ts::compile()`.
+// GXT-aware `template`. In GXT mode `precompile()` emits a marker
+// `{ __gxtTemplate, source, moduleName }` instead of a Glimmer block spec,
+// which the classic `templateFactory` cannot read. Compile such markers with
+// the GXT runtime compiler and wrap them with the same cache-counter
+// instrumentation that `compile()` uses.
 function template(spec: unknown): ReturnType<typeof _templateFactory> {
   if (spec && typeof spec === 'object') {
     const anySpec = spec as Record<string, unknown>;

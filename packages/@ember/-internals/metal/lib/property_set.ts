@@ -76,9 +76,6 @@ export function set<T>(obj: object, keyName: string | number, value: T, tolerant
     : _setProp(obj, keyName, value);
 
   // GXT backtracking detection: check AFTER set so toString() reflects the new value.
-  // Slice-10 (Cluster B): migrated from `globalThis.__gxtCheckBacktracking` to
-  // the typed bridge. Method is optional in the interface (load-order
-  // independence — classic builds never publish it), so the call is guarded.
   if (__GXT_MODE__ && DEBUG) {
     getGxtRenderer()?.backtracking.checkBacktracking?.(obj, keyName);
   }
@@ -117,13 +114,9 @@ export function _setProp(obj: object, keyName: string, value: any) {
     }
 
     if (currentValue !== value) {
-      // Cluster A Phase 1.7b: forward `value` as the 4th arg so the GXT
-      // trigger can `cellFor(obj, keyName, true)?.update(value)` synchronously
-      // at the enqueue site, eliminating the body's `obj[keyName]` getter
-      // read. Pass `null` for `_meta` so `notifyPropertyChange` does its
-      // standard `peekMeta(obj)` lookup. set() is the highest-traffic write
-      // path; combined with the @tracked setter at tracked.ts:309 this
-      // covers ~85% of write traffic per Phase 1.7 audit.
+      // Forward `value` so the GXT trigger can update the property's cell
+      // synchronously without re-reading `obj[keyName]`. `null` meta makes
+      // `notifyPropertyChange` look it up as usual.
       notifyPropertyChange(obj, keyName, null, value);
     }
   }

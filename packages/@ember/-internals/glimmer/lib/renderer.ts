@@ -8,16 +8,6 @@ import {
   getViewId,
   setViewElement,
 } from '@ember/-internals/views/lib/system/utils';
-// (Cluster B slice 6) Bridge reader for `registerArrayOwner`.
-// (Cluster B slice 9) Bridge writer for `rootComponent.{isRootComponent,
-// updateRootTagValues}` — renderer.ts is the first non-gxt-backend file to
-// install a capabilities part. See gxt-bridge.ts `GxtRootComponentCapabilities`
-// for the namespace docs.
-// (Cluster B slice 96) Bridge writer for `compilePipeline.forceEmberRerender`
-// — renderer.ts contributes the morph-fallback function to the compilePipeline
-// namespace via `installCompilePipelinePart` (slice-9 reverse-flow install
-// precedent). See gxt-bridge.ts `forceEmberRerender` doc for the namespace /
-// shape decision narrative.
 import {
   getGxtRenderer,
   installCompilePipelinePart,
@@ -35,14 +25,10 @@ import {
   beginRenderPass,
   endRenderPass,
 } from '@glimmer/manager';
-// Lazy accessor for @lifeart/gxt symbols. The gxt-backend module (only loaded
-// in __GXT_MODE__) stashes the namespace on globalThis.__lifeartGxt at its
-// own load time. In classic mode (e.g., benchmark-app, embroider builds) the
-// stash is undefined and these symbols are never accessed because every
-// callsite below is reached only through GXT-mode-gated code paths. Avoiding
-// a static `import * as _gxt from '@lifeart/gxt'` here keeps ~50KB of GXT
-// runtime out of the classic bundle and prevents any @lifeart/gxt module-load
-// side effects from running in classic-mode contexts.
+// Lazy accessor for @lifeart/gxt symbols through the bridge. Every call site
+// below is reached only from GXT-mode code paths. Avoiding a static
+// `import * as _gxt from '@lifeart/gxt'` keeps the GXT runtime (and its
+// module-load side effects) out of the classic bundle.
 function _gxtLib(): any {
   // GXT-only. Body gated on the literal `__GXT_MODE__` so the `getGxtRenderer`
   // reference (and thus the whole gxt-bridge module) tree-shakes out of the
@@ -85,12 +71,8 @@ function ensureGxtContext() {
       // This sets fastRenderingContext which is checked first by initDOM
       const domApi = getGxtDomApi();
       lib.provideContext(gxtRootContext, lib.RENDERING_CONTEXT, domApi);
-      // Publish to compile.ts's canonical state so it can reuse the same root
-      // context instead of creating new roots that pollute the shared context
-      // chain. Slice-119 (Cluster B): canonical state lives in compile.ts as
-      // the module-local `_gxtRootContext`; routed through
-      // `compilePipeline.setRootContext` (pre-slice-119 this was a direct
-      // `(globalThis as any).__gxtRootContext = gxtRootContext` write).
+      // Share this root context with gxt-backend so it reuses it instead of
+      // creating new roots that pollute the shared context chain.
       getGxtRenderer()?.compilePipeline.setRootContext?.(gxtRootContext);
     }
     // Always ensure context is set before rendering
@@ -102,22 +84,17 @@ function ensureGxtContext() {
   }
 }
 
-// GXT-only: a minimal DebugRenderTree backed by gxt's `captureRenderTree`
-// (exported from @lifeart/gxt since 0.0.79; the walk's cycle/visited guard
-// landed in 0.0.80 / glimmer-next #262). Only `.capture()` is reachable in GXT
-// mode — the `begin`/`create`/`update`/`didRender`/`willDestroy`/`commit`
-// bookkeeping lives on the classic Glimmer VM environment, whose opcode eval
-// pipeline is purged from the GXT build (see the `debugRenderTree` getter).
+// GXT-only: a minimal DebugRenderTree backed by gxt's `captureRenderTree`.
+// Only `.capture()` is reachable in GXT mode — the `begin`/`create`/`update`/
+// `didRender`/`willDestroy`/`commit` bookkeeping lives on the classic Glimmer
+// VM environment, which the GXT build does not include (see the
+// `debugRenderTree` getter).
 //
-// SEAM: gxt's `captureRenderTree()` already returns Ember-compatible
-// `CapturedRenderNode[]` — each node is `{ id, type, name, args:{positional,
-// named}, instance, bounds:{parentElement,firstNode,lastNode}|null, children }`,
-// matching @glimmer/interfaces' `CapturedRenderNode` exactly (gxt adds a
-// harmless extra `template:null` field, and always reports `type:'component'`).
-// So `capture()` is a straight pass-through with no remapping. Called with no
-// arguments, gxt auto-discovers the render roots from its own component-parent
-// registry (populated under the build's default WITH_CONTEXT_API=true). Any gxt
-// error propagates loud (never swallowed).
+// gxt's `captureRenderTree()` already returns Ember-compatible
+// `CapturedRenderNode[]` (gxt adds a harmless extra `template: null` field and
+// always reports `type: 'component'`), so `capture()` is a straight
+// pass-through. Called with no arguments, gxt discovers the render roots from
+// its own component-parent registry. gxt errors propagate.
 let gxtDebugRenderTree: DebugRenderTree | null = null;
 
 function getGxtDebugRenderTree(): DebugRenderTree {
@@ -133,9 +110,7 @@ function getGxtDebugRenderTree(): DebugRenderTree {
         didRender: noop,
         willDestroy: noop,
         commit: noop,
-        // No args → gxt auto-discovers the render roots from its own
-        // component-parent registry and returns Ember-compatible
-        // CapturedRenderNode[] (see the SEAM note above).
+        // No args → gxt discovers the render roots itself (see above).
         capture: (): CapturedRenderNode[] => _gxtLib().captureRenderTree() as CapturedRenderNode[],
       } as DebugRenderTree;
     }
@@ -267,21 +242,6 @@ export class DynamicScope implements GlimmerDynamicScope {
 
 const NO_OP = () => {};
 
-// Note: `ensureLifecycleErrorCapture` previously patched
-// `Component.prototype._trigger` and per-instance `destroy` to capture
-// user-thrown lifecycle errors into the GXT render-error queue before
-// manager.ts's silent try/catch blocks discarded them. As of Phase 3 step 6
-// of the GXT workaround-removal plan, those swallows in manager.ts are
-// replaced with captureRenderError() at the source:
-//   - triggerLifecycleHook (around `instance.trigger(hookName)`) captures all
-//     Error instances (was: only allowlisted "Assertion Failed" / "Error in")
-//   - __gxtDestroyUnclaimedPoolEntries Phase 3 captures destroy/willDestroy
-//     throws (was: silent /* ignore */ catch)
-// Both honor the `_suppressDestroyCapture` flag in `manager.ts` (slice-52,
-// previously `globalThis.__gxtSuppressDestroyCapture`) for spurious-sweep
-// gating.
-// The renderer-side prototype patch is therefore no longer needed.
-
 // This wrapper logic prevents us from rerendering in case of a hard failure
 // during render. This prevents infinite revalidation type loops from occuring,
 // and ensures that errors are not swallowed by subsequent follow on failures.
@@ -404,23 +364,9 @@ function _registerArrayProxyOwner(proxy: any, ownerObj: object, ownerKey: string
   }
 }
 
-// Slice-15 (Cluster B): the pre-slice-15 `_ensureTriggerReRenderPatched`
-// wrap-by-reassignment is replaced by a registered AFTER-chain host hook on
-// `compilePipeline.addAfterTriggerReRender` (see slice-15 doc in
-// `gxt-bridge.ts`). The hook closes over `_proxyContentOwners` (renderer.ts
-// module-local WeakMap) so relocation would have fragmented the map's only
-// reader site — host-hook applies, not relocation.
-//
-// Why AFTER-hook: pre-slice-15 the wrap called `origTrigger(obj, keyName)`
-// FIRST and then did the ArrayProxy content-owner cell dirtying. The
-// AFTER-chain in compile.ts's canonical body runs the same sequence:
-// canonical body executes, then registered AFTER hooks run.
-//
-// Lazy install retained: pre-slice-15 the wrap was installed lazily on first
-// proxy registration (`_registerArrayProxyOwner`) so that classic-Ember
-// builds without GXT mode don't take the wrap overhead. The bridge form
-// keeps the lazy pattern — the first proxy registration installs the host
-// hook through the bridge if it's available.
+// Lazily registers (once) an after-hook on the GXT re-render trigger that runs
+// after the trigger's own work: when an ArrayProxy's content array changes,
+// it dirties the owning component cell with the proxy.
 let _triggerReRenderHostHookInstalled = false;
 function _ensureTriggerReRenderPatched() {
   if (__GXT_MODE__) {
@@ -503,8 +449,6 @@ class ClassicRootState {
 
     this.render = errorLoopTransaction(() => {
       // Guard against infinite render depth (e.g., engine mounting loops).
-      // Slice 47 (Cluster B): reads/writes the module-local
-      // `_gxtRenderDepth` (graduated from `globalThis.__gxtRenderDepth`).
       const depth = _gxtRenderDepth || 0;
       if (depth > 20) {
         console.warn('[gxt] Max render depth exceeded, skipping render');
@@ -520,15 +464,8 @@ class ClassicRootState {
           setAmbientOwner(owner);
         }
 
-        // Check if this is a gxt template BEFORE unwrapping.
-        // Gate on __GXT_MODE__: the root outlet template is always tagged
-        // __gxtCompiled=true (templates/root.ts) so isGxtTemplate(template)
-        // would return true even for classic-Ember apps that don't load the
-        // gxt runtime. Without GXT_MODE the GXT branch's outlet re-render
-        // (root.ts:1110 `parentElement.innerHTML = ''`) wipes the DOM and
-        // never restores it — observed as an infinite hang in benchmark-app
-        // at the clearItems4 phase. Force classic mode through standard
-        // Glimmer rendering by short-circuiting here.
+        // Check if this is a gxt template BEFORE unwrapping (GXT mode only;
+        // classic builds always take the standard Glimmer rendering path).
         const templateIsGxt = __GXT_MODE__ ? isGxtTemplate(template) : false;
 
         let layout = unwrapTemplate(template).asLayout();
@@ -602,8 +539,6 @@ class ClassicRootState {
               };
             } else if (root && 'layoutName' in root) {
               // This is a ClassicComponent (from RenderingTestCase)
-              // Use Object.create to preserve the prototype chain so methods are accessible
-              // via this.methodName() in templates
               const component = root as any;
 
               // Use the component directly as render context (not Object.create).
@@ -624,7 +559,6 @@ class ClassicRootState {
               // data properties. Use skipDefine=false so GXT's native formula
               // tracking (in $_if, $_each, etc.) picks up cell.value reads.
               const _cellFor = getGxtRenderer()?.compilePipeline.cellFor;
-              // (Cluster B slice 6) Bridge reader for registerArrayOwner.
               const _registerArrayOwner = getGxtRenderer()?.compilePipeline.registerArrayOwner;
               _ensureTriggerReRenderPatched();
               if (_cellFor) {
@@ -664,10 +598,9 @@ class ClassicRootState {
                     // `undefined` for inherited props. Without walking, we fail
                     // to detect mixin-installed computed-property getter/setter
                     // pairs (e.g., `actionContextObject` from TargetActionSupport)
-                    // and install a cellFor that captures the CP's getter into a
-                    // GXT cached `Yt` via gxt's `jt` WeakMap. Subsequent reads
-                    // cycle: `Object.defineProperty(comp, key, { get: () => yt.value })`
-                    // -> yt.value -> yt.__fn() -> comp[key] -> yt.value ...
+                    // and install a cellFor whose cell re-reads the CP through
+                    // `comp[key]`, recursing forever
+                    // (cell.value -> cell.__fn() -> comp[key] -> cell.value ...).
                     let desc: PropertyDescriptor | undefined;
                     let obj: any = component;
                     while (obj && obj !== Object.prototype) {
@@ -821,17 +754,10 @@ class ClassicRootState {
               pushParentView(root);
             }
             // Wrap the synchronous template render so that init-phase throws
-            // (e.g., `init() { throw ... }` on a classic Ember component) can
-            // be caught directly. Previously this was handled by the
-            // `captureRenderError` queue + `__gxtRenderErrorCount` global at
-            // manager.ts:9144/10840 (gxt-backend's classic-component closure
-            // outer wraps), but those captures both swallowed information and
-            // required the `root.ts:142` swallow + `flushRenderErrors` dance to
-            // surface the throw. With manager.ts now letting init throws
-            // propagate naturally and `root.ts` no longer swallowing, the
-            // throw reaches us here and we can react locally: clear the
-            // partially-rendered DOM (matching classic Glimmer VM behaviour
-            // for init failures) and re-throw to `assert.throws` / the host.
+            // (e.g., `init() { throw ... }` on a classic Ember component) are
+            // caught here: clear the partially-rendered DOM (matching classic
+            // Glimmer VM behaviour for init failures) and re-throw to
+            // `assert.throws` / the host.
             let renderPhaseError: unknown = undefined;
             try {
               (template as any).render(renderContext, actualRenderTarget);
@@ -848,10 +774,7 @@ class ClassicRootState {
             }
             if (renderPhaseError !== undefined) {
               // Init-phase failure — DOM is partially populated. Clear it
-              // before propagating, matching Glimmer's behaviour and the
-              // expectations of the `Errors thrown during render: it can
-              // recover resets the transaction when an error is thrown during
-              // initial render` canary.
+              // before propagating, matching Glimmer's behaviour.
               (parentElement as unknown as Element).innerHTML = '';
               throw renderPhaseError;
             }
@@ -863,9 +786,8 @@ class ClassicRootState {
           }
 
           // Flush queued didInsertElement / didRender hooks now that all DOM
-          // has been inserted into the live document by GXT. Lifecycle errors
-          // thrown here are queued by `ensureLifecycleErrorCapture`'s
-          // `_trigger`/`destroy` wrappers (renderer.ts:319) into `_renderErrors`.
+          // has been inserted into the live document by GXT. Errors thrown by
+          // these hooks are queued by gxt-backend and re-thrown below.
           flushAfterInsertQueue();
 
           // Re-throw any lifecycle (didInsertElement / destroy) errors captured
@@ -894,21 +816,15 @@ class ClassicRootState {
             this.gxtLastTagValue = valueForTag(componentTag);
           }
 
-          // Wrap the re-render in a deferred-error mechanism so that lifecycle
-          // errors (destroy, didInsertElement during re-render) don't permanently
-          // disable re-rendering via errorLoopTransaction. The error is stored on
-          // the root state and re-thrown by renderRoots after the render completes.
-          // Fine-grained reactivity (GXT opcode path) drives all re-renders;
-          // the legacy whole-template morph re-render has been removed. The
-          // `render` closure is still invoked by `_gxtForceEmberRerender` and
-          // `renderRoots`, but in GXT mode it is a no-op — root tag bookkeeping
-          // (`gxtComponentTag` / `gxtLastTagValue`) is maintained by the
-          // dirty-root detection in `_gxtForceEmberRerender` /
-          // `_gxtUpdateRootTagValues`.
+          // GXT's fine-grained reactivity drives all re-renders, so `render`
+          // is a no-op from here on (it is still invoked by
+          // `_gxtForceEmberRerender` and `renderRoots`). Root tag bookkeeping
+          // (`gxtComponentTag` / `gxtLastTagValue`) is maintained by
+          // `_gxtForceEmberRerender` / `_gxtUpdateRootTagValues`. Lifecycle
+          // errors (destroy, didInsertElement during re-render) are stored on
+          // `__gxtDeferredError` and re-thrown by renderRoots outside
+          // errorLoopTransaction, so they don't permanently disable re-rendering.
           this.render = errorLoopTransaction(() => {});
-
-          // Deferred lifecycle errors are stored on __gxtDeferredError and
-          // re-thrown by renderRoots (outside errorLoopTransaction).
         } else if (!__GXT_MODE__) {
           // Use standard glimmer rendering (resolves the lazy VM context —
           // correct here: this branch actually runs the Glimmer VM). This
@@ -947,11 +863,8 @@ class ClassicRootState {
         this.gxtRenderIncomplete = true;
         throw e;
       } finally {
-        // Slice 47 (Cluster B): restore the captured pre-entry depth so
-        // the counter unwinds cleanly across nested renders. NOT a
-        // reset-to-0 — writes back the local `depth` snapshot taken at
-        // the top of the render body, so the depth tracks each nested
-        // render-entry/exit independently.
+        // Restore the pre-entry depth (not 0) so nested renders unwind
+        // correctly.
         _gxtRenderDepth = depth;
       }
     });
@@ -1000,54 +913,15 @@ class ClassicRootState {
 
 const renderers: BaseRenderer[] = [];
 
-// Slice 45 (Cluster B): module-local re-entrancy guard for
-// `__gxtForceEmberRerender`. Graduates the pre-slice-45
-// `globalThis.__gxtForceRerenderInProgress` slot to a module-local
-// boolean (slice-31/43/44 zero-bridge intra-file precedent). The flag is
-// set to `true` on entry to `__gxtForceEmberRerender` and reset to
-// `false` in the `finally` block; any re-entrant call returns early
-// while the outer call is in-flight. All 3 sites (1 reader-with-early-
-// return, 1 writer-true on entry, 1 writer-false in the finally block)
-// live in this file — confirmed by exhaustive grep across `packages/`.
-// The pre-slice-45 globalThis slot is dropped (the only remaining
-// non-source references are defensive resets in packages/demo/tests.html,
-// which now write to an unused slot — no consumer reads it).
+// Re-entrancy guard for `_gxtForceEmberRerender`.
 let _gxtForceRerenderInProgress = false;
 
-// Slice 46 (Cluster B): module-local stash for the dirty-roots list
-// recorded by `_gxtUpdateRootTagValues` (Phase 1b of `__gxtSyncDomNow`)
-// for consumption by `__gxtForceEmberRerender` (Phase 1c). Graduates the
-// pre-slice-46 `globalThis.__gxtDirtyRootsAtSync` slot to a module-local
-// `any[] | undefined` (slice-31/43/44/45 zero-bridge intra-file precedent).
-// Lifetime spans one `__gxtSyncDomNow` cycle: written by
-// `_gxtUpdateRootTagValues` (populate), read by `__gxtForceEmberRerender`
-// (consume), cleared to `undefined` in `__gxtForceEmberRerender`'s
-// `finally` block. All 3 sites (1 reader in `__gxtForceEmberRerender`,
-// 1 writer-undefined in the same function's `finally`, 1 writer-populate
-// in `_gxtUpdateRootTagValues`) live in this file — confirmed by
-// exhaustive grep across `packages/`. Paired with slice-45's
-// `_gxtForceRerenderInProgress` (both are part of the
-// `__gxtForceEmberRerender` cycle state). The pre-slice-46 globalThis
-// slot is dropped.
+// Dirty roots recorded by `_gxtUpdateRootTagValues` during a GXT DOM sync,
+// consumed (and cleared) by `_gxtForceEmberRerender` in the same sync.
 let _gxtDirtyRootsAtSync: any[] | undefined;
 
-// Slice 47 (Cluster B): module-local render-depth re-entrancy counter
-// for `ClassicRootState.render` (the `errorLoopTransaction`-wrapped
-// initial render in this file). Graduates the pre-slice-47
-// `globalThis.__gxtRenderDepth` slot to a module-local `number`
-// (slice-31/43/44/45/46 zero-bridge intra-file precedent). All 3 sites
-// (1 reader-init capturing the pre-entry depth, 1 writer-increment on
-// entry-arm, 1 writer-restore in the `finally` block restoring the
-// pre-entry value) live in this file in the `ClassicRootState`
-// constructor's render body — confirmed by exhaustive grep across
-// `packages/`. The L1137 writer-restore is NOT a reset-to-0; it
-// restores the captured pre-entry depth so the counter unwinds cleanly
-// across nested renders (e.g., engine-mounting chains). If the depth
-// exceeds 20 on entry, the render is skipped with a `console.warn`.
-// Third consecutive Cluster B slice with state-home in `renderer.ts`
-// (after slice 45's `_gxtForceRerenderInProgress` and slice 46's
-// `_gxtDirtyRootsAtSync`), forming a 3-slot module-local cluster of
-// renderer-cycle state. The pre-slice-47 globalThis slot is dropped.
+// Render depth of `ClassicRootState` renders (e.g. engine-mounting chains);
+// renders nested deeper than 20 are skipped with a warning.
 let _gxtRenderDepth = 0;
 
 export function _resetRenderers() {
@@ -1094,10 +968,9 @@ export function renderSettled() {
     // if there is no current runloop, the promise created above will not have
     // a chance to resolve (because its resolved in backburner's "end" event)
     if (!_getCurrentRunLoop()) {
-      // In GXT mode, scheduling 'actions' triggers backburner's onEnd hook,
-      // which flushes __gxtSyncDomNow when __gxtPendingSync is set. The
-      // 'end' event listener registered below then resolves the deferred,
-      // so the promise resolves AFTER any pending DOM sync has been applied.
+      // ensure a runloop has been kicked off. In GXT mode its end flushes any
+      // pending DOM sync before the 'end' listener registered below resolves
+      // the deferred, so the promise resolves after the DOM is up to date.
       _backburner.schedule('actions', null, NO_OP);
     }
   }
@@ -1133,8 +1006,9 @@ function loopEnd() {
 }
 
 // In GXT mode, don't hook into backburner's begin/end events for render
-// revalidation. GXT handles rendering via its own reactivity system.
-// Instead, use __gxtSyncDomNow (called by runTask) for synchronous updates.
+// revalidation. GXT handles rendering via its own reactivity system; pending
+// DOM syncs are flushed at the end of the outermost run loop (and explicitly
+// by the test helpers).
 if (!__GXT_MODE__) {
   _backburner.on('begin', loopBegin);
   _backburner.on('end', loopEnd);
@@ -1146,25 +1020,8 @@ if (!__GXT_MODE__) {
   // not inside runTask (which performs its own explicit sync).
   _backburner.on('end', (_curr: unknown, nextInstance: unknown) => {
     loops = 0;
-    // Slice-37 (Cluster B): `__gxtPendingSync` canonical state migrated to
-    // module-local `_gxtPendingSyncFlag` in `compile.ts`. Cross-package
-    // reader routes through the bridge getter (load-order-safe optional
-    // chain — by the time this `_backburner.on('end', ...)` listener
-    // fires, compile.ts's `installCompilePipelinePart` has run and the
-    // getter is installed). See `getPendingSync` doc in gxt-bridge.ts.
-    // Slice-38 (Cluster B): `__gxtRunTaskActive` canonical state migrated
-    // to module-local `_gxtRunTaskActiveFlag` in `compile.ts`. Cross-
-    // package reader routes through the bridge getter (paired
-    // topologically with the slice-37 `getPendingSync` reader above —
-    // both flags read together in this `pending && !runTaskActive`
-    // gate). See `getRunTaskActive` doc in gxt-bridge.ts.
     const _cpBB = getGxtRenderer()?.compilePipeline;
     if (nextInstance == null && _cpBB?.getPendingSync?.() && !_cpBB?.getRunTaskActive?.()) {
-      // Slice-125 (Cluster B): `__gxtSyncDomNow` canonical function migrated
-      // to module-local `_gxtSyncDomNow` in `compile.ts`. Cross-package
-      // reader routes through the bridge method on the same compilePipeline
-      // namespace we already dereferenced above. See `syncDomNow` doc in
-      // gxt-bridge.ts.
       const syncNow = _cpBB?.syncDomNow;
       if (typeof syncNow === 'function') {
         try {
@@ -1179,60 +1036,21 @@ if (!__GXT_MODE__) {
 }
 
 // Force re-render all GXT roots whose own tag moved in the current sync
-// cycle. Called from __gxtSyncDomNow when GXT's cell tracking misses changes
-// made through Ember's set() / notifyPropertyChange, and from manager.ts's
-// patched-recompute helper-recompute path to force a full-tree morph that
-// lets formulas reading helper cells re-evaluate.
-//
-// Slice-96 (Cluster B): graduated from the pre-slice-96 globalThis writer
-// `(globalThis as any).__gxtForceEmberRerender = function () { ... };` to
-// a plain module-local `function _gxtForceEmberRerender()` declaration
-// exposed through the `compilePipeline.forceEmberRerender` typed-bridge
-// method. Pattern mirrors slice-91's `newRenderPass` and slice-92's
-// `postRenderHooks` (same shape: void-returning bridge method invoked from
-// sibling cross-package readers). The two readers at `compile.ts:6716`
-// (PHASE 2b morph fallback inside `_gxtSyncDomNow`) and `manager.ts:602`
-// (patched-recompute helper-recompute path) route through
-// `getGxtRenderer()?.compilePipeline.forceEmberRerender?.()` — the
-// optional-chain provides the same null-tolerant guard as the pre-slice-96
-// `typeof === 'function'` check. State home: renderer.ts owns the
-// `renderers[]` registry plus the slice-45/46 module-local cycle state
-// (`_gxtForceRerenderInProgress` re-entrancy guard, `_gxtDirtyRootsAtSync`
-// pre-sync dirty list), so the function stays here and is registered via
-// `installCompilePipelinePart` (slice-9 reverse-flow install precedent).
-// See `forceEmberRerender` doc in gxt-bridge.ts. Net -1 globalThis slot,
-// +1 new bridge method on `compilePipeline`.
+// cycle. gxt-backend calls this (as `compilePipeline.forceEmberRerender`) from
+// its DOM sync when GXT's cell tracking misses changes made through Ember's
+// set() / notifyPropertyChange, and from the helper-recompute path so formulas
+// reading helper cells re-evaluate.
 function _gxtForceEmberRerender(): void {
-  // Re-entrancy guard: prevent infinite loops when morphing triggers
+  // Re-entrancy guard: prevent infinite loops when re-rendering triggers
   // cell updates that schedule additional force-rerenders.
-  // Slice 45 (Cluster B): canonical state migrated from
-  // `globalThis.__gxtForceRerenderInProgress` to module-local
-  // `_gxtForceRerenderInProgress` (zero-bridge intra-file — all 3 sites
-  // live in this file). See module-local declaration near `renderers`.
   if (_gxtForceRerenderInProgress) return;
   _gxtForceRerenderInProgress = true;
   try {
-    // Slice-35 (Cluster B): canonical state migrated from
-    // `globalThis.__gxtHadPendingSync` to module-local
-    // `_gxtHadPendingSyncFlag` in `compile.ts`. Cross-package reader
-    // routes through the bridge getter (load-order-safe optional chain
-    // — by the time `__gxtForceEmberRerender` fires, compile.ts's
-    // `installCompilePipelinePart` has run and the getter is installed).
-    // See `getHadPendingSync` doc in gxt-bridge.ts.
     const hadPendingSync = !!getGxtRenderer()?.compilePipeline.getHadPendingSync?.();
-    // Slice-97 (Cluster B): canonical state migrated from
-    // `globalThis.__gxtHadNestedObjectChange` to module-local
-    // `_gxtHadNestedObjectChangeFlag` in `compile.ts`. Cross-package
-    // reader routes through the bridge getter (load-order-safe optional
-    // chain — by the time `_gxtForceEmberRerender` fires, compile.ts's
-    // `installCompilePipelinePart` has run and the getter is installed).
-    // See `getHadNestedObjectChange` doc in gxt-bridge.ts.
     const hadNestedObjectChange = !!getGxtRenderer()?.compilePipeline.getHadNestedObjectChange?.();
-    // Collect roots whose own tag moved RIGHT NOW (after Phase 1a of
-    // __gxtSyncDomNow, before Phase 1b updateRootTagValues was called).
-    // If __gxtUpdateRootTagValues was already called earlier in this sync,
-    // it stashed the dirty list on module-local `_gxtDirtyRootsAtSync` — use that.
-    // (Slice 46 — graduated from `globalThis.__gxtDirtyRootsAtSync`.)
+    // Collect roots whose own tag has moved. If `_gxtUpdateRootTagValues`
+    // already ran earlier in this sync, it stashed the dirty list in
+    // `_gxtDirtyRootsAtSync`; prefer that.
     const dirtyRootsFromSync = _gxtDirtyRootsAtSync;
     const dirtyRoots: any[] = [];
     const allGxtRoots: any[] = [];
@@ -1298,26 +1116,10 @@ function _gxtForceEmberRerender(): void {
       // so the instance pool resets claimed flags and REUSES existing
       // instances instead of creating new ones (which would fire
       // spurious init/render lifecycle hooks).
-      // Slice-124 (Cluster B): intra-file write of the module-local
-      // `_emberRenderPassId` (graduated from
-      // `(globalThis as any).__emberRenderPassId`). See
-      // `getRenderPassId` / `incrementRenderPassId` docs in
-      // gxt-bridge.ts for the slice topology.
       _incrementEmberRenderPassId();
-      // Slice-112 (Cluster B): paired typed-bridge migration of the
-      // `__gxtIsForceRerender` boolean flag. Pre-slice-112 this site set
-      // `(globalThis as any).__gxtIsForceRerender = true` before
-      // `classicRoot.render()` and reset it to `false` in the enclosing
-      // `finally`. Slice-112 routes BOTH writes through
-      // `compilePipeline.withForceRerender?.(fn) ?? fn()` — the optional
-      // chain short-circuits to the unwrapped body when the bridge is
-      // not yet installed (matching pre-slice-112 semantics where the
-      // readers' truthy check coerced `undefined` to `false`). The
-      // deferred-error stash on `classicRoot.__gxtDeferredError` stays
-      // INSIDE the wrapped body so it captures `renderErr` before the
-      // bridge's `finally` resets the flag — net behavior identical to
-      // the pre-slice-112 set-true / try / catch / finally-set-false
-      // pair. See `withForceRerender` doc in gxt-bridge.ts.
+      // Render inside `withForceRerender` so gxt-backend knows a forced
+      // rerender is in progress. The render error is stashed inside the
+      // wrapped body, before the flag is reset.
       const _renderFn = () => {
         try {
           classicRoot.render();
@@ -1352,39 +1154,14 @@ function _gxtForceEmberRerender(): void {
       }
     }
   } finally {
-    // Slice 45 (Cluster B): canonical state migrated from
-    // `globalThis.__gxtForceRerenderInProgress` to module-local
-    // `_gxtForceRerenderInProgress`. See module-local declaration near
-    // `renderers`.
     _gxtForceRerenderInProgress = false;
-    // Slice-35 (Cluster B): canonical state migrated from
-    // `globalThis.__gxtHadPendingSync` to module-local
-    // `_gxtHadPendingSyncFlag` in `compile.ts`. Cross-package writer
-    // routes through the bridge setter. See `setHadPendingSync` doc in
-    // gxt-bridge.ts.
     getGxtRenderer()?.compilePipeline.setHadPendingSync?.(false);
-    // Slice-97 (Cluster B): canonical state migrated from
-    // `globalThis.__gxtHadNestedObjectChange` to module-local
-    // `_gxtHadNestedObjectChangeFlag` in `compile.ts`. Cross-package
-    // writer routes through the bridge setter. See
-    // `setHadNestedObjectChange` doc in gxt-bridge.ts.
     getGxtRenderer()?.compilePipeline.setHadNestedObjectChange?.(false);
-    // Slice 46 (Cluster B): module-local dirty-roots stash. See declaration
-    // near `renderers`.
     _gxtDirtyRootsAtSync = undefined;
   }
 }
 
-// Slice-96 (Cluster B): publish the renderer-owned force-rerender morph
-// fallback to the gxt-bridge `compilePipeline` namespace. Mirrors slice-9's
-// `installRootComponentPart` reverse-flow install (renderer.ts contributes
-// to a bridge namespace consumed inside `@ember/-internals/gxt-backend`).
-// Replaces the pre-slice-96 globalThis writer at L1363
-// (`(globalThis as any).__gxtForceEmberRerender = function () { ... };`,
-// now retired). The two cross-package readers at `compile.ts:6716` and
-// `manager.ts:602` route through
-// `getGxtRenderer()?.compilePipeline.forceEmberRerender?.()`. See
-// `forceEmberRerender` doc in gxt-bridge.ts. Net -1 globalThis slot.
+// Expose `_gxtForceEmberRerender` to gxt-backend.
 if (__GXT_MODE__) {
   installCompilePipelinePart({
     forceEmberRerender: _gxtForceEmberRerender,
@@ -1392,14 +1169,10 @@ if (__GXT_MODE__) {
 }
 
 // Check if the given object is a GXT root-component's `root` (i.e., a
-// component that owns a top-level renderer state). Used by compile.ts's
-// __gxtTriggerReRender to distinguish own-SELF_TAG changes (which the
-// cell-based sync pipeline handles) from nested-object changes (which need
-// a force-rerender fallback).
-//
-// (Cluster B slice 9) Was `(globalThis as any).__gxtIsRootComponent`. Now
-// installed on the gxt-bridge `rootComponent` namespace via
-// `installRootComponentPart` below.
+// component that owns a top-level renderer state). Used by the GXT re-render
+// trigger to distinguish own-SELF_TAG changes (which the cell-based sync
+// pipeline handles) from nested-object changes (which need a force-rerender
+// fallback).
 function _gxtIsRootComponent(obj: unknown): boolean {
   if (!obj || typeof obj !== 'object') return false;
   for (const renderer of renderers) {
@@ -1414,18 +1187,11 @@ function _gxtIsRootComponent(obj: unknown): boolean {
   return false;
 }
 
-// Update gxtLastTagValue on all GXT roots to mark them clean.
-// Called from __gxtTriggerReRender after cell-based sync succeeds,
-// so __gxtForceEmberRerender sees them as up-to-date and skips
-// the destructive innerHTML='' + full rebuild.
-// ALSO records which roots WERE dirty (on module-local `_gxtDirtyRootsAtSync`)
-// so __gxtForceEmberRerender can scope its rerender to just those roots,
-// avoiding a full-tree force-render when only some components mutated.
-// (Slice 46 — graduated from `globalThis.__gxtDirtyRootsAtSync`.)
-//
-// (Cluster B slice 9) Was `(globalThis as any).__gxtUpdateRootTagValues`. Now
-// installed on the gxt-bridge `rootComponent` namespace via
-// `installRootComponentPart` below.
+// Update gxtLastTagValue on all GXT roots to mark them clean. Called from
+// gxt-backend's DOM sync after the cell-based updates, so
+// `_gxtForceEmberRerender` sees them as up to date. Also records which roots
+// WERE dirty (in `_gxtDirtyRootsAtSync`) so `_gxtForceEmberRerender` can scope
+// its rerender to just those roots.
 function _gxtUpdateRootTagValues(): void {
   const dirtyRoots: any[] = [];
   for (const renderer of renderers) {
@@ -1456,21 +1222,8 @@ if (__GXT_MODE__) {
   });
 }
 
-// Slice-124 (Cluster B): canonical state for the `__emberRenderPassId`
-// counter. Pre-slice-124 this was the globalThis slot
-// `(globalThis as any).__emberRenderPassId` written by 3 sites
-// (renderer.ts force-rerender loop below + 2 test-helper writers in
-// `internal-test-helpers/lib/test-cases/rendering.ts`) and read by 12
-// sites in gxt-backend (manager.ts × 9, compile.ts × 2,
-// ember-template-compiler.ts × 1). Slice 124 graduates the slot to a
-// module-local `_emberRenderPassId` here in renderer.ts (the natural
-// owner — the force-rerender loop is the dominant writer) and exposes
-// a paired typed-bridge getter+incrementer on the `viewUtils` namespace.
-// Reverse-flow install via `installViewUtilsPart` mirrors slice 9's
-// `installRootComponentPart` and slice 96's
-// `installCompilePipelinePart({ forceEmberRerender })` pattern. See
-// `getRenderPassId` / `incrementRenderPassId` docs in gxt-bridge.ts for
-// the full topology narrative.
+// Render pass ID, incremented before each forced root re-render and by the
+// rendering test helpers. Exposed to gxt-backend through `viewUtils`.
 let _emberRenderPassId = 0;
 function _getEmberRenderPassId(): number {
   return _emberRenderPassId;
@@ -1484,12 +1237,6 @@ if (__GXT_MODE__) {
     incrementRenderPassId: _incrementEmberRenderPassId,
   });
 }
-
-// (Cluster B slice 9 orphan cleanup) The pre-slice `(globalThis as any)
-// .__gxtCheckAllTagsCurrent` writer had ZERO live readers in source — the
-// sole reference at `compile.ts:5522` is a historical comment explaining
-// why the function is no longer used (the morph must always run when
-// hadPendingSync is true). Writer removed without bridge migration.
 
 interface ViewRegistry {
   [viewId: string]: unknown;
@@ -1711,17 +1458,10 @@ class RendererState {
 
   revalidate(renderer: BaseRenderer): void {
     // In GXT mode, isValid() returns true to prevent infinite revalidation.
-    // But explicit .rerender() calls route through
-    // `compilePipeline.forceRerender(this)` (slice-109; pre-slice-109 this
-    // was the globalThis writer `__gxtForceRerender`) on the component and
-    // need a sync pass to flush the hooks.
+    // But explicit .rerender() calls (which mark the component through
+    // `compilePipeline.forceRerender`) still need a sync pass to flush the
+    // hooks.
     if (__GXT_MODE__) {
-      // Slice-37 (Cluster B): `__gxtPendingSync` canonical state migrated
-      // to module-local `_gxtPendingSyncFlag` in `compile.ts`. Cross-
-      // package writer routes through the bridge setter (load-order-safe
-      // optional chain — by the time `revalidate` fires, compile.ts's
-      // `installCompilePipelinePart` has run and the setter is
-      // installed). See `setPendingSync` doc in gxt-bridge.ts.
       getGxtRenderer()?.compilePipeline.setPendingSync?.(true);
       return;
     }
@@ -1809,9 +1549,7 @@ interface GxtRenderEntry {
    * The runloop instance that was active when this entry was created.
    * Used to distinguish "sibling renders within the same render pass"
    * (same runloop -> coexist) from "re-render of the same target across
-   * runloop boundaries" (different runloop -> destroy prior). This is
-   * the heuristic that lets the renderComponent siblings tests pass while
-   * keeping the eager-tracks-with-parent test passing: synchronous
+   * runloop boundaries" (different runloop -> destroy prior): synchronous
    * back-to-back renders in one run() are siblings; an outer template
    * re-render that calls renderComponent again replaces.
    */
@@ -1932,8 +1670,7 @@ function _renderComponentGxt(
       }
     }
     // Initial render into a target that has not yet been claimed by
-    // renderComponent: clear any pre-existing contents (per the
-    // "replaces existing contents within the target element" test).
+    // renderComponent: clear any pre-existing contents of the target element.
     if (!targetState.cleared) {
       targetElement.innerHTML = '';
       targetState.cleared = true;
@@ -2284,26 +2021,9 @@ function _renderComponentGxt(
     }
     renderContext.owner = owner;
 
-    // Enable isRendering so GXT formulas created during template.render()
-    // properly track cell dependencies (e.g., trackedObject cells).
-    //
-    // Slice-19 (Cluster B): read the render-pass depth through the typed
-    // `compilePipeline.isRendering()` bridge predicate.
-    // Slice-21 (Cluster B): wrap the render bodies with the typed
-    // `compilePipeline.withRendering(fn)` bridge helper (increment +
-    // try/finally + decrement). The bridge helper invokes
-    // `_gxtSetIsRendering` directly (intra-module to compile.ts), so
-    // semantics are identical to the pre-slice-21 `globalThis.
-    // __gxtSetIsRendering` lookup. The conditional-decrement workaround
-    // (`if (!wasRendering) _setRendering(false)`) is folded into the
-    // helper's unconditional decrement — depth counter handles nested
-    // calls correctly (outer N → inner N+1 → outer N). The
-    // `__gxtIsRendering` / `__gxtSetIsRendering` globalThis fallback
-    // branches are also dropped in this slice — the bridge install runs
-    // at compile.ts module init (top-level), strictly before any
-    // renderComponent invocation in a QUnit test (the bridge is loaded
-    // transitively through `@ember/-internals/glimmer` import). See
-    // `isRendering` / `withRendering` docs in gxt-bridge.ts.
+    // Render inside `withRendering` so GXT formulas created during
+    // template.render() properly track cell dependencies (e.g., trackedObject
+    // cells). It is a depth counter, so nested renders are handled correctly.
     const _pipeline = getGxtRenderer()?.compilePipeline;
     const _isRendering = _pipeline?.isRendering;
     const _withRendering = _pipeline?.withRendering;
@@ -2316,15 +2036,6 @@ function _renderComponentGxt(
     // (before the parent re-renders) and cause double getter evaluations.
     // Top-level renderComponent calls (wasRendering=false) DO need text effects
     // for trackedObject reactivity.
-    //
-    // Slice-115 (Cluster B): the flag is now routed through the typed
-    // bridge — `compilePipeline.setSkipTextEffects(value)` / `compilePipeline.
-    // getSkipTextEffects()` (state-home compile.ts). Pre-slice-115 this
-    // pair wrote `(globalThis as any).__gxtSkipTextEffects = prev / true`.
-    // The optional-chain fallback (writer short-circuits to undefined,
-    // reader `?? false` defaults) preserves the pre-slice-115 semantics
-    // when the bridge is not yet installed. See `setSkipTextEffects` doc
-    // in gxt-bridge.ts for the full narrative.
     const _compilePipeline = getGxtRenderer()?.compilePipeline;
     const prevSkipTextEffects = _compilePipeline?.getSkipTextEffects?.() ?? false;
     if (wasRendering) {
@@ -2343,9 +2054,6 @@ function _renderComponentGxt(
       _rendering = true;
       const prevOwnerLocal = getAmbientOwner();
       setAmbientOwner(owner);
-      // Slice-115 (Cluster B): routed through `compilePipeline.
-      // {set,get}SkipTextEffects` bridge methods (state-home compile.ts).
-      // Pre-slice-115 read/wrote `(globalThis as any).__gxtSkipTextEffects`.
       const _pipelineLocal = getGxtRenderer()?.compilePipeline;
       const prevSkip = _pipelineLocal?.getSkipTextEffects?.() ?? false;
       const wasRenderingLocal = typeof _isRendering === 'function' ? _isRendering() : false;
@@ -2364,7 +2072,6 @@ function _renderComponentGxt(
           renderIntoRegion(template, renderContext);
         }
       } finally {
-        // Slice-115 (Cluster B): routed through bridge — see entry comment.
         _pipelineLocal?.setSkipTextEffects?.(prevSkip);
         setAmbientOwner(prevOwnerLocal);
         _rendering = false;
@@ -2397,11 +2104,10 @@ function _renderComponentGxt(
     // tests; on the next test's classic-tag dirty (e.g. typing in a
     // textarea) the leaked reactor would fire _doRender on the prior
     // test's detached target and clobber shared GXT sync state via
-    // __gxtSyncDomNow. The "can render in to a detached element" test
-    // creates an element that is NEVER attached during the reactor's
-    // lifetime, then attaches it later — _hasBeenConnected stays false
-    // until the attach, so we keep firing pre-connection. This mirrors
-    // the LinkTo path in gxt-backend/manager.ts.
+    // syncDomNow. A target that has never been attached (rendering into a
+    // detached element that is attached later) keeps _hasBeenConnected
+    // false, so we keep firing until it connects. This mirrors the LinkTo
+    // path in gxt-backend/manager.ts.
     let reactorInitialized = false;
     let _hasBeenConnected = false;
     let _disconnectedTicks = 0;
@@ -2414,10 +2120,6 @@ function _renderComponentGxt(
           /* ignore individual reactor errors */
         }
         // After re-render, flush GXT DOM so the new text content is visible.
-        // Slice-125 (Cluster B): `__gxtSyncDomNow` canonical function
-        // migrated to module-local `_gxtSyncDomNow` in `compile.ts`. Cross-
-        // package reader routes through the bridge method. See `syncDomNow`
-        // doc in gxt-bridge.ts.
         try {
           getGxtRenderer()?.compilePipeline.syncDomNow?.();
         } catch {
@@ -2454,7 +2156,6 @@ function _renderComponentGxt(
 
     try {
       // Render the template into the target (initial render)
-      // Slice-115 (Cluster B): routed through bridge — see entry comment.
       if (wasRendering) {
         _compilePipeline?.setSkipTextEffects?.(true);
       }
@@ -2466,7 +2167,6 @@ function _renderComponentGxt(
         renderIntoRegion(template, renderContext);
       }
     } finally {
-      // Slice-115 (Cluster B): routed through bridge — see entry comment.
       _compilePipeline?.setSkipTextEffects?.(prevSkipTextEffects);
       // Arm the reactor: from now on, classic-tag dirties will trigger
       // _doRender. This is done in `finally` so that any tag dirties
@@ -2757,13 +2457,10 @@ class BaseRenderer {
   get debugRenderTree(): DebugRenderTree {
     if (__GXT_MODE__) {
       // The classic debugRenderTree lives on the Glimmer VM environment, which
-      // is not built under the GXT backend. Reading `this.state.env` here would
-      // force the (purged) VM evaluation context. Instead, GXT exposes its own
-      // render tree via `@lifeart/gxt`'s `captureRenderTree` (0.0.79); return a
-      // minimal DebugRenderTree whose `.capture()` delegates to it. This is the
-      // Ember Inspector foundation seam consumed by
-      // `@ember/debug`'s `captureRenderTree(owner)` →
-      // `renderer.debugRenderTree.capture()`.
+      // is not built under the GXT backend; reading `this.state.env` here would
+      // force the VM evaluation context. Return a minimal DebugRenderTree whose
+      // `.capture()` delegates to gxt's `captureRenderTree` instead (consumed by
+      // `@ember/debug`'s `captureRenderTree(owner)`, e.g. for Ember Inspector).
       return getGxtDebugRenderTree();
     }
 
@@ -2885,14 +2582,11 @@ export class Renderer extends BaseRenderer {
     named['controller'] = UNDEFINED_REFERENCE;
     named['model'] = UNDEFINED_REFERENCE;
 
-    // appendOutletView IS on the GXT root-outlet append path, so use a
-    // VM-free inline equivalent of `createCapturedArgs(named, EMPTY_POSITIONAL)`
-    // — which is just `{ named, positional }` (see @glimmer/runtime vm/arguments)
-    // — under __GXT_MODE__. This drops renderer.ts's last `@glimmer/runtime/
-    // lib/vm/arguments` reference so the renderer chunk no longer pulls the VM
-    // arguments module. (The arguments module itself stays in the GXT dist: it
-    // is genuinely shared by the live GXT helpers {{fn}}/{{concat}}/(hash)/
-    // (array)/{{on}} — see the report.)
+    // appendOutletView is on the GXT root-outlet append path, so under
+    // __GXT_MODE__ use a VM-free equivalent of
+    // `createCapturedArgs(named, EMPTY_POSITIONAL)` (which is just
+    // `{ named, positional }`), keeping the renderer chunk free of
+    // `@glimmer/runtime/lib/vm/arguments`.
     let args = __GXT_MODE__
       ? ({ named, positional: EMPTY_POSITIONAL_GXT } as unknown as ReturnType<
           typeof createCapturedArgs
@@ -2921,11 +2615,8 @@ export class Renderer extends BaseRenderer {
       );
     }
 
-    // Direct GXT rendering for ClassicComponents was tried (the disabled
-    // `_tryGxtRender` triplet) but couldn't inject $slots/$fw/block params
-    // through Ember's component integration. ClassicRootState handles GXT
-    // templates in __GXT_MODE__ via templateIsGxt, so this path always falls
-    // through to Glimmer VM regardless of mode.
+    // In GXT mode ClassicRootState renders the (GXT) root template itself;
+    // see `templateIsGxt`.
     let definition = new RootComponentDefinition(view);
     this._appendDefinition(
       view,
@@ -2998,22 +2689,10 @@ export class Renderer extends BaseRenderer {
   }
 
   get _context() {
-    // In GXT mode the Glimmer VM is bypassed, so there is no real
-    // EvaluationContext — `this.state.context` would force the (purged) VM
-    // evaluation context (createContext throws). The runtime-resolver cache
-    // test (`ember-glimmer runtime resolver cache`) only reads
-    // `_context.constants.{component,helper,modifier}DefinitionCount`; serve a
-    // synthetic constants bag straight from the GXT-side resolver-cache tracker
-    // so the assertions see the live counts WITHOUT spinning up the VM.
-    //
-    // Slice-78 (Cluster B): routes through the typed-bridge getter
-    // `compilePipeline.getResolverCacheCounters?.()` rather than the
-    // pre-slice-78 `(globalThis as any).__gxtResolverCacheCounters` slot.
-    // The bridge returns the live module-local reference declared in
-    // `gxt-backend/ember-gxt-wrappers.ts:249` (see the slice-78 docblock
-    // there). Optional-chain short-circuits to `undefined` if the bridge
-    // is not yet installed (load-order edge); the `|| 0` preserves the
-    // pre-slice-78 truthy-guard semantics.
+    // In GXT mode there is no real EvaluationContext (`this.state.context`
+    // would throw). Callers such as the runtime-resolver cache tests only read
+    // `_context.constants.{component,helper,modifier}DefinitionCount`, so
+    // serve those counts from the GXT resolver-cache tracker instead.
     if (__GXT_MODE__) {
       const counters = getGxtRenderer()?.compilePipeline.getResolverCacheCounters?.();
       return {
@@ -3029,7 +2708,7 @@ export class Renderer extends BaseRenderer {
 
   register(view: any): void {
     let id = getViewId(view);
-    // In GXT mode, view registration can conflict during force-rerender (morph)
+    // In GXT mode, view registration can conflict during a forced rerender
     // or when views aren't fully cleaned up between test runs. Silently
     // overwrite the existing entry instead of asserting.
     if (__GXT_MODE__) {

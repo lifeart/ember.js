@@ -12,7 +12,6 @@ import { createComputeRef, updateRef } from '@glimmer/reference/lib/reference';
 import { consumeTag } from '@glimmer/validator/lib/tracking';
 import { createTag, DIRTY_TAG as dirtyTag } from '@glimmer/validator/lib/validators';
 import type { SimpleElement } from '@simple-dom/interface';
-// (Cluster B slice 113) Bridge reader for the root-outlet rerender dispatcher.
 import {
   getGxtRenderer,
   setCurrentOutletState,
@@ -88,17 +87,13 @@ export default class OutletView {
     if (__GXT_MODE__) {
       // GXT mode: install a cellFor-backed reactive slot on outletState.outlets.main
       // and pass the raw outletState through as `ref` (consumers in this branch
-      // dereference it directly). cellFor is read lazily from the gxt-backend's
-      // globalThis.__lifeartGxt stash so classic-mode bundles (benchmark-app)
-      // don't statically import @lifeart/gxt.
+      // dereference it directly). cellFor comes from the bridge's gxt library
+      // handle so classic bundles don't statically import @lifeart/gxt.
       getGxtRenderer()?.gxtLib.cellFor(outletState.outlets, 'main');
       this.ref = outletState as unknown as Reference<OutletState | undefined>;
     } else {
-      // Classic mode: restore upstream's createComputeRef + tag pattern so that
-      // standard Glimmer VM revalidation drives outlet re-renders. Without this,
-      // setOutletState has no invalidation hook and the renderer hangs on
-      // subsequent revalidation cycles (observed as the bench's clearItems4
-      // hang in benchmark-app, which never sets __GXT_MODE__).
+      // Classic mode: a compute ref backed by a tag, so standard Glimmer VM
+      // revalidation drives outlet re-renders.
       const tag = createTag();
       this.ref = createComputeRef(
         () => {
@@ -150,10 +145,8 @@ export default class OutletView {
 
     // GXT mode: directly mutate the raw OutletState (this.ref IS that state in
     // GXT mode — see constructor) and drive re-render through GXT's outlet
-    // chain. Wrapped in `if (__GXT_MODE__)` so the GXT-only bridge calls below
-    // (setCurrentOutletState / getActiveOutletElements / getGxtRenderer)
-    // tree-shake out of the classic bundle (this block is unreachable in
-    // classic anyway thanks to the early return above).
+    // chain. The `if (__GXT_MODE__)` lets the GXT-only bridge calls below
+    // tree-shake out of the classic bundle.
     if (__GXT_MODE__) {
       (this.ref as any).outlets['main'] = state;
 
@@ -164,12 +157,6 @@ export default class OutletView {
       // The root render function handles the top-level route (the one that
       // root.ts renders directly, skipping the -outlet template).
       {
-        // Slice-113 (Cluster B): routed through
-        // `compilePipeline.getRootOutletRerender?.() ?? null` — the `?? null`
-        // fallback matches the pre-slice-113 `(globalThis as any)
-        // .__gxtRootOutletRerender` `undefined` semantics which the
-        // `typeof === 'function'` guard treated as falsy. See
-        // `getRootOutletRerender` doc in gxt-bridge.ts.
         const rootRenderFn = getGxtRenderer()?.compilePipeline.getRootOutletRerender?.() ?? null;
         if (typeof rootRenderFn === 'function') {
           // Snapshot active outlets BEFORE the root re-render. The root re-render

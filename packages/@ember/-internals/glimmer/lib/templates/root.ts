@@ -7,67 +7,46 @@ import { DEBUG } from '@glimmer/env';
 // Classic-build template compiler (build-time macro in classic pipelines; the
 // GXT-aliased shim in GXT mode, where the call site below is dead-branched).
 import { precompileTemplate } from '@ember/template-compilation';
-// Bridge reader for `registerObjectValueOwner`.
 import {
   getGxtRenderer,
   setCurrentOutletState,
   setAmbientOwner,
   setControllerOutletRerender,
 } from '@ember/-internals/gxt-backend/gxt-bridge';
-// Lazy accessor for @lifeart/gxt symbols. The gxt-backend module (only loaded
-// in __GXT_MODE__) stashes the namespace on globalThis.__lifeartGxt at its
-// own load time. Avoiding a static `import * as _gxt from '@lifeart/gxt'`
-// here keeps the GXT runtime out of the classic bundle (benchmark-app,
-// embroider apps) — classic mode never reaches these call sites since they
-// are only invoked from the factory.render path, which itself is gated on
-// __gxtCompiled-templated rendering.
+// Lazy accessor for @lifeart/gxt symbols through the bridge. Avoiding a static
+// `import * as _gxt from '@lifeart/gxt'` keeps the GXT runtime out of the
+// classic bundle; classic mode never reaches these call sites.
 function _gxtLib(): any {
   return getGxtRenderer()?.gxtLib;
 }
 
-// Ensure GXT context is initialized for the document
-// Uses a shared root context on globalThis to avoid multiple roots
-// fighting over the parent context when modules are deduplicated.
+// DOM API provided to the shared GXT root context (see `ensureGxtContext`).
 let gxtDomApi: any = null;
 
 // Per-outlet rerender registry. Shared across all `createRootTemplate`
 // factory invocations within this module so that multiple concurrent
 // ApplicationInstances (e.g. Ember Islands-style setup) each get their
 // own closure + parentElement and don't clobber each other. Keyed by
-// `instance.outletRef` (each visit creates a fresh one); the dispatch
-// shim installed as `__gxtRootOutletRerender` looks up the closure for
-// the incoming outletRef.
+// `instance.outletRef` (each visit creates a fresh one); the root-outlet
+// rerender dispatcher looks up the closure for the incoming outletRef.
 const _gxtRootOutletRerenderMap = new Map<
   any,
   (ref: any, forceFull?: boolean, cellOnlyKey?: string) => void
 >();
 
-// Controller→outletRef bridge: maps each controller instance currently
-// bound to a rendered outlet back to that outlet's `outletRef`, so that
-// `set(controller, key, value)` (or any other write that triggers
-// `_gxtTriggerReRender(controller, key)`) can locate the outlet and
-// invoke its `rerenderForThisRoot` closure. This bridges the cell→DOM
-// propagation gap for controller property writes: cells DO update
-// correctly via the `__gxtComponentContexts` fan-out, but the outlet
-// template's text-binding effects don't always auto-flush without a
-// rerender pass through `rerenderForThisRoot`.
-//
-// Lookup is exposed on `globalThis.__gxtControllerOutletRerender` (a
-// function that takes a controller and returns void). compile.ts's
-// `_gxtTriggerReRender` (controller-property branch) calls it after
-// SyncCore completes, gated by an `isController === true` marker check
-// + a re-entrancy guard to avoid infinite-loop hazards.
+// Maps each controller bound to a rendered outlet to that outlet's
+// `outletRef`, so a controller property write can find the outlet and run its
+// `rerenderForThisRoot` closure. The cells themselves update through the
+// component-contexts fan-out, but the outlet template's text-binding effects
+// don't always flush without that rerender pass.
 const _gxtControllerToOutletRefMap: WeakMap<object, any> = new WeakMap();
 let _gxtInControllerRerender = false;
 
-// Install the controller-set notification hook at module load. compile.ts
-// reads `globalThis.__gxtControllerOutletRerender` from the
-// `_gxtTriggerReRender` controller-branch post-SyncCore and invokes this
-// function. It is a no-op when no outlet is registered for the
-// controller (e.g. controllers from other tests, controllers that have
-// been torn down, etc.). The re-entrancy guard prevents infinite
-// recursion when the rerender's own internal `set()` cascades fire this
-// hook a second time on the same controller.
+// The GXT re-render trigger calls this hook after a controller property
+// write. It is a no-op when no outlet is registered for the controller (e.g.
+// controllers that have been torn down). The re-entrancy guard prevents
+// infinite recursion when the rerender's own `set()` cascades fire the hook
+// again for the same controller.
 if (__GXT_MODE__) {
   setControllerOutletRerender(function (controller: object, keyName?: string): void {
     if (_gxtInControllerRerender) return;
@@ -84,12 +63,10 @@ if (__GXT_MODE__) {
     //   `setupController` on a dynamic-segment transition): the cell-only fast
     //   path re-evaluates `{{@model.…}}` bindings (leaf-owner re-registration)
     //   WITHOUT destroying the route template's components. A full re-render
-    //   would re-instantiate those components and fire `didInsertElement` again,
-    //   breaking the "view should have inserted only once" invariant (Route -
-    //   template rendering :: model-change).
+    //   would re-instantiate those components and fire `didInsertElement` again.
     // - QP-tracked / other controller properties: `set(controller, qpKey,
-    //   value)`'s cell was ALREADY updated by SyncCore's
-    //   `__gxtComponentContexts` fan-out before this hook fires. The cell-only
+    //   value)`'s cell was ALREADY updated by the component-contexts fan-out
+    //   before this hook fires. The cell-only
     //   fast path then sets outletState + `syncDomNow()`, which flushes the
     //   subscribed text-binding effects so `{{this.qp}}` updates in-place. The
     //   changed key is forwarded so the fast path can refresh that key's
@@ -241,10 +218,7 @@ function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: a
   // NOTE: throws from `tpl.render` (init-phase user errors, assertion
   // failures, etc.) propagate up to `renderer.ts`'s try/catch around
   // `template.render(...)`, which clears the partially-rendered DOM and
-  // re-throws. Do not swallow them here — the previous "only rethrow
-  // Assertion Failed" workaround was a holdover from the
-  // `captureRenderError`/`__gxtRenderErrorCount` plumbing and is no longer
-  // needed now that the manager-level outer-wrap captures have been removed.
+  // re-throws. Do not swallow them here.
   if (typeof tpl?.render === 'function') {
     if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] Calling tpl.render()');
     tpl.render(ctx, target);
@@ -279,7 +253,6 @@ function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: a
           lib.renderComponent(tpl, {
             element: target,
             args: ctx?.args || {},
-            // Routed through the compilePipeline bridge.
             owner: getGxtRenderer()?.compilePipeline.getRootContext?.(),
           });
           return; // renderComponent handles everything
@@ -553,16 +526,7 @@ function createRootTemplate(_owner: any) {
           renderContext.args = {};
         }
 
-        // Store the render context for cross-cell dirtying. The
-        // component-contexts map is read through
-        // `compilePipeline.getComponentContextsMap?.()` (a get-only accessor
-        // with internal lazy-init), which guarantees a single WeakMap instance
-        // across all call sites. The optional chain handles the
-        // bridge-not-yet-installed edge: if it returns undefined, the
-        // `if (ctxsMap)` guard short-circuits and registration is skipped. In
-        // practice compile.ts's `installCompilePipelinePart` runs at module
-        // init, before any RootTemplate render-time call can fire, so the
-        // guard never trips at runtime.
+        // Store the render context for cross-cell dirtying.
         const ctxsMap = getGxtRenderer()?.compilePipeline.getComponentContextsMap?.();
         if (ctxsMap) {
           if (!ctxsMap.has(component)) {
@@ -644,13 +608,11 @@ function createRootTemplate(_owner: any) {
                 // key, skip cellFor install — otherwise `_cellFor(..., false)`
                 // would install a cell-backed own getter whose `__fn = () =>
                 // component[key]` would re-read the CP's getter through the
-                // prototype chain, producing unbounded recursion in GXT's
-                // cached Yt (`cell.value → __fn() → component[key] →
-                // cell.value → ...`). Matches the same guard in renderer.ts
-                // and the gap the PrototypeMixin.properties walk leaves:
-                // `collected` contains the key but the raw value stored in
-                // `properties[key]` is the ComputedProperty meta object, not a
-                // usable marker. The proto descriptor is the authoritative signal.
+                // prototype chain, recursing without bound (`cell.value →
+                // __fn() → component[key] → cell.value → ...`). Matches the
+                // same guard in renderer.ts. `properties[key]` holds the
+                // ComputedProperty itself, so the proto descriptor is the
+                // reliable signal.
                 let hasAccessor = false;
                 let proto: any = Object.getPrototypeOf(component);
                 while (proto && proto !== Object.prototype) {
@@ -684,32 +646,17 @@ function createRootTemplate(_owner: any) {
     }
 
     // CASE 2: OutletView rendering (routes)
-    // When called from __gxtForceEmberRerender (force re-render path), skip the
-    // re-render entirely. OutletView content is managed by the root-outlet
-    // rerender dispatcher (called from setOutletState). Re-rendering here would
-    // APPEND a second copy of the application template to parentElement,
-    // creating duplicate components and corrupting the view registry (e.g.,
-    // root-1 appearing twice, root-6 missing).
-    // The force-rerender flag and the dispatcher are both read through the
-    // bridge (`compilePipeline.isForceRerender?.()` and
-    // `compilePipeline.getRootOutletRerender?.()`); the `?? false` / `?? null`
-    // fallbacks treat a not-yet-installed bridge as "no force rerender".
+    // During a forced full rerender, skip this once the root-outlet rerender
+    // dispatcher exists: OutletView content is managed by that dispatcher
+    // (called from setOutletState). Re-rendering here would APPEND a second
+    // copy of the application template to parentElement, creating duplicate
+    // components and corrupting the view registry.
     if (
       (getGxtRenderer()?.compilePipeline.isForceRerender?.() ?? false) &&
       (getGxtRenderer()?.compilePipeline.getRootOutletRerender?.() ?? null)
     ) {
       return { nodes: [], ctx: context };
     }
-    // Per-outlet rerender registry (`_gxtRootOutletRerenderMap`) is declared
-    // at module scope above. It supports multiple concurrent
-    // ApplicationInstances (e.g. Ember Islands-style setup) where each
-    // visit() has its own outletRef + rootElement: a single shared rerender
-    // function would cause the second visit to overwrite the first, so
-    // setOutletState on either root would re-render into the wrong DOM
-    // target. The map is keyed by outletRef (each visit creates a fresh
-    // one); callers in outlet.ts / renderer.ts pass the outletRef, so the
-    // dispatcher below looks up the matching closure and preserves per-root
-    // state (lastRenderContext, etc.).
     // Create component instance to access outlet state
     const args = context.rootState ? { rootState: context.rootState } : context;
     const instance = new RootTemplate(args) as any;
@@ -800,8 +747,8 @@ function createRootTemplate(_owner: any) {
       } else if (controller) {
         // Build render context via Object.create(controller) so property
         // reads fall through to the controller via prototype chain.
-        // GXT cells are installed on this renderContext, and
-        // __gxtComponentContexts maps the controller (prototype) to
+        // GXT cells are installed on this renderContext, and the
+        // component-contexts map links the controller (prototype) to
         // this renderContext, so set(controller, key, val) updates propagate.
         renderContext = Object.create(controller);
       } else {
@@ -819,7 +766,7 @@ function createRootTemplate(_owner: any) {
       // GXT formula tracking: the formula sees no cell reads, marks itself
       // isConst, and never re-evaluates when the model changes on route
       // transitions. With a plain property + cellFor, the formula tracks the
-      // cell and re-evaluates when the cell is updated via __gxtComponentContexts
+      // cell and re-evaluates when the cell is updated via component-contexts
       // propagation (triggered by set(controller, 'model', newValue)).
       //
       // GXT fix: if the controller defines a read-only computed `model`
@@ -867,12 +814,9 @@ function createRootTemplate(_owner: any) {
         }
       }
 
-      // Register the renderContext in __gxtComponentContexts so that
-      // __gxtTriggerReRender(controller, key) can find and update cells
-      // on this renderContext. The map is keyed by prototype.
-      // The component-contexts map is read through
-      // `compilePipeline.getComponentContextsMap?.()` — see the sibling
-      // registration site above for the rationale.
+      // Register the renderContext in the component-contexts map (keyed by
+      // the controller, i.e. its prototype) so the GXT re-render trigger for
+      // `set(controller, key)` can find and update cells on it.
       if (controller && typeof controller === 'object') {
         const ctxsMap = getGxtRenderer()?.compilePipeline.getComponentContextsMap?.();
         if (ctxsMap) {
@@ -895,7 +839,6 @@ function createRootTemplate(_owner: any) {
       // are tracked. Without this, set(model, 'color', 'blue') won't trigger
       // re-renders because the formula never tracked cell(context, 'model').
       const _cellFor = getGxtRenderer()?.compilePipeline.cellFor;
-      // Bridge reader for registerObjectValueOwner.
       const _registerOwner = getGxtRenderer()?.compilePipeline.registerObjectValueOwner;
       if (_cellFor) {
         try {
@@ -961,7 +904,7 @@ function createRootTemplate(_owner: any) {
 
       // Fix for @tracked properties on controller prototype:
       // Object.create(controller) makes prototype getters run with `this = renderContext`
-      // instead of `this = controller`. The @tracked getter's trackedData is keyed by
+      // instead of `this = controller`. The @tracked getter's storage is keyed by
       // `this`, so it creates a fresh storage entry for renderContext and returns the
       // initial value (e.g., `false` for `@tracked isExpanded = false`), ignoring the
       // actual current value on the controller (e.g., `true` after a toggle click).
@@ -986,8 +929,8 @@ function createRootTemplate(_owner: any) {
               // Don't override already-installed own properties on renderContext
               if (Object.getOwnPropertyDescriptor(renderContext, key)) continue;
               try {
-                // Read the actual value using the controller as `this`, not renderContext.
-                // This correctly reads trackedData.get(controller) instead of a fresh entry.
+                // Read the actual value using the controller as `this`, not renderContext,
+                // so the controller's own storage is read instead of a fresh entry.
                 const actualValue = (controller as any)[key];
                 // Install a GXT cell on renderContext for this key
                 _cellFor(renderContext, key, /* skipDefine */ false);
@@ -1005,15 +948,12 @@ function createRootTemplate(_owner: any) {
         }
       }
 
-      // Set global outlet state for nested <ember-outlet> elements
+      // Set the current outlet state for nested <ember-outlet> elements
       setCurrentOutletState(outletState);
 
       // Begin render pass for backtracking detection (detects mutations
       // to already-consumed values during rendering, e.g., component init
       // setting a property that was already read by the template).
-      // The render-pass triad lives on the typed `renderPass` namespace of the
-      // gxt-backend bridge; optional-chain guards handle classic-Ember builds
-      // where the bridge is null.
       const _renderPass = getGxtRenderer()?.renderPass;
       _renderPass?.beginRenderPass();
       // Mark the render context and model as rendered so backtracking
@@ -1022,15 +962,8 @@ function createRootTemplate(_owner: any) {
         _renderPass.markTemplateRendered(renderContext);
         if (model && typeof model === 'object') _renderPass.markTemplateRendered(model);
       }
-      // The `in-outlet-render` flag is a paired `withInOutletRender(fn)` /
-      // `isInOutletRender()` surface on `compilePipeline`: the set-true / try /
-      // finally-set-false pair around `renderTemplateWithContext` is folded
-      // into the bridge wrap. The `_renderPass?.endRenderPass()` post-call
-      // (paired with the `_renderPass?.beginRenderPass()` above) still fires
-      // unconditionally in the outer `try/finally`, independent of the bridge
-      // wrap. For classic-Ember builds (no GXT backend loaded) the optional
-      // chain short-circuits and the body runs unwrapped. See
-      // `withInOutletRender` doc in gxt-bridge.ts.
+      // Render inside `withInOutletRender` so `isInOutletRender()` is true for
+      // the duration; the render pass ends regardless.
       const _cp110 = getGxtRenderer()?.compilePipeline;
       const renderFn = (): void => {
         renderTemplateWithContext(
@@ -1080,15 +1013,9 @@ function createRootTemplate(_owner: any) {
       lastNestedSnapshot = snapshotOutletTree(outletState);
     }
 
-    // Store the top-level outlet ref for re-rendering on property changes.
-    // The ref is a paired `setTopOutletRef(ref)` / `getTopOutletRef()` surface
-    // on `compilePipeline`. The cross-file readers (`manager.ts`'s render-tree
-    // outlet branch and `glimmer/lib/renderer.ts`'s OutletView re-render
-    // fallback) route through `compilePipeline.getTopOutletRef?.()`. The
-    // optional chain is a no-op when the bridge is not yet installed
-    // (classic-Ember builds, where the outlet-render branch does not execute
-    // the gxt-templated path). See `setTopOutletRef` / `getTopOutletRef` doc in
-    // gxt-bridge.ts.
+    // Store the top-level outlet ref for re-rendering on property changes (read
+    // by the render-tree outlet branch and the renderer's OutletView re-render
+    // fallback).
     getGxtRenderer()?.compilePipeline.setTopOutletRef?.(instance.outletRef);
 
     // Track the last render context and args for cell-based updates.
@@ -1099,15 +1026,14 @@ function createRootTemplate(_owner: any) {
     // Used to detect phantom rerenders triggered by the tag-revalidate loop:
     // those fire with the SAME outletState.render.model as a prior rerender,
     // but the controller may have been updated to a NEWER model via
-    // `set(controller, 'model', x)` propagation through __gxtComponentContexts.
+    // `set(controller, 'model', x)` propagation through the component-contexts map.
     // Overwriting the ctx cell back to the stale model in that case clobbers
     // the fresh value and the template renders the old value.
     let lastPropagatedModel: any = undefined;
     // Snapshot of the last propagated model's shallow shape (JSON.stringify).
     // Used to detect "same reference but interior shape changed" cases like
-    // `set(model, 'color', 'blue')` which mutate in-place — the cell value
-    // identity is unchanged so phantom-detection skips updates, but the DOM
-    // text bindings need a fresh render to reflect the new nested values.
+    // `set(model, 'color', 'blue')`, which mutate in place without changing
+    // the cell value's identity.
     let _lastModelSnapshot: string | undefined = undefined;
     // Identity of the template that was last rendered for the current route.
     // Used by the re-render fast-path to detect a template swap (the same
@@ -1147,15 +1073,11 @@ function createRootTemplate(_owner: any) {
 
     // Register a re-render function that setOutletState can call.
     //
-    // It is stored in two places:
-    //  1. The module-local `_gxtRootOutletRerenderMap` (declared at the top
-    //     of this file), keyed by `instance.outletRef` so that multiple
-    //     concurrent ApplicationInstances (Ember Islands) each get their own
-    //     closure + parentElement and don't clobber each other.
-    //  2. `__gxtRootOutletRerender` as a dispatch function that looks up the
-    //     correct closure by outletRef. This keeps backwards compatibility
-    //     with callers that don't know about the map and still pass the ref
-    //     as the sole argument.
+    // It is stored in `_gxtRootOutletRerenderMap`, keyed by
+    // `instance.outletRef` so that multiple concurrent ApplicationInstances
+    // (Ember Islands) each get their own closure + parentElement and don't
+    // clobber each other. The root-outlet rerender dispatcher registered
+    // below looks up the closure by the outletRef it is passed.
     const rerenderForThisRoot = (
       outletRef: any,
       forceFull: boolean = false,
@@ -1213,24 +1135,15 @@ function createRootTemplate(_owner: any) {
         return true;
       })();
 
-      // If same route template AND nested outlets haven't changed, try to
-      // update existing cells in-place to preserve DOM node identity.
-      // If the model object identity changed (route revisit with new dynamic
-      // segment, exterior model swap, etc.), fall through to the full
-      // re-render. Cell-only updates do not reliably propagate model swaps
-      // to template formulas in the current GXT architecture — observed:
-      // `[@model: red]` persists in DOM even after the cell value reads as
-      // `yellow`. The "stable DOM when model changes" test exercises the
-      // happy-path of cell-only updates and is a 1-test tradeoff against
-      // the 4 model-swap correctness tests fixed by this fallback.
+      // If same route template AND nested outlets haven't changed, update
+      // existing cells in place to preserve DOM node identity (model swaps and
+      // interior model mutations included, see below).
       const modelGenuinelyChanged =
         lastPropagatedModel !== undefined && newModel !== lastPropagatedModel;
       // Also detect interior model mutations: same object reference, but the
       // shape has changed (e.g., `set(model, 'color', 'blue')` mutated the
-      // existing model in-place). The cell value is still the same reference
-      // so phantom-detection skips updates, but the template's text bindings
-      // need a real re-render to pick up the new nested value. A shallow JSON
-      // snapshot of the model is compared to detect interior changes.
+      // existing model in place). A shallow JSON snapshot of the model is
+      // compared to detect them.
       let modelInteriorChanged = false;
       try {
         if (
@@ -1256,9 +1169,7 @@ function createRootTemplate(_owner: any) {
       // template's `{{@model.name}}` bindings re-evaluate in place WITHOUT
       // destroying + recreating the route template's components. A full
       // clear+re-render would re-instantiate every component in the route
-      // template (firing didInsertElement again), breaking the "view should
-      // have inserted only once" invariant (Route - template rendering :: "The
-      // template is not re-rendered when the route's model changes"). The
+      // template (firing didInsertElement again). The
       // leaf-owner re-registration that makes nested model reads reactive is
       // what lets cell-only propagate model swaps reliably.
       //
@@ -1291,7 +1202,7 @@ function createRootTemplate(_owner: any) {
             // `set(controller, 'model', x)` call in setupController) rather
             // than by a new setOutletState with a fresh model. In that case,
             // skip the model cell updates — the cells may have been refreshed
-            // by the set() call's propagation through __gxtComponentContexts
+            // by the set() call's propagation through the component-contexts map
             // to a NEWER value (the controller's current model), and writing
             // the stale outlet model back would clobber that fresh value.
             // The model update from set() will be picked up by the next
@@ -1308,7 +1219,6 @@ function createRootTemplate(_owner: any) {
             // The previous model was registered via registerObjectValueOwner,
             // but the new model is a different object reference that needs its
             // own entry in _objectValueCellMap.
-            // Bridge reader for registerObjectValueOwner.
             const _registerOwner = getGxtRenderer()?.compilePipeline.registerObjectValueOwner;
             if (newModel && typeof newModel === 'object' && _registerOwner && !isPhantomRerender) {
               _registerOwner(newModel, lastArgsObj, 'model');
@@ -1334,7 +1244,7 @@ function createRootTemplate(_owner: any) {
             }
             // For a non-model controller-property write (QP key, etc.) the
             // changed key's renderContext cell was already dirtied by
-            // SyncCore's `__gxtComponentContexts` fan-out; touch it
+            // the component-contexts fan-out; touch it
             // here too (idempotent) so a freshly-encountered key whose cell
             // hadn't yet been installed on lastRenderContext picks up the
             // controller's current value before the syncDomNow flush. The
@@ -1354,27 +1264,10 @@ function createRootTemplate(_owner: any) {
             // Update outletState
             lastRenderContext.outletState = effectiveOutlet;
             // Sync DOM now so GXT formulas re-evaluate and update text nodes.
-            // The pending-sync flag's canonical state is the module-local
-            // `_gxtPendingSyncFlag` in `compile.ts`; this cross-package writer
-            // routes through the bridge setter (the optional chain is
-            // load-order-safe — by the time this outlet-model-update path
-            // fires, compile.ts's `installCompilePipelinePart` has run and the
-            // setter is installed). See `setPendingSync` doc in gxt-bridge.ts.
-            //
-            // `syncDomNow`'s canonical function is the module-local
-            // `_gxtSyncDomNow` in `compile.ts`, read here through the bridge
-            // method on the same compilePipeline namespace dereferenced for
-            // setPendingSync / setPendingSyncFromPropertyChange below. See
-            // `syncDomNow` doc in gxt-bridge.ts.
             const _cpRoot = getGxtRenderer()?.compilePipeline;
             const syncDomNow = _cpRoot?.syncDomNow;
             if (typeof syncDomNow === 'function') {
               _cpRoot?.setPendingSync?.(true);
-              // `setPendingSyncFromPropertyChange`'s canonical state is the
-              // module-local `_gxtPendingSyncFromPropertyChangeFlag` in
-              // `compile.ts`; this cross-package writer routes through the
-              // bridge setter. See `setPendingSyncFromPropertyChange` doc in
-              // gxt-bridge.ts.
               _cpRoot?.setPendingSyncFromPropertyChange?.(true);
               syncDomNow();
             }
@@ -1385,24 +1278,17 @@ function createRootTemplate(_owner: any) {
         }
       }
 
-      // Full re-render: clear and re-render from scratch.
-      // Don't use morphing for outlet re-renders — morphChildren can't handle
-      // <ember-outlet> custom elements properly (they render via connectedCallback
-      // which doesn't fire when morph updates in-place). Instead, clear the
-      // parent and re-render. The <ember-outlet> elements will fire connectedCallback
-      // when inserted into the live DOM and render their nested content.
+      // Full re-render: clear the parent and re-render from scratch. The
+      // <ember-outlet> elements fire connectedCallback when inserted into the
+      // live DOM and render their nested content.
       //
-      // DOM IDENTITY PRESERVATION (scoped to anchors with ids): Tests
-      // capture LinkTo DOM element references at visit-time via
-      // `document.getElementById('a-1')` etc. and expect them to stay live
-      // across subsequent route transitions (the Query Params
-      // model-dependent state tests rely on this). A blanket innerHTML=''
-      // orphans those captured references. Preservation is narrowed to
-      // `<a id="...">` elements (LinkTos), which are the cases where
-      // references are captured. Classic component wrappers, ember-outlet,
-      // and other elements fall through to normal full re-render so the
-      // pool-managed lifecycle continues to work (view-tree tests rely on
-      // the full re-render path).
+      // DOM identity preservation (scoped to anchors with ids): callers may
+      // capture LinkTo elements (`document.getElementById('a-1')` etc.) and
+      // expect them to stay live across route transitions, which a blanket
+      // innerHTML='' would orphan. Preservation is narrowed to `<a id="...">`
+      // elements; classic component wrappers, ember-outlet and other elements
+      // take the normal full re-render so their pool-managed lifecycle keeps
+      // working.
       const oldAnchorMap: Map<string, HTMLAnchorElement> = new Map();
       if (lastRenderContext !== null) {
         const anchors = parentElement.querySelectorAll('a[id]');
@@ -1454,8 +1340,8 @@ function createRootTemplate(_owner: any) {
             // child-list changes onto OLD. This lets the captured `oldA`
             // reference stay in sync when subsequent reactive effects
             // (driven by `dirtyTagFor(routing, 'currentState')`) mutate NEW.
-            // Disconnect when NEW is detached (it no longer receives updates
-            // OR a subsequent re-render replaces it).
+            // The observer is never disconnected explicitly; once a later
+            // re-render replaces NEW, nothing mutates it any more.
             try {
               const obs = new MutationObserver((records) => {
                 for (const rec of records) {
@@ -1502,12 +1388,8 @@ function createRootTemplate(_owner: any) {
     // render registered this root), do nothing — the initial render will
     // pick up the latest state. Do NOT fall back to another root's closure,
     // because that would cause the second visit's state changes to bleed
-    // into the first visit's rootElement (the Ember Islands regression).
-    // The dispatcher is registered via
-    // `compilePipeline.setRootOutletRerender(fn)` (typed bridge). The
-    // instrumentation wrap registered by `gxt-backend/manager.ts`'s
-    // `setRootOutletRerenderWrap` is applied at set-time inside the bridge.
-    // See `setRootOutletRerender` doc in gxt-bridge.ts.
+    // into the first visit's rootElement. The bridge applies any registered
+    // instrumentation wrap (`setRootOutletRerenderWrap`) when it is set.
     const _gxtRootOutletDispatcher = (outletRef: any) => {
       if (outletRef && _gxtRootOutletRerenderMap.has(outletRef)) {
         _gxtRootOutletRerenderMap.get(outletRef)!(outletRef);
@@ -1525,16 +1407,12 @@ function createRootTemplate(_owner: any) {
   return factory;
 }
 
-// The classic root template — upstream's precompiled `{{component this}}`,
-// consumed by the Glimmer VM (setup-registry.ts registers it as
-// `template:-root`). The initializer is short-circuited in GXT builds so the
+// The classic root template, consumed by the Glimmer VM (setup-registry.ts
+// registers it as `template:-root`). It is skipped in GXT builds so the
 // GXT-aliased `@ember/template-compilation` shim is never invoked at
-// module-init time; the rollup/vite pipelines inline `__GXT_MODE__` to a
-// literal, so exactly one branch survives DCE in each dist. Shipping
-// `createRootTemplate` unconditionally broke every CLASSIC runtime consumer
-// of the dist (the VM received a fake GXT compile handle and crashed on its
-// first opcode — caught by the tracerbench perf job, the only CI job that
-// runs the built classic dist).
+// module-init time; `__GXT_MODE__` is inlined at build time, so exactly one
+// branch survives in each dist. The classic VM cannot run
+// `createRootTemplate`'s fake compile handle.
 const ClassicRootTemplate = __GXT_MODE__
   ? undefined
   : precompileTemplate(`{{component this}}`, {

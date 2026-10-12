@@ -9,11 +9,6 @@ import { runDestroy, runLoopSettled, runTask } from '../run';
 import { assert } from '@ember/debug';
 import { rerenderComponent } from '../component-helper';
 import { _resetRenderers } from '@ember/-internals/glimmer';
-// Test-helper writer for `__gxtPendingSyncFromPropertyChange` — routes flag
-// clears through the bridge setter (canonical state lives as the module-local
-// `_gxtPendingSyncFromPropertyChangeFlag` in
-// `@ember/-internals/gxt-backend/compile.ts`). See
-// `setPendingSyncFromPropertyChange` doc in gxt-bridge.ts.
 import {
   getGxtRenderer,
   getAmbientOwner,
@@ -73,22 +68,14 @@ export abstract class AbstractStrictTestCase {
 
   afterEach() {
     try {
-      // Clean up GXT active components before destroy. Routes through the
-      // bridge — see `cleanupActiveComponents` doc in gxt-bridge.ts. The
-      // optional chain is a null-tolerant guard for classic-Ember builds
-      // (where gxt-backend was never loaded).
+      // Clean up GXT active components before destroy.
       getGxtRenderer()?.compilePipeline.cleanupActiveComponents?.();
 
       runDestroy(this);
 
-      // Flush pending modifier destroys so willDestroyElement fires during
-      // teardown (matching Glimmer VM behavior where destroyModifier is called
-      // synchronously when the element is removed). The canonical state is the
-      // module-local `_pendingModifierDestroys` Array in
-      // `gxt-backend/manager.ts`; the cross-package reader here routes through
-      // the read-only Array-getter
-      // `compilePipeline.getPendingModifierDestroys?.()` and mutates the
-      // returned array reference in place (`splice(0)` drains it here).
+      // Flush pending GXT modifier destroys so willDestroyElement fires during
+      // teardown, matching the Glimmer VM, which calls destroyModifier
+      // synchronously when the element is removed.
       try {
         const pendingDestroys = getGxtRenderer()?.compilePipeline.getPendingModifierDestroys?.();
         if (pendingDestroys && pendingDestroys.length > 0) {
@@ -104,9 +91,8 @@ export abstract class AbstractStrictTestCase {
                 entry.cached.manager.destroyModifier(entry.cached.instance);
                 if (entry.cached.instance) entry.cached.instance.__gxtModDestroyed = true;
               }
-              // The production teardown path in gxt-backend/compile.ts already
-              // covers modifier-destroyable cleanup before tests reach this
-              // helper, so no per-entry destroyable cleanup is needed here.
+              // Modifier destroyables are already cleaned up by gxt-backend's
+              // own teardown path.
             } catch {
               /* ignore individual modifier destroy errors */
             }
@@ -144,18 +130,14 @@ export abstract class AbstractStrictTestCase {
       }
     } finally {
       _resetRenderers();
-      // Clear the GXT pending-sync flags. Their canonical state lives as
-      // module-local flags in `compile.ts`; these test-helper writers route
-      // through the bridge setters.
+      // Clear the GXT pending-sync flags.
       const _cpAT = getGxtRenderer()?.compilePipeline;
       _cpAT?.setPendingSync?.(false);
       _cpAT?.setPendingSyncFromPropertyChange?.(false);
-      // Clear stale render errors so they don't leak into the next test's
-      // beforeEach. Errors like backtracking assertions are caught by
-      // assert.rejectsAssertion but also captured in _renderErrors via
-      // captureRenderError, leaving a stale copy that would re-throw on
-      // the next flushRenderErrors() call. Routes through the bridge — see
-      // clearRenderErrors doc in gxt-bridge.ts.
+      // Clear stale render errors so they don't leak into the next test.
+      // Errors such as backtracking assertions are caught by
+      // assert.rejectsAssertion but also queued by gxt-backend, and the
+      // queued copy would otherwise rethrow later.
       _cpAT?.clearRenderErrors?.();
     }
   }

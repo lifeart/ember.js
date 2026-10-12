@@ -45,21 +45,12 @@ export function getRootViews(owner: InternalOwner): View[] {
   let registry = owner.lookup('-view-registry:main') as Dict<View>;
 
   // GXT compat: rebuild view-tree parent/child relationships from live DOM.
-  // Slice-11 (Cluster B) — typed bridge call via `viewUtils.rebuildViewTreeFromDom`.
-  // Was `(globalThis as any).__gxtRebuildViewTreeFromDom`. The bridge slot
-  // dispatches the `afterRebuildViewTreeFromDom` host hook contributed by
-  // compile.ts after the main rebuild body — replacing the pre-slice-11
-  // `_wrapGxtRebuildViewTree` wrap-by-reassignment.
   if (__GXT_MODE__) {
     try {
       getGxtRenderer()?.viewUtils.rebuildViewTreeFromDom?.(registry);
     } catch (e) {
-      // A throw here means the GXT view-tree rebuild crashed, so the
-      // `-view-registry:main` we read below reflects a STALE parent/child
-      // graph. Surface the broken wiring (DEBUG-gated console.warn so it is
-      // visible to a developer without tripping QUnit's `warn()`/deprecation
-      // assertion helpers) instead of silently masking it. Behavior is
-      // preserved: we still fall through and read the registry as before.
+      // A failed rebuild leaves the registry read below with a stale
+      // parent/child graph; surface it in DEBUG and read the registry anyway.
       if (DEBUG) {
         // eslint-disable-next-line no-console
         console.warn(
@@ -151,18 +142,12 @@ export function getChildViews(view: View): View[] {
   // parentView=null or CHILD_VIEW_IDS stale when a component is created while
   // the render-time parent-view stack was empty. Passing the registry tells
   // the rebuild which registry the caller will read.
-  // Slice-11 (Cluster B) — typed bridge call via `viewUtils.rebuildViewTreeFromDom`.
-  // Was `(globalThis as any).__gxtRebuildViewTreeFromDom`.
   if (__GXT_MODE__) {
     try {
       getGxtRenderer()?.viewUtils.rebuildViewTreeFromDom?.(registry);
     } catch (e) {
-      // A throw here means the GXT view-tree rebuild crashed, so the
-      // `-view-registry:main` we read below reflects a STALE parent/child
-      // graph. Surface the broken wiring (DEBUG-gated console.warn so it is
-      // visible to a developer without tripping QUnit's `warn()`/deprecation
-      // assertion helpers) instead of silently masking it. Behavior is
-      // preserved: we still fall through and read the registry as before.
+      // A failed rebuild leaves the registry read below with a stale
+      // parent/child graph; surface it in DEBUG and read the registry anyway.
       if (DEBUG) {
         // eslint-disable-next-line no-console
         console.warn(

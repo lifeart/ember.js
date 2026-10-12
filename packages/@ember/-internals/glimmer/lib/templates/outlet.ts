@@ -3,14 +3,10 @@
  *
  * GXT compiles {{outlet}} (transformed to <ember-outlet />) as $_tag("ember-outlet", ...),
  * which creates this custom element. The element then renders the nested route template
- * by reading from the outlet state stored in globalThis.__currentOutletState.
+ * from the current outlet state held by the gxt bridge.
  */
-// (Cluster B slice 3) — typed bridge access for the GXT view-utils namespace
-// (parent-view stack + view ↔ element WeakMap lookups). In classic builds
-// `getGxtRenderer()` returns null and every reader's optional chain DCEs to a
-// no-op; in GXT mode manager.ts installs the capabilities at module init.
-// The bridge module is a leaf with no side effects, so the import is safe to
-// pull from a non-gxt-backend package even under classic rollup.
+// The bridge module is a side-effect-free leaf, so importing it is safe in
+// classic builds.
 import {
   getGxtRenderer,
   getCurrentOutletState,
@@ -32,10 +28,8 @@ import { outletHelper } from '../syntax/outlet';
 // in non-DOM environments the element is never constructed.
 // The `<ember-outlet>` custom element and its registration are GXT-only:
 // classic builds render outlets through the Glimmer VM `ClassicOutletTemplate`
-// below and never construct this element. Gating the whole definition lets the
-// classic rollup build tree-shake the gxt-bridge accessors used in its method
-// bodies (getGxtRenderer / getCurrentOutletState / getActiveOutletElements /
-// getAmbientOwner / setAmbientOwner / setCurrentOutletState).
+// below, and gating the whole definition lets them tree-shake the gxt-bridge
+// accessors used here.
 if (__GXT_MODE__) {
   const EmberOutletElement: any =
     typeof HTMLElement === 'undefined'
@@ -47,30 +41,18 @@ if (__GXT_MODE__) {
 
           connectedCallback() {
             // Skip rendering if this element is being temporarily reattached to the DOM
-            // for willDestroyElement/willClearRender lifecycle hooks. The reattachment
-            // is performed by __gxtDestroyUnclaimedPoolEntries so that tests using
-            // document.body.contains(this.element) pass during the destroy phase.
-            // Without this guard, the inner <ember-outlet> inside a just-removed component
-            // wrapper (e.g., root-9) would fire connectedCallback, read the NEW route's
-            // outlet state, and render the new route's template with the old wrapper's
-            // view on the parentView stack — corrupting the parentView of new components.
-            //
-            // Slice-89 (Cluster B): cross-package reader routes through the typed-
-            // bridge getter `compilePipeline.getDestroyReattachInProgress?.()`. The
-            // `?.()` chain returns `undefined` when either the renderer or the method
-            // is not yet installed (e.g., classic-Ember build path where gxt-backend
-            // was never loaded); the truthy `if (...)` guard coerces `undefined` to
-            // FALSE, matching pre-slice-89 semantics where
-            // `globalThis.__gxtDestroyReattachInProgress === undefined` (pre-first-
-            // destroy-reattach edge) coerced to FALSE. See
-            // `getDestroyReattachInProgress` doc in gxt-bridge.ts and module-local
-            // definition in compile.ts.
+            // for willDestroyElement/willClearRender lifecycle hooks (the destroy phase
+            // reattaches removed component elements so `document.body.contains(this.element)`
+            // holds in those hooks). Without this guard, the inner <ember-outlet> inside a
+            // just-removed component wrapper would fire connectedCallback, read the NEW
+            // route's outlet state, and render the new route's template with the old
+            // wrapper's view on the parentView stack — corrupting the parentView of new
+            // components.
             if (getGxtRenderer()?.compilePipeline.getDestroyReattachInProgress?.()) {
               return;
             }
 
-            // Get outlet state from the bridge (see outlet bridge state in
-            // gxt-bridge.ts — the retired __currentOutletState slot)
+            // Get the current outlet state from the bridge
             this._outletState = getCurrentOutletState();
 
             if (DEBUG && (globalThis as any).__DEBUG_GXT_RENDER) {
@@ -200,7 +182,7 @@ if (__GXT_MODE__) {
 
             // Fix for @tracked properties on controller prototype:
             // Object.create(controller) makes prototype getters run with `this = nestedContext`
-            // instead of `this = controller`. The @tracked getter's trackedData is keyed by `this`,
+            // instead of `this = controller`. The @tracked getter's storage is keyed by `this`,
             // so it creates a fresh storage entry for nestedContext with the initial value
             // (e.g., `false` for `@tracked isExpanded = false`), ignoring the actual current
             // value on the controller (e.g., `true` after a toggle click).
@@ -251,7 +233,7 @@ if (__GXT_MODE__) {
               }
             }
 
-            // Update the global outlet state for nested outlets
+            // Update the current outlet state for nested outlets
             const previousOutletState = getCurrentOutletState();
             setCurrentOutletState(nestedOutlet);
 
@@ -269,8 +251,6 @@ if (__GXT_MODE__) {
             // the old route's component is destroyed.
             let _parentViewPushed = false;
             try {
-              // (Cluster B slice 3) — typed bridge call. Was __gxtViewUtilsRef +
-              // __gxtPushParentView.
               const viewUtils = getGxtRenderer()?.viewUtils;
               if (viewUtils) {
                 const directParent = this.parentElement;
@@ -327,7 +307,6 @@ if (__GXT_MODE__) {
               setCurrentOutletState(previousOutletState);
               if (_parentViewPushed) {
                 try {
-                  // (Cluster B slice 3) — typed bridge call. Was __gxtPopParentView.
                   getGxtRenderer()?.viewUtils.popParentView();
                 } catch {
                   /* ignore */
@@ -410,8 +389,6 @@ function createOutletTemplate(_owner: any) {
     // don't show up as root views).
     let _factoryParentPushed = false;
     try {
-      // (Cluster B slice 3) — typed bridge call. Was __gxtViewUtilsRef +
-      // __gxtPushParentView.
       const viewUtils = getGxtRenderer()?.viewUtils;
       if (viewUtils && parentElement) {
         // parentElement here is the rendering target (typically the
@@ -475,7 +452,6 @@ function createOutletTemplate(_owner: any) {
     } finally {
       if (_factoryParentPushed) {
         try {
-          // (Cluster B slice 3) — typed bridge call. Was __gxtPopParentView.
           getGxtRenderer()?.viewUtils.popParentView();
         } catch {
           /* ignore */
@@ -489,14 +465,10 @@ function createOutletTemplate(_owner: any) {
   return factory;
 }
 
-// The classic outlet template — upstream's precompiled
-// `{{component (outletHelper)}}`, consumed by the Glimmer VM. The initializer
-// is short-circuited in GXT builds so the GXT-aliased
-// `@ember/template-compilation` shim is never invoked at module-init time;
-// the rollup/vite pipelines inline `__GXT_MODE__` to a literal, so exactly
-// one branch survives DCE in each dist. See the matching note in
-// templates/root.ts — shipping `createOutletTemplate` unconditionally broke
-// classic runtime consumers of the dist.
+// The classic outlet template, consumed by the Glimmer VM. It is skipped in
+// GXT builds so the GXT-aliased `@ember/template-compilation` shim is never
+// invoked at module-init time; `__GXT_MODE__` is inlined at build time, so
+// exactly one branch survives in each dist.
 const ClassicOutletTemplate = __GXT_MODE__
   ? undefined
   : precompileTemplate(`{{component (outletHelper)}}`, {

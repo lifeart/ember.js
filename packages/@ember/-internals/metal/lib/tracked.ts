@@ -3,14 +3,11 @@ import { isEmberArray } from '@ember/array/-internals';
 import { assert } from '@ember/debug';
 import { DEBUG } from '@glimmer/env';
 import { getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
-// GXT dual-backend note: in classic mode `@glimmer/validator` resolves to the
-// vendored package; in EMBER_RENDER_BACKEND=gxt mode rollup aliases it to
-// packages/@ember/-internals/gxt-backend/validator.ts. Both shapes expose the
-// same named exports, so a namespace import yields a `validator` object with
-// the same surface as @lifeart/gxt/glimmer-compatibility's `validator`.
-// BARREL specifiers are load-bearing: the rollup GXT alias map redirects the
-// exact '@glimmer/validator' key to the gxt-backend shim; deep lib/* paths
-// would resolve to the real VM source in GXT builds (scripts/gxt-alias-map.mjs).
+// In GXT builds `@glimmer/validator` is aliased to gxt-backend's validator
+// shim, which exposes the same named exports. The barrel specifier is
+// load-bearing: the alias map (scripts/gxt-alias-map.mjs) redirects the exact
+// '@glimmer/validator' key, so deep lib/* paths would resolve to the real VM
+// source in GXT builds.
 // eslint-disable-next-line ember-local/no-barrel-imports
 import * as validator from '@glimmer/validator';
 // eslint-disable-next-line ember-local/no-barrel-imports
@@ -24,17 +21,6 @@ import type { ElementDescriptor } from '..';
 import { CHAIN_PASS_THROUGH } from './chain-tags';
 import type { ExtendedMethodDecorator, DecoratorPropertyDescriptor } from './decorator';
 import { COMPUTED_SETTERS, isElementDescriptor, setClassicDecorator } from './decorator';
-// Slice-123 (Cluster B): the intra-metal `notifyPropertyChange` reader (the
-// `__GXT_MODE__`-gated `_notifyPropChange(this, key)` call inside the
-// @tracked setter, post-`dirtyTagFor`) graduated from the pre-slice-123
-// `(globalThis as any).__emberNotifyPropertyChange` raw-globalThis hop to
-// a direct sibling import. This file already imports from peers
-// `./chain-tags`, `./decorator`, and `./tags`, so adding `./property_events`
-// is a straightforward sibling edge with no new module boundary crossed
-// (matches the slice-122 intra-package zero-bridge precedent). Only the
-// cross-package `gxt-backend/manager.ts` reader still routes through
-// `compilePipeline.notifyPropertyChange`. See `notifyPropertyChange` doc
-// in gxt-bridge.ts.
 import { notifyPropertyChange } from './property_events';
 
 // Use compat trackedData for backtracking detection support.
@@ -196,27 +182,21 @@ if (DEBUG) {
   setClassicDecorator(tracked);
 }
 
-// ── GXT @tracked single-cell convergence ───────────────────────────────────
-// Phase 1 of the reactivity convergence: a `@tracked` property is backed by
-// EXACTLY ONE gxt cell — `cellFor(obj, key)` — which is the same per-property
-// cell `tagFor(obj, key)` resolves to (in @lifeart/gxt both share one
-// `WeakMap<obj, Map<key, Cell>>` store). The accessor reads/writes that cell;
-// Ember's createCache/computed/observer tracking entangles the SAME cell via
-// `consumeTag(tagFor(obj, key))`. This retires the former double-backing where
-// the value lived in a separate `trackedData` storage cell that was hand-synced
-// into the native cell on every get/set.
+// ── GXT @tracked storage ───────────────────────────────────────────────────
+// In GXT mode a `@tracked` property is backed by exactly one gxt cell,
+// `cellFor(obj, key)`, which is also the cell `tagFor(obj, key)` resolves to
+// (gxt keeps both in one per-property store). The accessor reads and writes
+// that cell, and Ember's createCache/computed/observer tracking consumes the
+// same cell via `consumeTag(tagFor(obj, key))`. Classic mode keeps
+// `@glimmer/validator`'s `trackedData`.
 //
-// RE-ENTRANCY GUARD (load-bearing): gxt's `cellFor` creates the cell with
+// Re-entrancy guard (load-bearing): gxt's `cellFor` creates the cell with
 // `new Cell(obj[key])` and `tagFor` creates a lazy formula `() => obj[key]`.
-// For a `@tracked` property `obj[key]` IS this very accessor, so the first
-// touch re-enters the getter before the cell exists → infinite recursion
-// (verified empirically — a naive `cellFor(...).value` read stack-overflows on
-// the first read/write). The guard makes that re-entrant `obj[key]` read return
-// the memoized initializer value, which seeds the storage cell and resolves the
-// lazy formula; after that the cell is self-sufficient. The separate
-// `trackedData` storage existed precisely to supply this recursion-safe seed;
-// the guard replaces it for the GXT `@tracked` path while classic mode keeps
-// the real `@glimmer/validator` `trackedData`.
+// For a `@tracked` property `obj[key]` is this very accessor, so the first
+// access re-enters the getter before the cell exists and recurses forever.
+// The guard makes that re-entrant `obj[key]` read return the memoized
+// initializer value, which seeds the cell and resolves the lazy formula;
+// after that the cell is self-sufficient.
 let _gxtSeedObj: object | null = null;
 let _gxtSeedKey: string | symbol | null = null;
 let _gxtSeedInit: (() => unknown) | null = null;
@@ -227,9 +207,8 @@ let _gxtSeedValue: unknown;
 // gxt `cellFor` bridge is installed (the metal module-init window) has no cell
 // to write yet, so it is stashed in the classic `trackedData` storage and the
 // (obj, key) is flagged here. On the cell's first post-install creation we
-// migrate that stashed value into the cell (see `_gxtTrackedCellGet`). This is
-// deliberately scoped to ONLY flagged props: normal `@tracked` props never read
-// classic storage, so the single-cell convergence (no double-backing) holds.
+// migrate that stashed value into the cell (see `_gxtTrackedCellGet`). Only
+// flagged props ever read classic storage.
 const _gxtPendingWindowWrites = new WeakMap<object, Set<string | symbol>>();
 function _gxtFlagPendingWindowWrite(obj: object, key: string | symbol): void {
   let set = _gxtPendingWindowWrites.get(obj);
@@ -260,8 +239,7 @@ function _gxtTrackedCellGet(
     if (!_gxtSeedComputed) {
       // Seed the cell being created. If a value was written during the
       // pre-install window, migrate it from classic storage; otherwise use the
-      // initializer default (NO classic-storage read for normal props — that
-      // would re-introduce the double-backing this convergence removed).
+      // initializer default (normal props never read classic storage).
       _gxtSeedValue = _gxtTakePendingWindowWrite(obj, key)
         ? classicGetter(obj)
         : (_gxtSeedInit ?? initializer).call(obj);
@@ -318,10 +296,9 @@ function _gxtTrackedCellSet(
     const cell = _cellFor(obj, key, /* skipDefine */ true) as
       | { update: (v: unknown) => void }
       | undefined;
-    // The single-cell scheme relies on the gxt cell exposing a synchronous
-    // `update()` (true for gxt 0.0.67, where tagFor's lazy MergedCell extends
-    // Cell). Assert it in DEBUG so a future gxt contract change fails loudly
-    // here rather than silently no-op'ing a @tracked write.
+    // This relies on the gxt cell exposing a synchronous `update()` (tagFor's
+    // lazy MergedCell extends Cell). Assert it in DEBUG so a gxt contract
+    // change fails loudly here rather than silently dropping a @tracked write.
     assert(
       `@tracked single-cell: gxt cellFor("${String(key)}") returned a cell without update(); the gxt cell contract changed`,
       !cell || typeof cell.update === 'function'
@@ -368,12 +345,9 @@ function descriptorForField([target, key, desc]: ElementDescriptor): DecoratorPr
   let { getter, setter } = trackedData<any, any>(key, initializer);
 
   function get(this: object): unknown {
-    // GXT mode: read THE single gxt cell (cellFor === tagFor per-property cell).
-    // The read entangles GXT render formulas; `_gxtTrackedCellGet` also consumes
-    // `tagFor(obj,key)` (the same cell) so Ember's createCache/computed tracking
-    // captures the dependency. Classic mode: read the real @glimmer/validator
-    // `trackedData` storage (its getter already consumes the per-key tag via
-    // Glimmer's standard autotracking, so no extra consumeTag here).
+    // GXT mode: read the property's gxt cell, which also consumes
+    // `tagFor(obj, key)` so Ember's createCache/computed tracking captures the
+    // dependency. Classic mode: the `trackedData` getter consumes the tag.
     let value = __GXT_MODE__ ? _gxtTrackedCellGet(this, key, initializer, getter) : getter(this);
 
     // Add the tag of the returned value if it is an array, since arrays
@@ -387,20 +361,16 @@ function descriptorForField([target, key, desc]: ElementDescriptor): DecoratorPr
 
   function set(this: object, newValue: unknown): void {
     // GXT backtracking detection for @tracked properties (render-pass based:
-    // "modified X after it was rendered"). Slice-10 (Cluster B): typed bridge,
-    // optional method, guarded.
+    // "modified X after it was rendered").
     if (__GXT_MODE__ && DEBUG) {
       getGxtRenderer()?.backtracking.checkBacktracking?.(this, key);
       // track()/render-frame backtracking ("updated X after using it in the
-      // same computation") on the SAME single cell the getter recorded its read
-      // into. Replaces the assertion formerly inside trackedData.setter.
+      // same computation") on the same cell the getter recorded its read into.
       _gxtAssertTrackedBacktrack?.(tagFor(this, key), key, this);
     }
 
     if (__GXT_MODE__) {
-      // Write THE single gxt cell (cellFor === tagFor per-property cell). This
-      // is the only value store for the GXT @tracked path — the former
-      // trackedData dual-write is gone.
+      // Write the property's gxt cell, the only value store on the GXT path.
       const wrote = _gxtTrackedCellSet(this, key, newValue, initializer);
       if (!wrote) {
         // Bridge not installed yet (metal module-init window, before the gxt
@@ -411,22 +381,10 @@ function descriptorForField([target, key, desc]: ElementDescriptor): DecoratorPr
         setter(this, newValue);
         _gxtFlagPendingWindowWrite(this, key);
       }
-      // Public notification — the SINGLE coherence path. notifyPropertyChange:
-      //   • markObjectAsDirty → dirtyTagFor(obj,key) + dirtyTagFor(obj,SELF_TAG)
-      //     → marks the SHARED cell's tag dirty so createCache/computed/observers
-      //     watching `key`/`[]`/SELF_TAG invalidate;
-      //   • fires sync + (schedules) async observers;
-      //   • recomputes dependent computed properties;
-      //   • triggers the GXT re-render (with `newValue` forwarded).
-      // This one call SUBSUMES the former GXT-only amplifications that existed
-      // ONLY to keep the two now-unified cell systems coherent: the explicit
-      // `dirtyTagFor(SELF_TAG)` + `dirtyTagFor(key)` double-dirty and the
-      // standalone `triggerReRender`/`setPendingSync` block (both of which
-      // markObjectAsDirty + notifyPropertyChange's own triggerReRender already
-      // perform). The cell's own `.update()` above handles GXT render
-      // entanglement; notifyPropertyChange handles the classic-tag + observer
-      // side. Forward `newValue` as the 4th arg so the enqueue site can call
-      // `cellFor(this,key,true).update(newValue)` without re-reading the getter.
+      // notifyPropertyChange dirties the `key` and SELF_TAG tags (invalidating
+      // createCache/computed/observers), fires observers, recomputes dependent
+      // computed properties and triggers the GXT re-render. `newValue` is
+      // forwarded so the trigger does not re-read the getter.
       notifyPropertyChange(this, key, null, newValue);
     } else {
       setter(this, newValue);

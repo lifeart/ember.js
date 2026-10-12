@@ -2,16 +2,6 @@ import type { Meta } from '@ember/-internals/meta/lib/meta';
 import { peekMeta } from '@ember/-internals/meta/lib/meta';
 import { assert } from '@ember/debug';
 import { DEBUG } from '@glimmer/env';
-// `notifyPropertyChange` routes its `__gxtInTriggerReRender` save-restore
-// writer through the typed `compilePipeline.withInTriggerReRender(fn)` bridge
-// helper, which is the sole writer surface. If the bridge has not been
-// installed yet (only reachable before compile.ts's module-init
-// `installCompilePipelinePart` call has fired, which is unreachable from any
-// known `notifyPropertyChange` entry point), the wrap is skipped and
-// `gxtTrigger` is called directly. The canonical body itself wraps via
-// `_gxtWithInTriggerReRender` so the CP.get re-entrance guard still observes
-// the flag for the body's duration regardless. See `withInTriggerReRender` doc
-// in gxt-bridge.ts.
 import {
   getGxtRenderer,
   installCompilePipelinePart,
@@ -44,24 +34,13 @@ export function hasPropertyDidChange(obj: unknown): obj is PropertyDidChange {
 
 let deferred = 0;
 
-// CP invalidation tracking: a module-local `WeakMap<object, Set<string>>` plus
-// a typed `_gxtCPIsInvalidating(obj, keyName)` predicate exposed to its sole
-// sibling reader in `metal/lib/computed.ts`. All sites live inside the
-// `@ember/-internals/metal` package, so no bridge / globalThis slot is needed.
-// The shape mirrors the sibling `_cpSetInFlight` / `_inCPSetFor` module-local
-// at the head of `computed.ts` (same `WeakMap<object, Set<string>>`,
-// per-(obj, keyName) granularity, boolean predicate read).
-//
-// Ownership: `property_events.ts` owns the WeakMap because
-// `notifyPropertyChange` is the canonical writer of the invalidation lifecycle
-// — the marker is added in the `try` head and removed in the `finally`, scoped
-// to one notify call. `computed.ts`'s read only checks membership during CP.get
-// re-entrance and never mutates.
+// GXT: per-(obj, keyName) markers for properties whose `notifyPropertyChange`
+// is in flight. `notifyPropertyChange` adds a marker and removes it in its
+// `finally`; `CP.get` in computed.ts reads it via `_gxtCPIsInvalidating`.
 const _gxtCPInvalidationSet: WeakMap<object, Set<string>> = new WeakMap();
 function _gxtCPMarkInvalidating(obj: object, keyName: string): boolean {
-  // Returns whether the (obj, keyName) marker was already present (so the
-  // caller knows whether to remove it on the way out — clear-only-if-added
-  // semantics).
+  // Returns whether the marker was already present, so the caller only clears
+  // markers it added.
   let perObj = _gxtCPInvalidationSet.get(obj);
   if (!perObj) {
     perObj = new Set();
@@ -114,23 +93,17 @@ function notifyPropertyChange(
 ): void {
   let meta = _meta === undefined ? peekMeta(obj) : _meta;
 
-  // GXT integration: Mark (obj, keyName) as "actively invalidating" for the
-  // entire notify lifecycle — both the `__gxtTriggerReRender` side-effect
-  // reads AND the subsequent `markObjectAsDirty → dirtyTagFor` cascade.
-  // GXT cells installed by `cellFor` for CP-backed properties re-fire
-  // their formulas synchronously during either path, which would invoke
-  // the user's getter — something classic behavior forbids. The narrow
-  // per-(obj, keyName) marker tells `CP.get` to short-circuit to the
-  // cached value for this exact key while the cascade is in flight, and
-  // lets unrelated CPs read normally. Classic mode neither installs
-  // formulas nor reads this marker, so skip the per-call WeakMap/Set
-  // bookkeeping there — `clearItems4` issues thousands of notifies.
+  // GXT integration: mark (obj, keyName) as invalidating for the whole
+  // notification, covering both the GXT re-render trigger and the
+  // `markObjectAsDirty` -> `dirtyTagFor` cascade below. GXT cells for
+  // CP-backed properties re-run their formulas synchronously on either path,
+  // which would invoke the user's getter (classic Ember never does that); the
+  // marker makes `CP.get` return the cached value for this key instead while
+  // unrelated CPs read normally. Classic mode never reads the marker, so skip
+  // the bookkeeping there (clearing a large list issues thousands of
+  // notifies).
   let wasPresent = true;
   if (__GXT_MODE__) {
-    // Mark via the module-local `_gxtCPMarkInvalidating(obj, keyName)` helper
-    // at the head of this file. It returns whether the marker was already
-    // present, which the `finally` block uses to clear only if it was added
-    // here. See the `_gxtCPInvalidationSet` doc block above.
     wasPresent = _gxtCPMarkInvalidating(obj, keyName);
   }
 
@@ -140,42 +113,20 @@ function notifyPropertyChange(
     // computed-property getters whose cache revision hasn't been set yet (e.g. PromiseProxy).
     // Still fire for prototype meta objects so GXT stays in sync.
     if (__GXT_MODE__ && (meta === null || !meta.isInitializing())) {
-      // The re-render trigger is the `compilePipeline.triggerReRender(obj,
-      // keyName)` bridge method. It is optional (load-order independence —
-      // classic builds never publish it); when not installed
-      // (`_cp?.triggerReRender === undefined`) the call is skipped.
-      // Suppression semantics (the `withTriggerSuppressed(fn)` frame) are
-      // preserved by the module-local `_gxtTriggerSuppressedFlag` short-circuit
-      // at the entry of `_gxtTriggerReRender` in compile.ts. See `triggerReRender`
-      // doc in `@ember/-internals/gxt-backend/gxt-bridge`.
       const _cp = getGxtRenderer()?.compilePipeline;
       const _triggerReRender = _cp?.triggerReRender;
       if (typeof _triggerReRender === 'function') {
-        // Mark the trigger scope so CP.get can preserve classic "don't eagerly
-        // evaluate never-consumed CPs during a change notification" semantics.
-        // (core.ts's lazy wrapper is only installed for proxied CoreObjects,
-        // which misses plain `class Foo { @computed ... }` cases.)
+        // Mark the trigger scope (`withInTriggerReRender`) so CP.get can
+        // preserve classic "don't eagerly evaluate never-consumed CPs during a
+        // change notification" semantics. (core.ts's lazy wrapper is only
+        // installed for proxied CoreObjects, which misses plain
+        // `class Foo { @computed ... }` cases.) If the helper is unavailable,
+        // the trigger still marks the scope for its own body.
         //
-        // The `__gxtInTriggerReRender` save-restore toggle that wraps the
-        // trigger call is routed through the typed
-        // `compilePipeline.withInTriggerReRender(fn)` bridge helper, which is
-        // the sole writer surface. If the bridge is unavailable (module-init
-        // window only — unreachable from any known `notifyPropertyChange` entry
-        // point), call the trigger directly; the canonical body's internal
-        // `_gxtWithInTriggerReRender` wrap still sets the flag for the body's
-        // duration, which is what the CP.get re-entrance guard cares about. See
-        // `withInTriggerReRender` doc in gxt-bridge.ts.
-        //
-        // Forward the optional `value` parameter through the trigger when the
-        // caller passed it (using the existing `arguments.length === 4`
-        // discriminator — the same pattern used around `PROPERTY_DID_CHANGE`
-        // below). This lets the enqueue site call `cellFor(...).update(value)`,
-        // which removes the body's dependency on the synchronous `obj[keyName]`
-        // getter read for the write traffic that already passes a value (set()
-        // and the @tracked setter). Capture `arguments.length` to a const so
-        // the arrow closure observes the outer notifyPropertyChange's
-        // call-shape (arrows don't have their own `arguments`, and capturing
-        // avoids any TS/transform ambiguity).
+        // Forward `value` when the caller passed it (see the `arguments.length`
+        // check around `PROPERTY_DID_CHANGE` below) so the trigger can update
+        // the cell without re-reading `obj[keyName]`. `arguments.length` is
+        // captured because the arrow below has no `arguments` of its own.
         const _hasValueArg = arguments.length === 4;
         const _withIn = _cp?.withInTriggerReRender;
         if (_withIn) {
@@ -245,9 +196,7 @@ function notifyPropertyChange(
       }
     }
   } finally {
-    // Clear the narrow CP invalidation marker only if it was added here,
-    // via the module-local `_gxtCPClearInvalidating(obj, keyName)` helper. See
-    // the `_gxtCPInvalidationSet` doc block above.
+    // Clear the CP invalidation marker only if it was added here.
     if (!wasPresent) {
       _gxtCPClearInvalidating(obj, keyName);
     }
@@ -300,22 +249,11 @@ function changeProperties(callback: () => void): void {
   }
 }
 
-// GXT integration: expose a function that recomputes computed properties
-// whose dependentKeys include the changed key. Returns an array of
-// { key, value } pairs for each recomputed property.
-// This is called from compile.ts's __gxtTriggerReRender after the primary
-// cell is updated, so that derived computed properties are also refreshed.
-//
-// The function is a module-local declaration exposed through the
-// `compilePipeline.recomputeDependents` typed-bridge method. The single
-// cross-package reader (the post-`cellFor(obj, keyName).update(newValue)`
-// derived-CP propagation loop inside `__gxtTriggerReRender`) routes through
-// `getGxtRenderer()?.compilePipeline.recomputeDependents?.(obj, keyName)`; the
-// optional chain provides a null-tolerant guard. The function stays in this
-// file because it owns the `deferred` batch counter from `beginPropertyChanges`
-// / `endPropertyChanges` (which it MUST early-return inside), the `peekMeta`
-// import, and the classic CP descriptor knowledge; it is registered via
-// `installCompilePipelinePart`. See `recomputeDependents` doc in gxt-bridge.ts.
+// GXT integration: recompute the computed properties whose dependent keys
+// include `changedKey` and return `{ key, value }` pairs. The GXT re-render
+// trigger calls this (as `compilePipeline.recomputeDependents`) after updating
+// the primary cell, so derived computed properties are refreshed too. It
+// lives here because it must respect the `deferred` batch counter.
 function _gxtRecomputeDependents(
   obj: object,
   changedKey: string
@@ -324,9 +262,9 @@ function _gxtRecomputeDependents(
   // Inside a `beginPropertyChanges`/`endPropertyChanges` batch, classic
   // Ember never evaluates dependent computed properties — it defers all
   // re-evaluation until the batch closes and observers flush. Mirror that
-  // here: returning an empty results array tells compile.ts's
-  // __gxtTriggerReRender loop not to eagerly update the dependent CPs'
-  // cells. GXT's own cell invalidation still happens via `dirtyTagFor`,
+  // here: returning an empty results array tells the re-render trigger not
+  // to eagerly update the dependent CPs' cells. GXT's own cell invalidation
+  // still happens via `dirtyTagFor`,
   // so the next genuine read (observer callback, `get()`, render) will
   // lazily recompute through the CP descriptor with a fresh value.
   if (deferred > 0) return results;
@@ -410,14 +348,8 @@ if (__GXT_MODE__) {
   installCompilePipelinePart({ recomputeDependents: _gxtRecomputeDependents });
 }
 
-// `notifyPropertyChange` is exposed as a typed
-// `compilePipeline.notifyPropertyChange(obj, keyName, _meta, value)` bridge
-// method. The intra-metal reader (`tracked.ts`) imports the locally-declared
-// `notifyPropertyChange` directly. Only the cross-package
-// `gxt-backend/manager.ts` reader routes through the bridge — that file cannot
-// directly import from `@ember/-internals/metal/lib/property_events` because
-// the dependency direction is metal→gxt-backend via `gxt-bridge`, and a reverse
-// direct edge would loop. See `notifyPropertyChange` doc in gxt-bridge.ts.
+// Expose `notifyPropertyChange` to gxt-backend through the bridge; importing
+// it from metal directly would create an import cycle.
 if (__GXT_MODE__) {
   installCompilePipelinePart({ notifyPropertyChange });
 }
