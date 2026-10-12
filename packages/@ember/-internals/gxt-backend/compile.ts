@@ -823,6 +823,25 @@ const JS_RESERVED_WORDS = new Set([
   'await',
 ]);
 
+// Built-in keyword helpers that may be passed as a named argument as-is: the
+// named-arg resolved-helper guard (see the `maybeHelperInNamedArgPosition`
+// rewrite in precompileTemplate) skips them.
+const _GXT_NAMED_ARG_SAFE_BUILTINS = new Set([
+  'array',
+  'hash',
+  'concat',
+  'fn',
+  'get',
+  'mut',
+  'readonly',
+  'unique-id',
+  'unbound',
+  'helper',
+  'modifier',
+  'component',
+  '__mutGet',
+]);
+
 // Built-in helpers that cannot be overridden by an owner-registered helper of
 // the same name. Hoisted module const; previously inlined identically at the
 // two override-assert sites ($_maybeHelper override check + owner.factoryFor).
@@ -13147,27 +13166,34 @@ export function precompileTemplate(
     // (e.g., when WITH_HELPER_MANAGER path isn't taken). The scope injection later
     // creates `const get = globalThis[scopeKey]["get"]`, but the compiled code
     // references the string "get" — this fix bridges that gap.
+    //
+    // Only keys the compiler reports are rewritten: a quoted lookup is listed in
+    // `maybeHelperNames`, and a kebab binding that gxt emitted verbatim as an
+    // unquoted identifier (`$_maybeHelper(say-hello, …)`, invalid JS parsed as
+    // `say - hello`) is listed in `referencedBindings`.
     if (options?.scopeValues && Object.keys(options.scopeValues).length > 0) {
       const _jsReserved = JS_RESERVED_WORDS;
+      const quotedLookups = new Set(compilationResult.maybeHelperNames);
+      const referencedBindings = new Set(compilationResult.referencedBindings);
       const scopeKeySet = new Set(Object.keys(options.scopeValues));
       for (const key of scopeKeySet) {
+        const quoted = quotedLookups.has(key);
+        const bareKebab = key.indexOf('-') !== -1 && referencedBindings.has(key);
+        if (!quoted && !bareKebab) continue;
         let jsKey = hyphenToUnderscore(key);
         if (_jsReserved.has(jsKey)) {
           jsKey = `__scope_${jsKey}`;
         }
-        // Replace $_maybeHelper("key", with $_maybeHelper(jsKey,
-        // Use a regex that matches both quote styles
         const escapedKey = key.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-        const pattern = new RegExp(`\\$_maybeHelper\\("${escapedKey}",`, 'g');
-        modifiedCode = modifiedCode.replace(pattern, `$_maybeHelper(${jsKey},`);
-        const pattern2 = new RegExp(`\\$_maybeHelper\\('${escapedKey}',`, 'g');
-        modifiedCode = modifiedCode.replace(pattern2, `$_maybeHelper(${jsKey},`);
-        // Replace $_maybeHelper(kebab-name, ...) — GXT may emit the scope
-        // binding name verbatim as an unquoted identifier, which for kebab
-        // names like `say-hello` is invalid JS (parsed as `say - hello`).
-        // Only apply when the key actually contains a hyphen — hyphen-free
-        // names (including reserved words handled elsewhere) are safe.
-        if (key.indexOf('-') !== -1) {
+        if (quoted) {
+          // Replace $_maybeHelper("key", with $_maybeHelper(jsKey,
+          // Use a regex that matches both quote styles
+          const pattern = new RegExp(`\\$_maybeHelper\\("${escapedKey}",`, 'g');
+          modifiedCode = modifiedCode.replace(pattern, `$_maybeHelper(${jsKey},`);
+          const pattern2 = new RegExp(`\\$_maybeHelper\\('${escapedKey}',`, 'g');
+          modifiedCode = modifiedCode.replace(pattern2, `$_maybeHelper(${jsKey},`);
+        }
+        if (bareKebab) {
           const pattern3 = new RegExp(`\\$_maybeHelper\\(${escapedKey},`, 'g');
           modifiedCode = modifiedCode.replace(pattern3, `$_maybeHelper(${jsKey},`);
         }
@@ -13191,53 +13217,41 @@ export function precompileTemplate(
     // or `["@name", () => $_maybeHelper(ident, ...)]` (with an outer getter
     // wrapper), so they do NOT match this un-wrapped pattern and are left
     // alone.
-    modifiedCode = modifiedCode.replace(
-      /(\["@[A-Za-z_][A-Za-z0-9_-]*",\s*)\$_maybeHelper\(("[^"]+"),\s*\[\],\s*this\)/g,
-      (match, prefix, nameLiteral) => {
-        // Skip known built-in helper names that are safe as named args.
-        const bareName = nameLiteral.slice(1, -1);
-        // Only apply to simple identifiers (letters/digits/underscore/hyphen)
-        if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(bareName)) return match;
-        // Do not guard built-in keyword helpers — those aren't "registered
-        // helpers" from the owner registry perspective.
-        const BUILTIN = new Set([
-          'array',
-          'hash',
-          'concat',
-          'fn',
-          'get',
-          'mut',
-          'readonly',
-          'unique-id',
-          'unbound',
-          'helper',
-          'modifier',
-          'component',
-          '__mutGet',
-        ]);
-        if (BUILTIN.has(bareName)) return match;
-        return `${prefix}(globalThis.__gxtAssertNotResolvedHelperAsNamedArg(${nameLiteral}, this), $_maybeHelper(${nameLiteral}, [], this))`;
-      }
-    );
+    //
+    // The compiler reports whether any string lookup landed in a named-arg
+    // position (`maybeHelperInNamedArgPosition`); the rewrite runs only then.
+    // The guard function is declared in the Function() body below, gated on
+    // `hasNamedArgHelperGuard`.
+    let hasNamedArgHelperGuard = false;
+    if (compilationResult.maybeHelperInNamedArgPosition) {
+      modifiedCode = modifiedCode.replace(
+        /(\["@[A-Za-z_][A-Za-z0-9_-]*",\s*)\$_maybeHelper\(("[^"]+"),\s*\[\],\s*this\)/g,
+        (match, prefix, nameLiteral) => {
+          // Skip known built-in helper names that are safe as named args.
+          const bareName = nameLiteral.slice(1, -1);
+          // Only apply to simple identifiers (letters/digits/underscore/hyphen)
+          if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(bareName)) return match;
+          // Do not guard built-in keyword helpers — those aren't "registered
+          // helpers" from the owner registry perspective.
+          if (_GXT_NAMED_ARG_SAFE_BUILTINS.has(bareName)) return match;
+          hasNamedArgHelperGuard = true;
+          return `${prefix}(__gxtAssertNotResolvedHelperAsNamedArg(${nameLiteral}, this), $_maybeHelper(${nameLiteral}, [], this))`;
+        }
+      );
+    }
 
-    // Detect unbound usage by checking for __ubCache in the compiled code
-    const hasUnbound = modifiedCode.includes('__ubCache');
+    // {{unbound}} islands are emitted as `globalThis.__gxtUnboundEval(__ubCache, …)`
+    // and reported in `emittedIdentifiers`.
+    const hasUnbound = compilationResult.emittedIdentifiers.includes('__gxtUnboundEval');
 
     compilationResult.code = modifiedCode;
     try {
       // Preamble injection is driven by the compiler's ground-truth emission
-      // flags (gxt >=0.0.71 surfaces `usedArgsAlias`/`usedSlots`/`usedFw` on
-      // compileTemplate's return — glimmer-next #237/#239), UNIONed with a
-      // scan of the post-processed code: our own regex rewrites above can
-      // INTRODUCE `$a`/`$slots`/`$fw` references the compiler never emitted,
-      // so the flag alone would under-inject. The scan matches BOTH access
-      // shapes (`$a.foo` and the bracket form `$a["foo-bar"]`); a false
-      // positive just emits an unused const.
-      const needsArgsAlias =
-        (compilationResult as any).usedArgsAlias === true || /\$a[.[]/.test(modifiedCode);
-      const needsSlots =
-        (compilationResult as any).usedSlots === true || modifiedCode.includes('$slots');
-      const needsFw = (compilationResult as any).usedFw === true || modifiedCode.includes('$fw');
+      // flags (`usedArgsAlias`/`usedSlots`/`usedFw`). The rewrites above never
+      // introduce `$a`/`$slots`/`$fw` references.
+      const needsArgsAlias = compilationResult.usedArgsAlias;
+      const needsSlots = compilationResult.usedSlots;
+      const needsFw = compilationResult.usedFw;
       // Inject Ember keyword helpers as local variables so GXT-compiled code
       // that references them as bare identifiers (e.g. inside {{#let}}) works.
       // GXT treats unknown helpers as scope variables in subexpression position.
@@ -13384,7 +13398,14 @@ export function precompileTemplate(
 
       const BUILTINS = _emberBuiltinHelpers;
       if (BUILTINS) {
-        // Check which helpers are referenced as bare identifiers in the compiled code
+        // Inject the helpers the compiled code references as bare identifiers:
+        // gxt lists every free identifier it emitted in `emittedIdentifiers`
+        // and every referenced caller binding (`gxtEntriesOf`,
+        // `gxtGetOutletState`) in `referencedBindings`.
+        const referenced = new Set([
+          ...compilationResult.emittedIdentifiers,
+          ...compilationResult.referencedBindings,
+        ]);
         const helperNames = [
           'get',
           'unbound',
@@ -13402,17 +13423,13 @@ export function precompileTemplate(
           '__gxtCommentLookup',
         ];
         for (const name of helperNames) {
-          // Convert helper name to valid JS identifier (unique-id -> unique_id)
-          const jsName = hyphenToUnderscore(name);
           // Skip if this name is provided in scope values (scope shadows built-in)
-          if (scopeKeys.has(name) || scopeKeys.has(jsName)) continue;
-          // Check if the compiled code references this as a bare identifier
-          // Match word boundary to avoid false positives (e.g. "getElement")
+          if (scopeKeys.has(name)) continue;
           // NOTE: unique-id is a first-class stable emission since gxt 0.0.76
           // (glimmer-next #252: `$_uid(this, SITE)` + a per-ctx WeakMap) — the
           // positional `_uid[N]` rewrite chain that lived here is retired.
-          if (containsWord(modifiedCode, jsName)) {
-            helperInjections.push(`const ${jsName} = __gxtBuiltinHelpers["${name}"];`);
+          if (referenced.has(name)) {
+            helperInjections.push(`const ${name} = __gxtBuiltinHelpers["${name}"];`);
           }
         }
       }
@@ -13458,20 +13475,6 @@ export function precompileTemplate(
         modifiedCode = modifiedCode
           .split('globalThis.__gxtUnboundEval(__ubCache')
           .join('__gxtUnboundEval(__ubCache');
-      }
-
-      // Rewrite emitted `globalThis.__gxtAssertNotResolvedHelperAsNamedArg(` →
-      // local `__gxtAssertNotResolvedHelperAsNamedArg(` so the inline-emitted
-      // guard function (declared at the outer Function() scope below) is used
-      // directly. The injection is gated on detection of the rewritten form so
-      // templates without the guard pattern pay zero overhead.
-      const hasNamedArgHelperGuard = modifiedCode.includes(
-        'globalThis.__gxtAssertNotResolvedHelperAsNamedArg('
-      );
-      if (hasNamedArgHelperGuard) {
-        modifiedCode = modifiedCode
-          .split('globalThis.__gxtAssertNotResolvedHelperAsNamedArg(')
-          .join('__gxtAssertNotResolvedHelperAsNamedArg(');
       }
 
       // Inlined `__gxtUnboundEval` definition + per-Function-body `__ubSlots`
