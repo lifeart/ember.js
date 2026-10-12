@@ -35,8 +35,9 @@ import {
   getTracker,
   isRendering,
   resolveCurried,
+  setTracker,
 } from '@lifeart/gxt';
-import { argsProxyFor, type ArgsSource, type Arguments } from './args';
+import { argsProxyFor, type ArgsSource } from './args';
 import { destroy, registerDestructor } from './destroyable';
 import {
   CustomModifierManager,
@@ -53,7 +54,6 @@ export const INTERACTIVE: unique symbol = Symbol('ember-native-interactive');
 
 interface ModifierInstance {
   readonly element: Element;
-  readonly args: Arguments;
   /** The state destroyed (Ember destroyable) when the modifier is removed. */
   readonly state: object;
   install(): void;
@@ -77,25 +77,32 @@ function schedule(instance: ModifierInstance): void {
 
 function run(instance: ModifierInstance): void {
   instance.stopTracking?.();
-  // The cells the install / update consumed. A later re-run (one of them
-  // changed) re-reads exactly these — so the effect stays bound to the same
-  // cells until the commit replaces it, and its teardown unbinds them all — and
-  // only schedules the update.
-  let consumed: Array<{ value: unknown }> | null = null;
-  instance.stopTracking = effect(() => {
-    if (consumed === null) {
-      if (instance.installed) {
-        instance.update();
-      } else {
-        instance.installed = true;
-        instance.install();
-      }
-      const tracker = getTracker();
-      consumed = tracker === null ? [] : (Array.from(tracker) as Array<{ value: unknown }>);
-      return;
+  instance.stopTracking = null;
+  // The install / update runs in its own tracking frame: the cells it
+  // consumed are all a later re-run depends on. A modifier that consumed
+  // nothing — an {{on}} whose handler is a class field or an `fn` — can never
+  // need an update, so it gets no effect at all.
+  const consumed = new Set<{ value: unknown }>();
+  const prior = getTracker();
+  setTracker(consumed as never);
+  try {
+    if (instance.installed) {
+      instance.update();
+    } else {
+      instance.installed = true;
+      instance.install();
     }
+  } finally {
+    setTracker(prior);
+  }
+  if (consumed.size === 0) return;
+  // Bound to exactly those cells until the next commit replaces it (its
+  // teardown unbinds them all); a change only SCHEDULES the update.
+  let subscribed = false;
+  instance.stopTracking = effect(() => {
     for (const cell of consumed) void cell.value;
-    schedule(instance);
+    if (subscribed) schedule(instance);
+    subscribed = true;
   });
 }
 
@@ -156,7 +163,7 @@ function createInstance(
   definition: object,
   element: Element,
   source: ArgsSource,
-  owner: object | undefined
+  ownerFor: () => object | undefined
 ): ModifierInstance {
   const manager = getInternalModifierManager(definition) as
     | CustomModifierManager
@@ -173,17 +180,16 @@ function createInstance(
         : 'BUG: modifier manager expected'
     );
   }
-  const args = argsProxyFor(source, 'modifier');
 
   if (manager instanceof CustomModifierManager) {
-    const delegate = manager.getDelegateFor(owner) as ModifierDelegate;
+    const args = argsProxyFor(source, 'modifier');
+    const delegate = manager.getDelegateFor(ownerFor()) as ModifierDelegate;
     const modifier = delegate.createModifier(definition, args);
     const state = {};
     registerDestructor(state, () => delegate.destroyModifier(modifier, args));
     const untracked = delegate.capabilities.disableAutoTracking === true;
     return {
       element,
-      args,
       state,
       install: untracked
         ? () => untrack(() => delegate.installModifier(modifier, element, args))
@@ -198,11 +204,11 @@ function createInstance(
     };
   }
 
-  // Native internal modifier manager (`on`).
-  const internalState = manager.create(owner, element, definition, args);
+  // Native internal modifier manager (`on`): it reads the call site's
+  // literal-or-thunk arguments itself and does not use the owner.
+  const internalState = manager.create(element, definition, source);
   return {
     element,
-    args,
     state: manager.getDestroyable(internalState),
     install: () => manager.install(internalState),
     update: () => manager.update(internalState),
@@ -246,7 +252,9 @@ function handle(
     if (resolved.named.length > 0) namedArgs = Object.assign({}, ...resolved.named, namedArgs);
   }
 
-  const owner =
+  // The render tree's owner — looked up only when it is used (a modifier
+  // name, a custom manager's delegate).
+  const ownerFor = (): object | undefined =>
     renderCtx === undefined
       ? undefined
       : (getContext<object>(renderCtx as never, OWNER, false) ?? undefined);
@@ -254,7 +262,7 @@ function handle(
   // A modifier NAME (`{{on}}`, a loose-mode `<div {{foo-bar}}>` — G11):
   // classic `lookupModifier` for the render tree's owner.
   if (typeof definition === 'string') {
-    const resolved = lookupModifier(owner as Parameters<typeof lookupModifier>[0], definition);
+    const resolved = lookupModifier(ownerFor() as Parameters<typeof lookupModifier>[0], definition);
     if (resolved === null) throw modifierNotFound(definition);
     definition = resolved;
   }
@@ -264,7 +272,7 @@ function handle(
     definition as object,
     element,
     { positional, named: namedArgs },
-    owner
+    ownerFor
   );
   schedule(instance);
   return () => remove(instance);

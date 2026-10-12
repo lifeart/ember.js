@@ -161,6 +161,48 @@ module('gxt-native | modifiers', function (hooks) {
     assert.deepEqual(log, ['create', 'install connected=true', 'update']);
   });
 
+  test('what each install / update consumed decides the next update (nothing consumed: never updated)', function (assert) {
+    class Store {
+      @tracked a = 1;
+      @tracked b = 1;
+    }
+    const store = new Store();
+    const calls = [];
+    const manager = (name, read) =>
+      setModifierManager(
+        () => ({
+          capabilities: capabilities('3.22'),
+          createModifier() {
+            return { runs: 0 };
+          },
+          installModifier(state) {
+            calls.push(`${name} install ${read(state.runs++)}`);
+          },
+          updateModifier(state) {
+            calls.push(`${name} update ${read(state.runs++)}`);
+          },
+          destroyModifier() {},
+        }),
+        {}
+      );
+    // reads nothing: no tracking at all, never updated
+    const inert = manager('inert', () => '-');
+    // the install reads `a`; every update reads `a` and `b`
+    const growing = manager('growing', (run) => (run === 0 ? store.a : `${store.a}/${store.b}`));
+    const Root = <template><i {{inert}}></i><b {{growing}}></b></template>;
+    this.render(Root);
+    run(() => store.b++);
+    assert.deepEqual(calls, ['inert install -', 'growing install 1'], '`b` was not read yet');
+    run(() => store.a++);
+    run(() => store.b++);
+    assert.deepEqual(calls, [
+      'inert install -',
+      'growing install 1',
+      'growing update 2/2',
+      'growing update 2/3',
+    ]);
+  });
+
   test('disableAutoTracking: install / update run untracked (no update on change)', function (assert) {
     const calls = [];
     const def = setModifierManager(

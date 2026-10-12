@@ -412,6 +412,13 @@ function removeListener(
   element.removeEventListener(eventName, callback, options);
 }
 
+const hasOwn = Object.prototype.hasOwnProperty;
+
+/** A named literal-or-thunk argument's value; `undefined` when not passed. */
+function namedArg(named: ArgsSource['named'], key: string): unknown {
+  return hasOwn.call(named, key) ? unwrapArg(named[key]) : undefined;
+}
+
 function checkBooleanOption(name: string, value: unknown): boolean | undefined {
   if (DEBUG && value !== undefined && typeof value !== 'boolean') {
     throw new Error(
@@ -426,7 +433,8 @@ export class OnModifierState {
 
   constructor(
     readonly element: Element,
-    readonly args: Arguments
+    /** The call site's literal-or-thunk arguments (read when installed / updated). */
+    readonly source: ArgsSource
   ) {
     registerDestructor(this, () => {
       const { listener } = this;
@@ -438,7 +446,8 @@ export class OnModifierState {
 
   /** (Re-)attach the listener when its inputs changed (Glimmer `updateListener`). */
   updateListener(): void {
-    const { element, args, listener } = this;
+    const { element, source, listener } = this;
+    const { positional, named } = source;
     let selector = '';
     if (DEBUG) {
       selector =
@@ -449,13 +458,13 @@ export class OnModifierState {
           .join('');
     }
 
-    const eventName = args.positional[0] as string;
+    const eventName = unwrapArg(positional[0]) as string;
     if (DEBUG && (typeof eventName !== 'string' || !eventName)) {
       throw new Error(
         `You must pass a valid DOM event name as the first argument to the \`on\` modifier on ${selector}`
       );
     }
-    const userProvidedCallback = args.positional[1] as EventListener;
+    const userProvidedCallback = unwrapArg(positional[1]) as EventListener;
     if (DEBUG && typeof userProvidedCallback !== 'function') {
       throw new Error(
         `You must pass a function as the second argument to the \`on\` modifier; you passed ${
@@ -463,9 +472,9 @@ export class OnModifierState {
         }. While rendering:\n\n(unknown) on ${selector}`
       );
     }
-    if (DEBUG && args.positional.length !== 2) {
+    if (DEBUG && positional.length !== 2) {
       throw new Error(
-        `You can only pass two positional arguments (event name and callback) to the \`on\` modifier, but you provided ${args.positional.length}. Consider using the \`fn\` helper to provide additional arguments to the \`on\` callback on ${selector}`
+        `You can only pass two positional arguments (event name and callback) to the \`on\` modifier, but you provided ${positional.length}. Consider using the \`fn\` helper to provide additional arguments to the \`on\` callback on ${selector}`
       );
     }
 
@@ -474,14 +483,13 @@ export class OnModifierState {
     let capture: boolean | undefined;
     if (DEBUG) {
       // reify every named argument (Glimmer reads them all in DEV)
-      const named = args.named;
       const extra = Object.keys(named).filter(
         (key) => key !== 'once' && key !== 'passive' && key !== 'capture'
       );
-      once = checkBooleanOption('once', named['once']);
-      passive = checkBooleanOption('passive', named['passive']);
-      capture = checkBooleanOption('capture', named['capture']);
-      for (const key of extra) void named[key];
+      once = checkBooleanOption('once', namedArg(named, 'once'));
+      passive = checkBooleanOption('passive', namedArg(named, 'passive'));
+      capture = checkBooleanOption('capture', namedArg(named, 'capture'));
+      for (const key of extra) void unwrapArg(named[key]);
       if (extra.length > 0) {
         throw new Error(
           `You can only \`once\`, \`passive\` or \`capture\` named arguments to the \`on\` modifier, but you provided ${extra.join(
@@ -490,10 +498,9 @@ export class OnModifierState {
         );
       }
     } else {
-      const named = args.named;
-      if ('once' in named) once = named['once'] as boolean | undefined;
-      if ('passive' in named) passive = named['passive'] as boolean | undefined;
-      if ('capture' in named) capture = named['capture'] as boolean | undefined;
+      once = namedArg(named, 'once') as boolean | undefined;
+      passive = namedArg(named, 'passive') as boolean | undefined;
+      capture = namedArg(named, 'capture') as boolean | undefined;
     }
 
     const shouldUpdate =
@@ -539,7 +546,8 @@ export class OnModifierState {
 
 /** The native internal modifier manager protocol (native/modifier-manager.ts). */
 export interface InternalModifierManager<S extends object = object> {
-  create(owner: object | undefined, element: Element, definition: object, args: Arguments): S;
+  /** `source`: the call site's literal-or-thunk arguments (no args proxies, no owner). */
+  create(element: Element, definition: object, source: ArgsSource): S;
   install(state: S): void;
   update(state: S): void;
   getDestroyable(state: S): object;
@@ -555,8 +563,8 @@ class OnModifierManager implements InternalModifierManager<OnModifierState> {
     return { adds, removes };
   }
 
-  create(_owner: unknown, element: Element, _definition: object, args: Arguments): OnModifierState {
-    return new OnModifierState(element, args);
+  create(element: Element, _definition: object, source: ArgsSource): OnModifierState {
+    return new OnModifierState(element, source);
   }
 
   install(state: OnModifierState): void {
