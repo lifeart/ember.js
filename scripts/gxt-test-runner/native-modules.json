@@ -53,6 +53,12 @@
     "packages/@ember/-internals/glimmer/tests/integration/syntax/each-in-test.js",
     "packages/@ember/-internals/glimmer/tests/integration/helpers/element-test.js",
     "packages/@ember/-internals/glimmer/tests/integration/components/runtime-template-compiler-explicit-test.ts",
-    "packages/@ember/-internals/glimmer/tests/integration/components/runtime-template-compiler-implicit-test.ts"
+    "packages/@ember/-internals/glimmer/tests/integration/components/runtime-template-compiler-implicit-test.ts",
+    "packages/@ember/-internals/glimmer/tests/integration/content-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/input-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/components/web-component-fallback-test.js",
+    "packages/@ember/-internals/glimmer/tests/integration/refinements-test.js",
+    "packages/@ember/template-compiler/tests/template_test.ts",
+    "packages/ember/tests/view_instrumentation_test.js"
   ]
 }

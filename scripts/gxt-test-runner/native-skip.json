@@ -314,6 +314,7 @@
     "Strict Mode - Runtime Template Compiler (implicit) - built ins ::  Can use Input": "Legacy (documented drop): `<Input>` / `<Textarea>` / `{{input}}` / `{{textarea}}` are not part of the gxt-native build.",
     "Strict Mode - Runtime Template Compiler (implicit) - built ins ::  Can use Textarea": "Legacy (documented drop): `<Input>` / `<Textarea>` / `{{input}}` / `{{textarea}}` are not part of the gxt-native build.",
     "Syntax test: {{#each-in}} ::  it does not update when the unbound helper is used": "Legacy drop: {{unbound}} (goal scope LEGACY). The gxt compiler lowers it to the compat-bridge-only __ubCache / globalThis.__gxtUnboundEval emission, which has no native runtime.",
-    "Syntax test: {{#each-in}} with `ObjectProxy` ::  it does not update when the unbound helper is used": "Legacy drop: {{unbound}} (goal scope LEGACY). The gxt compiler lowers it to the compat-bridge-only __ubCache / globalThis.__gxtUnboundEval emission, which has no native runtime."
+    "Syntax test: {{#each-in}} with `ObjectProxy` ::  it does not update when the unbound helper is used": "Legacy drop: {{unbound}} (goal scope LEGACY). The gxt compiler lowers it to the compat-bridge-only __ubCache / globalThis.__gxtUnboundEval emission, which has no native runtime.",
+    "Inline style tests - warnings ::  specifying `attributeBindings: [\"style\"]` generates a warning": "Legacy drop: classic @ember/component (Component.extend / curly {{foo-bar}} invocation / didInsertElement-style hooks) — goal scope LEGACY; the native @ember/component Component is a documented drop."
   }
 }
