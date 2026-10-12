@@ -1583,16 +1583,6 @@ function createEmberTag(original: Function) {
           events = tagProps[2];
         }
 
-        const detectBlockParams = (slotChildren: any[]): boolean => {
-          for (const child of slotChildren) {
-            if (typeof child === 'function') {
-              const fnStr = child.toString();
-              if (/\$_bp\d/.test(fnStr)) return true;
-            }
-          }
-          return false;
-        };
-
         if (children && children.length > 0) {
           const namedBlocks: Map<string, { children: any[]; hasBlockParams: boolean }> = new Map();
           const defaultChildren: any[] = [];
@@ -1611,11 +1601,10 @@ function createEmberTag(original: Function) {
             }
           }
 
+          // A block declares params only through the `@__hasBlockParams__`
+          // marker or a named block's `__hasBlockParams`.
           const createSlotFn = (slotChildren: any[], explicitHasBlockParams?: boolean) => {
-            const hasBlockParams =
-              explicitHasBlockParams !== undefined
-                ? explicitHasBlockParams
-                : detectBlockParams(slotChildren);
+            const hasBlockParams = explicitHasBlockParams ?? false;
 
             const slotFn = (slotCtx: any, ...params: any[]) => {
               const unwrappedParams = params.map((param) => {

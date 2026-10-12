@@ -709,6 +709,28 @@ moduleFor(
       this.assertStableRerender();
     }
 
+    '@test has-block-params is false for a block nested in another component block with params'() {
+      this.owner.register(
+        'component:yield-value',
+        template('{{yield "outer"}}', { component: class extends Component {}, strictMode: false })
+      );
+      this.owner.register(
+        'component:check-block-params',
+        template('{{#if (has-block-params)}}Yes{{else}}No{{/if}}:{{yield}}', {
+          component: class extends Component {},
+          strictMode: false,
+        })
+      );
+
+      this.render(
+        '<YieldValue as |value|><CheckBlockParams><i title={{value}}></i></CheckBlockParams></YieldValue>'
+      );
+
+      this.assertText('No:');
+
+      this.assertStableRerender();
+    }
+
     '@test includes invocation specified attributes in root element ("splattributes")'() {
       this.owner.register(
         'component:foo-bar',

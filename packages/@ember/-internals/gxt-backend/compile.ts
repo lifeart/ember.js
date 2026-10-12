@@ -201,22 +201,6 @@ function doubleDashToSlash(str: string): string {
 // precompileTemplate) — see `buildGxtDialectTransforms`. The former
 // `hasTextAreaTag` source scanner was deleted here.
 
-/** Check if a string contains a $_bp<digit> reference (block param) without regex */
-function hasBlockParamRef(str: string): boolean {
-  let idx = 0;
-  while (idx < str.length) {
-    const found = str.indexOf('$_bp', idx);
-    if (found === -1) return false;
-    const nextIdx = found + 4;
-    if (nextIdx < str.length) {
-      const c = str[nextIdx]!;
-      if (c >= '0' && c <= '9') return true;
-    }
-    idx = found + 1;
-  }
-  return false;
-}
-
 /** Check if a string contains a word (surrounded by non-word-char boundaries) without regex */
 function containsWord(text: string, word: string): boolean {
   let idx = 0;
@@ -10523,22 +10507,6 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
               events = [...parentFw[2]];
             }
           }
-          // Helper to detect if children use block params
-          // Block params are accessed via $_bp0, $_bp1 getters on Object.prototype
-          const detectBlockParams = (slotChildren: any[]): boolean => {
-            // Check if any child function references block params
-            for (const child of slotChildren) {
-              if (typeof child === 'function') {
-                const fnStr = child.toString();
-                // Look for $_bp references which indicate block params are used
-                if (hasBlockParamRef(fnStr)) {
-                  return true;
-                }
-              }
-            }
-            return false;
-          };
-
           // GXT puts text children in tagProps[2] (events position) for lowercase
           // elements. Extract text entries (numeric keys like "0", "1") as children
           // and keep only real event entries (named keys like "click").
@@ -10627,15 +10595,12 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
               }
             }
 
-            // Helper to create a slot function
-            // explicitHasBlockParams: if true/false is explicitly provided, use it
-            // otherwise detect from children
+            // Helper to create a slot function. A block declares params only
+            // through the `@__hasBlockParams__` marker (added by the block-params
+            // AST transform for every `as |…|` element binder) or a named
+            // block's `__hasBlockParams`; a slot without either has none.
             const createSlotFn = (slotChildren: any[], explicitHasBlockParams?: boolean) => {
-              // Use explicit flag if provided, otherwise detect from children
-              const hasBlockParams =
-                explicitHasBlockParams !== undefined
-                  ? explicitHasBlockParams
-                  : detectBlockParams(slotChildren);
+              const hasBlockParams = explicitHasBlockParams ?? false;
 
               const slotFn = (slotCtx: any, ...params: any[]) => {
                 // KEEP the live GXT formula for a reactive block param instead of
