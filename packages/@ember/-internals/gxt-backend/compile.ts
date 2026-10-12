@@ -521,6 +521,7 @@ function hasAttrsInBlockParams(str: string): boolean {
 // `hasDynamicHelper` / `hasDynamicModifier` source scanners were deleted here.
 
 import { buildUntouchableThis } from '@glimmer/debug-util';
+import { isProxy } from '@ember/-internals/utils';
 // The key of a classic `Helper` instance's recompute tag.
 import { RECOMPUTE_TAG } from '@ember/-internals/glimmer/lib/helper';
 // The class of `templateOnly()` component definitions.
@@ -2669,26 +2670,6 @@ function _gxtWalkHashGetterPaths(getter: any, ctx: any): void {
 {
   const g = globalThis as any;
   const _isArray = Array.isArray;
-  // Use Ember's isProxy (WeakSet-based) for reliable proxy detection.
-  // The heuristic (_content/content check) fails for proxies with undefined content.
-  const _isProxyImport = (() => {
-    try {
-      // Access Ember's proxy WeakSet — isProxy uses PROXIES.has(value)
-      // The isProxy function is also available via @ember/-internals/utils
-      return (v: any): boolean => {
-        if (!v || typeof v !== 'object') return false;
-        // Check Ember's proxy marker (setProxy adds to WeakSet)
-        // Also fall back to duck-typing: ObjectProxy has unknownProperty
-        if (typeof v.unknownProperty === 'function' && typeof v.setUnknownProperty === 'function')
-          return true;
-        // Check _content property existence (ObjectProxy stores content internally)
-        if ('_content' in v || 'content' in v) return true;
-        return false;
-      };
-    } catch {
-      return (_v: any) => false;
-    }
-  })();
 
   function emberToBool(predicate: unknown): boolean {
     if (predicate && typeof predicate === 'object') {
@@ -2696,8 +2677,10 @@ function _gxtWalkHashGetterPaths(getter: any, ctx: any): void {
       if (_isArray(predicate)) {
         return (predicate as any[]).length !== 0;
       }
-      // Proxy-like (ObjectProxy/ArrayProxy)
-      if (_isProxyImport(predicate)) {
+      // ObjectProxy: Ember's proxy brand (classic `toBool` uses the same
+      // `isProxy`), not duck typing — a plain object with a `content` key or an
+      // object implementing `unknownProperty` is an ordinary truthy object.
+      if (isProxy(predicate)) {
         // Distinguish ArrayProxy from ObjectProxy:
         // ArrayProxy has `objectAt` on its OWN prototype chain (from EmberArray).
         // ObjectProxy DELEGATES property access through unknownProperty, so

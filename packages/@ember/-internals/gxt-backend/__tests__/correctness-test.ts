@@ -3,6 +3,8 @@
  * classic Ember. The test page loads this file only in GXT builds
  * (`virtual:gxt-tests`).
  */
+import { moduleFor, RenderingTestCase } from 'internal-test-helpers';
+import ObjectProxy from '@ember/object/proxy';
 import { VERSION } from '@ember/version';
 import * as templateCompiler from 'ember-template-compiler';
 import { CustomComponentManager, componentCapabilities } from '../manager';
@@ -68,3 +70,28 @@ QUnit.module('GXT correctness: ember-template-compiler shim', function () {
     assert.strictEqual((templateCompiler as any).VERSION, VERSION);
   });
 });
+
+moduleFor(
+  'GXT correctness: {{#if}} truthiness',
+  class extends RenderingTestCase {
+    ['@test a plain object with a `content` key is truthy']() {
+      this.render('{{#if this.obj}}yes{{else}}no{{/if}}', { obj: { content: '' } });
+      this.assertText('yes');
+    }
+
+    ['@test an object that implements unknownProperty is truthy']() {
+      this.render('{{#if this.obj}}yes{{else}}no{{/if}}', {
+        obj: { unknownProperty() {}, setUnknownProperty() {} },
+      });
+      this.assertText('yes');
+    }
+
+    ['@test an ObjectProxy is truthy only when its content is']() {
+      this.render('{{#if this.empty}}yes{{else}}no{{/if}}|{{#if this.full}}yes{{else}}no{{/if}}', {
+        empty: ObjectProxy.create({ content: null }),
+        full: ObjectProxy.create({ content: {} }),
+      });
+      this.assertText('no|yes');
+    }
+  }
+);
