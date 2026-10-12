@@ -191,7 +191,7 @@ export function addChildView(parent: View, child: View): void {
   childViews.add(getViewId(child));
 }
 
-export function collectChildViews(view: View, registry: Dict<View>): View[] {
+function collectChildViews(view: View, registry: Dict<View>): View[] {
   let views: View[] = [];
   let childViews = CHILD_VIEW_IDS.get(view);
 

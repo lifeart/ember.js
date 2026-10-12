@@ -19,7 +19,6 @@ import {
 import {
   initChildViews as _emberInitChildViews,
   getElementView as _emberGetElementView,
-  collectChildViews as _emberCollectChildViews,
 } from '@ember/-internals/views/lib/system/utils';
 import { DEBUG } from '@glimmer/env';
 
@@ -301,15 +300,12 @@ function extractThisPath(getterStr: string): string | null {
 // toString" case) must clear the node rather than throw.
 function _gxtCoerceText(v: any): string {
   if (v == null) return '';
-  {
-    if (typeof v === 'object' && typeof v.toString !== 'function') return '';
-    try {
-      return String(v);
-    } catch {
-      return '';
-    }
+  if (typeof v === 'object' && typeof v.toString !== 'function') return '';
+  try {
+    return String(v);
+  } catch {
+    return '';
   }
-  return String(v);
 }
 
 /**
@@ -578,9 +574,7 @@ import {
   RENDERED_NODES_PROPERTY,
   COMPONENT_ID_PROPERTY,
   RENDERING_CONTEXT_PROPERTY,
-  initDOM as gxtInitDOM,
   setIsRendering as gxtSetIsRendering,
-  isRendering as gxtIsRendering,
   syncDom as _syncDomFromDirectImport,
   cellFor as _cellForFromDirectImport,
   effect as _effectFromDirectImport,
@@ -679,8 +673,8 @@ const gxtFormula = _formulaFromDirectImport;
 //   - its RENDERING_CONTEXT slot is null/undefined (test cleanup wiped it), OR
 //   - its RENDERING_CONTEXT.roots list is empty / points at a detached element.
 //
-// On detection, we create a fresh root via `gxtCreateRoot(document)`, re-prime
-// its rendering context via `gxtInitDOM`, and publish it. This keeps repeated
+// On detection, we create a fresh root via `gxtCreateRoot(document)` and
+// publish it. This keeps repeated
 // calls from GxtRehydrationDelegate working without breaking the outlet/manager
 // render chain.
 //
@@ -1461,8 +1455,6 @@ function _afterFlushAfterInsertQueue(): void {
 
         retryRef.appendChild(deferredFragment);
         _inElementRenderedNodes.set(retryRef, deferredRenderedNodes);
-        (placeholder as any).__gxtInElementNodes = deferredRenderedNodes;
-        (placeholder as any).__gxtInElementTarget = retryRef;
       };
 
       // Enqueue into the module-local queue declared adjacent to the drain
@@ -1684,8 +1676,6 @@ function _afterFlushAfterInsertQueue(): void {
       wrapperFragment.appendChild(fragment);
       wrapperFragment.appendChild(placeholder);
       _inElementRenderedNodes.set(appendRef, renderedNodes);
-      (placeholder as any).__gxtInElementNodes = renderedNodes;
-      (placeholder as any).__gxtInElementTarget = appendRef;
       // Tag the placeholder so future `insertBefore=null` updates know where
       // to insert — see the matching lookup in the non-self-insert path.
       (placeholder as any).__gxtInElementMarkerFor = appendRef;
@@ -1709,8 +1699,6 @@ function _afterFlushAfterInsertQueue(): void {
 
     // Store rendered nodes for cleanup
     _inElementRenderedNodes.set(appendRef, renderedNodes);
-    (placeholder as any).__gxtInElementNodes = renderedNodes;
-    (placeholder as any).__gxtInElementTarget = appendRef;
     // Back-link the host → its current block placeholder. The placeholder is
     // inserted into the LIVE template tree at the `{{#in-element}}` position
     // (by the enclosing {{#if}} branch / outer commit). When the enclosing
@@ -2718,7 +2706,7 @@ function _gxtWalkHashGetterPaths(getter: any, ctx: any): void {
         return false;
       };
     } catch {
-      return (v: any) => false;
+      return (_v: any) => false;
     }
   })();
 
@@ -2911,7 +2899,6 @@ let _pendingIfWatcherNotifications: Array<{ obj: object; keyName: string }> = []
 // body twice.
 let _deferredCascadeQueue: Array<{ obj: object; keyName: string }> = [];
 let _deferredCascadeIndex: WeakMap<object, Set<string>> = new WeakMap();
-let _drainInProgress = false;
 const _MAX_DRAIN = 1000;
 
 // Liveness guard for drain entries. `_arrayOwnerMap` can retain stale
@@ -3330,46 +3317,6 @@ function _gxtSetHadNestedObjectChange(on: boolean): void {
   _gxtHadNestedObjectChangeFlag = on;
 }
 
-// Paired state: a "morph render in progress" flag + a modifier-invocations
-// queue array, exposed via a save-restore bridge wrapper
-// (`withMorphRender(invocations, fn)`) plus paired read accessors
-// (`isMorphRenderInProgress()` + `getMorphModifierInvocations()`).
-//
-// Both pieces describe the same "we are currently rendering into a throwaway
-// tempContainer that will be diffed against the live DOM by `morphChildren`"
-// lifecycle phase: the flag is the gate (manager.ts' modifier-manager `handle`
-// reader + compile.ts' `$_each` empty-comment cleanup gate), the array is the
-// side-channel queue (manager.ts — modifiers seen on temp elements push entries
-// for post-morph replay against the real DOM). They are tightly coupled: the
-// array is always assigned together with the flag set to TRUE, and cleared to
-// `null` together with the flag set to FALSE.
-//
-// Re-entrancy contract: on entry, save the prior flag and invocations slot, set
-// the new values, invoke `fn`, then restore the prior values via try/finally so
-// nested calls stack correctly. In practice no nested morph render occurs (the
-// morph-fallback path is not re-entered from within a temp-container template
-// body).
-let _gxtMorphRenderInProgressFlag = false;
-let _gxtMorphModifierInvocations: any[] | null = null;
-function _gxtIsMorphRenderInProgress(): boolean {
-  return _gxtMorphRenderInProgressFlag;
-}
-function _gxtGetMorphModifierInvocations(): any[] | null {
-  return _gxtMorphModifierInvocations;
-}
-function _gxtWithMorphRender<T>(invocations: any[], fn: () => T): T {
-  const prevFlag = _gxtMorphRenderInProgressFlag;
-  const prevInvocations = _gxtMorphModifierInvocations;
-  _gxtMorphRenderInProgressFlag = true;
-  _gxtMorphModifierInvocations = invocations;
-  try {
-    return fn();
-  } finally {
-    _gxtMorphRenderInProgressFlag = prevFlag;
-    _gxtMorphModifierInvocations = prevInvocations;
-  }
-}
-
 // "In outlet render" flag: set TRUE for the duration of the
 // `renderTemplateWithContext(routeTemplate, ...)` call inside
 // `glimmer/lib/templates/root.ts`'s outlet render path, restored to FALSE on
@@ -3425,39 +3372,15 @@ function _gxtSetTopOutletRef(ref: any): void {
   _gxtTopOutletRef = ref;
 }
 
-// Captured "current helper scope", exposed via a paired set/get bridge surface
-// (`setCurrentHelperScope` / `getCurrentHelperScope`). Three intra-file
-// save-restore writer pairs in `patchGlobalIf`/`wrapBranch` set it around the
-// branch evaluation body, publishing a per-branch `Set<any>`
-// (`trueBranchHelpers` / `falseBranchHelpers`) so class-helper instantiation
-// paths can associate freshly-created helper instances with the enclosing
-// `{{#if}}` branch's teardown scope (matching Ember's classic Helper lifecycle:
-// destroy + willDestroy fire on branch swap, not only on component teardown).
-// Three readers:
-//
-//   - the intra-file `$_tag` class-based-helper instance creation block, which
-//     calls `ifScopeTag.add(helperInstance)` to wire the instance to the
-//     enclosing branch scope;
-//   - `ember-gxt-wrappers.ts`'s `$_maybeHelper` branch-swap recreation branch;
-//   - `ember-gxt-wrappers.ts`'s `$_maybeHelper` class-based-helper path
-//     (factory.create() cache miss).
-//
-// Each reader treats a non-`null`/`undefined` `scope` with a callable
-// `.add(...)` as the active branch scope; absence or non-Set values
-// short-circuit silently.
-//
-// Overwrite contract: each write OVERWRITES the prior captured scope. Intra-file
-// callers save the prior scope into a local binding and restore it in `finally`
-// so nested branch evaluations restore the outer scope. Bridge writers are
-// responsible for their own save-restore (the bridge does NOT auto-wrap). The
-// cross-file readers' optional-chain fallback gives `undefined` before the slot
-// is set.
+// Captured "current helper scope": `patchGlobalIf`/`wrapBranch` set it (with
+// save-restore) to a per-branch `Set` around branch evaluation, so class-based
+// helper instances created inside the branch join that `{{#if}}` branch's
+// teardown scope (destroy/willDestroy fire on branch swap, as in classic
+// Ember). Readers: the `$_tag` class-helper creation path here, and
+// ember-gxt-wrappers.ts's `$_maybeHelper` paths via `getCurrentHelperScope`.
 let _gxtCurrentHelperScope: any = null;
 function _gxtGetCurrentHelperScope(): any {
   return _gxtCurrentHelperScope;
-}
-function _gxtSetCurrentHelperScope(scope: any): void {
-  _gxtCurrentHelperScope = scope;
 }
 
 // "Is force-rerender" flag, exposed via a paired bridge surface
@@ -3860,10 +3783,9 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
   //
   // Re-entrancy: if a Deferred body run calls `_gxtTriggerReRender` recursively,
   // the inner call's SyncCore fires immediately (read-after-set contract), the
-  // inner call's Deferred is enqueued (dedupe may catch it), and the inner call
-  // SKIPS the drain because `_drainInProgress` is true. The outer call's cursor
-  // loop in `_drainCascadeQueue` picks up the new tail entry in the SAME pass
-  // (bounded by `_MAX_DRAIN`).
+  // inner call's Deferred is enqueued (dedupe may catch it); the drain only runs
+  // from `_gxtSyncDomNow`, so the cursor loop in `_drainCascadeQueue` picks up
+  // the new tail entry in the SAME pass (bounded by `_MAX_DRAIN`).
   try {
     _gxtWithInTriggerReRender(() => {
       _gxtTriggerReRenderSyncCore(obj, keyName, value, hasValueArg);
@@ -3961,8 +3883,8 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
       const _ctrlHook = getControllerOutletRerender();
       if (typeof _ctrlHook === 'function') {
         try {
-          // Pass the changed key so the outlet-rerender hook can, in
-          // fine-grained mode, choose the cell-only fast path for a route
+          // Pass the changed key so the outlet-rerender hook can choose the
+          // cell-only fast path for a route
           // MODEL identity swap (preserving route-template component identity
           // — `didInsertElement` fires once — while still re-evaluating
           // `{{@model.…}}` bindings). QP keys keep the legacy full re-render.
@@ -4681,9 +4603,8 @@ function _orderIfWatcherFlush(
   // (obj, key) appears in pending more than once.
   const seen = new Set<string>();
   for (const { obj, keyName } of pending) {
-    // Mirror notifyIfWatchers' candidate list: obj + its prototype + render-
-    // context proxies that wrap obj. Notification fires on each — we replicate
-    // here so ordering reflects the same set the original loop would touch.
+    // Candidate list: obj + its prototype + render-context proxies that wrap
+    // obj. Notification fires on each.
     const candidates: object[] = [obj];
     try {
       const proto = Object.getPrototypeOf(obj);
@@ -4740,47 +4661,6 @@ function _orderIfWatcherFlush(
   // unknown placed between false-first and true-last so previously-untracked
   // watchers retain their relative ordering vs. the explicit true flips.
   return [...falseFirst, ...unknown, ...trueLast];
-}
-
-function notifyIfWatchers(obj: object, key: string) {
-  const candidates = [obj];
-  try {
-    const proto = Object.getPrototypeOf(obj);
-    if (proto && proto !== Object.prototype) candidates.push(proto);
-  } catch {
-    /* ignore */
-  }
-  // Walk component-context mappings to also notify watchers on render-
-  // context proxies that wrap this instance. CRITICAL: only expand
-  // candidates from ctxsMap entries keyed by `obj` directly — not from
-  // proto-keyed entries. The prototype bucket aggregates contexts from
-  // every instance sharing the prototype, so expanding from it would
-  // broadcast the notify to sibling instances and fire their watchers,
-  // collapsing their {{#if}} branches on an unrelated toggle (cell-
-  // aliasing bug).
-  const ctxsMap = _getOrCreateGxtComponentContexts();
-  if (ctxsMap) {
-    const ctxs = ctxsMap.get(obj);
-    if (ctxs) {
-      for (const ctx of ctxs) {
-        const raw = (ctx as any)?.__gxtRawTarget || ctx;
-        if (!candidates.includes(raw)) candidates.push(raw);
-      }
-    }
-  }
-  for (const target of candidates) {
-    const keyMap = ifWatchers.get(target);
-    if (!keyMap) continue;
-    const watchers = keyMap.get(key);
-    if (!watchers) continue;
-    for (const cb of watchers) {
-      try {
-        cb(obj);
-      } catch (e) {
-        console.warn('[GXT] ifWatcher error:', e);
-      }
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -4924,8 +4804,7 @@ function patchGlobalIf() {
     // resolves parentView=null. We re-push THIS captured owner around the
     // branch evaluation in `wrappedBranch` (which the opcode path DOES traverse
     // via renderState → trueBranch) so toggled-in sub-components get the right
-    // parentView. GATED on fine-grained mode (curly `newly-added
-    // sub-components get correct parentView`).
+    // parentView (curly `newly-added sub-components get correct parentView`).
     const _capturedIfParentView: any = (() => {
       try {
         const vu = getGxtRenderer()?.viewUtils;
@@ -5218,9 +5097,6 @@ function patchGlobalIf() {
     }
 
     if (watchTarget && watchKey && ifCondition) {
-      // Mark as Ember-managed so itemToNode handles it correctly
-      ifCondition.__emberIfCondition = true;
-
       // Fix placeholder connectivity: ensure the IfCondition's target
       // (DocumentFragment containing placeholder + rendered content)
       // is returned as a single unit. Replace RENDERED_NODES with the
@@ -5530,7 +5406,6 @@ function patchGlobalIf() {
   return true;
 }
 patchGlobalIf();
-queueMicrotask(patchGlobalIf);
 
 // Host hook contributed via `installViewUtilsPart` (see module bottom). Runs
 // AFTER manager.ts's `_gxtRebuildViewTreeFromDom` body completes, dispatched by
@@ -6364,7 +6239,6 @@ function _gxtCaptureRowInstance(instance: any): void {
     _gxtRowCtxInstances.set(ctx, set);
   }
   set.add(instance);
-  (instance as any).__gxtOwnerRowCtx = ctx;
 }
 
 // Pre-DOM-removal destructor registered on each `{{#each}}` rowCtx. Fires the
@@ -7104,16 +6978,13 @@ function _gxtSyncDomNow(): void {
       // + syncWrapper) batches across every trigger that fired in this runtask.
       // The three cell.update fan-outs (_arrayOwnerMap + _objectValueCellMap)
       // live in SyncCore, so deferring this remaining work does not break
-      // same-runtask template reads. Re-entrance during drain is handled by
-      // `_drainInProgress`; recursive `_gxtTriggerReRender` calls during a
-      // Deferred body enqueue at the tail and the cursor loop picks them up
-      // in the same pass (bounded by `_MAX_DRAIN`).
+      // same-runtask template reads. Recursive `_gxtTriggerReRender` calls
+      // during a Deferred body enqueue at the tail and the cursor loop picks
+      // them up in the same pass (bounded by `_MAX_DRAIN`).
       if (_deferredCascadeQueue.length > 0) {
-        _drainInProgress = true;
         try {
           _drainCascadeQueue();
         } finally {
-          _drainInProgress = false;
           _deferredCascadeQueue.length = 0;
           _deferredCascadeIndex = new WeakMap();
         }
@@ -7246,9 +7117,7 @@ function _gxtSyncDomNow(): void {
           }
         }
         // Phase C: fire all watchers that have no flip metadata (unknown/legacy)
-        // plus any with metadata whose nextBool came back null. Use the original
-        // notifyIfWatchers fan-out so behavior matches the historical path for
-        // these untracked watchers.
+        // plus any with metadata whose nextBool came back null.
         for (const { cb, obj } of ordered) {
           if (directlyFiredCbs.has(cb)) continue;
           directlyFiredCbs.add(cb);
@@ -7647,12 +7516,11 @@ function _gxtCleanupActiveComponents(): void {
   }
   // Clear pending if-watcher notifications from the previous test
   _pendingIfWatcherNotifications.length = 0;
-  // Clear the deferred-cascade queue + index + in-progress flag between tests
-  // so queue state never leaks across the test boundary (defensive — the queue
-  // should already be drained by `_gxtSyncDomNow`).
+  // Clear the deferred-cascade queue + index between tests so queue state
+  // never leaks across the test boundary (defensive — the queue should already
+  // be drained by `_gxtSyncDomNow`).
   _deferredCascadeQueue.length = 0;
   _deferredCascadeIndex = new WeakMap();
-  _drainInProgress = false;
   // Clear dynamic component change listeners and stale getter from $_dc_ember.
   // The Set + string-path counter live in manager.ts behind the bridge's
   // `clearDynamicComponentListeners()`. The clear resets both in lockstep —
@@ -7833,16 +7701,6 @@ function _gxtClearTagHelperCache(): void {
 // directly onto this object). GXT's internal functions ($_maybeModifier,
 // $_maybeHelper, etc.) close over this same object reference.
 (globalThis as any).$_MANAGERS = $_MANAGERS;
-// Publish the GXT-original `$_MANAGERS` reference via the typed gxt-bridge
-// `runtime.getOriginalManagers` so manager.ts can find the GXT-original object
-// reliably (even after globalThis.$_MANAGERS is reassigned). Both this writer
-// and gxt-with-runtime-hbs.ts contribute the same object via
-// `installRuntimePart`; last-writer-wins is benign because both reference the
-// same `@lifeart/gxt` module instance (via the rollup `manualChunks`
-// consolidation).
-installRuntimePart({
-  getOriginalManagers: () => $_MANAGERS,
-});
 
 // Replace globalThis.$_maybeModifier with a version that delegates to our
 // Ember modifier manager. The GXT-original function closes over the module-scope
@@ -8384,8 +8242,6 @@ const _emberBuiltinHelpers: Record<string, any> = {
   // {{helper "hello-world"}} renders the result of invoking the helper (via toString/valueOf).
   // {{helper (helper "hello-world") "wow"}} passes extra args to the curried helper.
   helper: (helperNameOrRef: any, ...extraArgs: any[]) => {
-    const g = globalThis as any;
-
     // Helper invocation function: resolves and invokes a helper by name with given args
     const invokeByName = (name: string, positional: any[]) => {
       const owner = getAmbientOwner();
@@ -8688,8 +8544,8 @@ function _ensureOnExtAlias(): void {
 // `__gxtAssertNotResolvedHelperAsNamedArg`) for the inlined definition.
 
 // Global block params stack for yielded values
-// When a slot is rendered with block params, they're pushed here
-// The $_blockParam helper reads from the top of the stack
+// When a slot is rendered with block params, they're pushed here; the `$_bp<N>`
+// getters below read the top of the stack.
 // Cross-file readers (ember-gxt-wrappers' slot-render frames, manager.ts's
 // has-block frames) reach these by REFERENCE through the compilePipeline
 // bridge accessors (getBlockParamsStack / getContextBlockParams /
@@ -8741,15 +8597,6 @@ let _gxtInElementRenderTarget: unknown;
 const _gxtScopeStore = new Map<string, any>();
 const _gxtGetScopeFn = (key: string) => _gxtScopeStore.get(key);
 
-// Helper function to get a block param by index
-// This is called by compiled templates that use {{($_blockParam N)}}
-const _gxtBlockParam = function (index: number) {
-  const currentParams = blockParamsStack[blockParamsStack.length - 1];
-  const rawValue = currentParams ? currentParams[index] : undefined;
-  // Unwrap reactive value to get current value
-  return unwrapReactiveValue(rawValue);
-};
-
 // Helper to unwrap a potentially reactive value
 // This is called each time a block param is accessed to ensure fresh values
 function unwrapReactiveValue(value: any): any {
@@ -8764,22 +8611,8 @@ function unwrapReactiveValue(value: any): any {
     }
   }
 
-  // Check if it's a GXT reactive getter function that should be evaluated.
-  // Only call functions that are GXT-internal reactive wrappers — NOT plain
-  // user functions like arrow functions yielded as block params (e.g.,
-  // {{yield this.updatePerson}}). GXT reactive getters are typically created
-  // by $_slot and have no prototype (arrow-style) and no user-facing markers.
-  // However, yielded user functions also lack prototypes. The safest check:
-  // only unwrap functions that have GXT-specific markers like __isReactiveGetter
-  // or that come from formula.fn. Plain functions (user callbacks) are returned as-is.
-  if (typeof value === 'function' && (value as any).__isReactiveGetter) {
-    try {
-      return value();
-    } catch {
-      return value;
-    }
-  }
-
+  // Functions are returned as-is: yielded user callbacks (e.g.
+  // `{{yield this.updatePerson}}`) must not be invoked.
   return value;
 }
 
@@ -8827,22 +8660,20 @@ try {
   }
 }
 
-// Also expose through the functional-helper brand for GXT's helper resolution.
-// Hook mode keeps the brand Set module-local (the gxt runtime calls the
-// registered pair); legacy mode keeps the historical `EmberFunctionalHelpers`
-// global Set (which the pre-API gxt dist consults directly).
+// The functional-helper brand for GXT's helper resolution. Hook mode keeps the
+// brand Set module-local (the gxt runtime calls the registered pair); legacy
+// mode keeps the historical `EmberFunctionalHelpers` global Set (which the
+// pre-API gxt dist consults directly).
 if (_gxtRegisterHostHooks) {
   const _functionalHelpers = new Set<unknown>();
   _gxtRegisterHostHooks({
     isFunctionalHelper: (fn: unknown) => _functionalHelpers.has(fn),
     markFunctionalHelper: (fn: unknown) => void _functionalHelpers.add(fn),
   });
-  _functionalHelpers.add(_gxtBlockParam);
 } else {
   if (typeof (globalThis as any).EmberFunctionalHelpers === 'undefined') {
     (globalThis as any).EmberFunctionalHelpers = new Set();
   }
-  (globalThis as any).EmberFunctionalHelpers.add(_gxtBlockParam);
 }
 
 // Stack to track the current slots context during rendering
@@ -9084,7 +8915,6 @@ if (g.$_c && !g.$_c.__emberWrapped) {
     if (typeof comp === 'function' && comp.__stringComponentName) {
       const managers = g.$_MANAGERS;
       if (managers?.component?.canHandle?.(comp)) {
-        const $PROPS = _PROPS_SYM;
         const $SLOTS = _SLOTS_SYM;
         const namedArgs: any = {};
         let fw = null;
@@ -9600,8 +9430,6 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
       const managers = g.$_MANAGERS;
       if (resolvedTag.__isCurriedComponent || resolvedTag.__stringComponentName) {
         if (managers?.component?.canHandle?.(resolvedTag)) {
-          const $PROPS = _PROPS_SYM;
-          const $SLOTS = _SLOTS_SYM;
           // Build fw from tagProps (GXT format [props, attrs, events, parentFw?])
           const fwProps: [string, any][] = [];
           const fwAttrs: [string, any][] = [];
@@ -10087,10 +9915,6 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
       // process step can reparse the content in its real parent context
       // (critical for `<table>{{{tr}}}</table>` and similar).
       (startAnchor as any).__gxtHtmlRawStart = true;
-      (endAnchor as any).__gxtHtmlRawEnd = true;
-      (startAnchor as any).__gxtHtmlRawGetter = () => lastHtml;
-      (startAnchor as any).__gxtHtmlRawEndAnchor = endAnchor;
-      (startAnchor as any).__gxtHtmlRawContentNodes = contentNodes;
       (startAnchor as any).__gxtHtmlRawReparse = (parent: Element) => {
         // Remove current content between anchors
         for (const n of contentNodes) {
@@ -10248,12 +10072,6 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
           /* parent-context unavailable — effect still cleans on next run */
         }
       }
-
-      // Keep the post-mount reparse flag unused — the caller-context
-      // probe above usually nails the right parent for the initial parse
-      // and the effect above handles all subsequent reparses.
-      void reparsedForParent;
-      void reparseIfNeeded;
 
       return fragment;
     }
@@ -10887,17 +10705,16 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
                 // Passing the raw formula lets `$_bp${i}` → `unwrapReactiveValue`
                 // re-evaluate it inside the consumer's tracker frame each read,
                 // subscribing to the underlying cells.
-                const _fgSlot = true;
                 const unwrappedParams = params.map((param) => {
                   // Unwrap GXT reactive formulas (objects with fn/isConst)
                   if (param && typeof param === 'object' && 'fn' in param && 'isConst' in param) {
-                    // Fine-grained: keep CONSTANT formulas snapshotted (no cell
+                    // Keep CONSTANT formulas snapshotted (no cell
                     // to subscribe to) but keep REACTIVE formulas live so the
                     // consumer re-reads them. `param.isConst` is already computed
                     // by glimmer-next's createSlot (it reads `.value` before
                     // deciding to keep the formula), so a live formula reaching
                     // here is genuinely reactive.
-                    if (_fgSlot && param.isConst !== true) {
+                    if (param.isConst !== true) {
                       return param;
                     }
                     try {
@@ -11000,86 +10817,6 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
                   : undefined;
               slots.default = createSlotFn(defaultChildren, explicitHasBlockParams);
             }
-          }
-
-          // Legacy: If no slots were created but children exist, create default slot
-          // (This handles the case where there are no named blocks)
-          if (
-            effectiveChildren &&
-            effectiveChildren.length > 0 &&
-            !slots.default &&
-            Object.keys(slots).length === 0
-          ) {
-            // Check for explicit hasBlockParams marker from args
-            const explicitHasBlockParams =
-              args.__hasBlockParams__ !== undefined
-                ? (typeof args.__hasBlockParams__ === 'function'
-                    ? args.__hasBlockParams__()
-                    : args.__hasBlockParams__) === 'default'
-                : undefined;
-            // Detect from children if not explicitly set
-            const hasBlockParams =
-              explicitHasBlockParams !== undefined
-                ? explicitHasBlockParams
-                : detectBlockParams(effectiveChildren);
-
-            const slotFn = (slotCtx: any, ...params: any[]) => {
-              // CRITICAL: Do NOT unwrap params here - keep them as raw values (potentially reactive)
-              // The $_bp0, $_bp1, etc. getters will unwrap them when accessed
-              // This allows reactivity to work: when the component's property changes,
-              // the next access to $_bp0 will return the new value
-              const rawParams = [...params];
-
-              // Store on slotCtx for context-based lookup
-              const contextParams = contextBlockParams as WeakMap<object, any[]>;
-              if (contextParams && slotCtx && typeof slotCtx === 'object') {
-                contextParams.set(slotCtx, rawParams);
-              }
-
-              // Also store as current slot params for re-renders
-              // This persists until the next slot call, allowing reactivity
-              // to access block params even after the slot function returns
-              currentSlotParams = rawParams;
-
-              // Push block params onto the global stack
-              // The $_blockParam helper reads from this stack
-              const stack = blockParamsStack;
-              stack.push(rawParams);
-
-              try {
-                // Evaluate lazy-wrapped component children (contain $_tag/$_c/$_dc)
-                // but preserve reactive text getters as functions so GXT can track
-                // cell dependencies and create reactive text nodes via gxtEffect.
-                return effectiveChildren.map((child: any) => {
-                  if (
-                    typeof child === 'function' &&
-                    !child.__isCurriedComponent &&
-                    !(child instanceof Node)
-                  ) {
-                    // gxt ≥0.0.70 `$_isNode` marker — see the sibling site above.
-                    if ((child as any).$_isNode === true) {
-                      try {
-                        return child();
-                      } catch {
-                        return child;
-                      }
-                    }
-                    return child;
-                  }
-                  return child;
-                });
-              } finally {
-                // Pop block params from stack
-                // NOTE: We do NOT clear __currentSlotParams here
-                // This allows re-renders (via GXT reactivity) to access
-                // the params even after the slot function has returned
-                stack.pop();
-              }
-            };
-
-            // Mark slot with block params info
-            (slotFn as any).__hasBlockParams = hasBlockParams;
-            slots.default = slotFn;
           }
 
           // Check for __hasBlock__ marker - indicates curly block invocation or
@@ -12467,8 +12204,6 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
         }
       });
       observer.observe(el, { attributes: true, attributeFilter: ['style'] });
-      // Store observer reference for cleanup
-      (el as any).__gxtStyleObserver = observer;
     }
 
     return result;
@@ -12715,8 +12450,6 @@ function _scopeNameAppearsAsReference(template: string, name: string): boolean {
 // $_GET_ARGS puts the render context into gxt's component TREE (fresh id via
 // `??= cId()`, addToTree under the ambient gxtRoot parent), which is what
 // unlocks gxt-native destroy sequencing for ember components.
-const _gxtNativePathStats = { native: 0, legacy: 0 };
-(globalThis as any).__gxtPathStats = _gxtNativePathStats;
 // P4 increment 2: scopeValues are threaded into gxtCompileTemplate (gxt binds
 // them as real Function parameters) when EVERY key is a plain valid JS
 // identifier — matching gxt's emitted identifier references verbatim. Keys
@@ -12854,7 +12587,6 @@ function _gxtNativeTemplateEligible(
   // excluded (runtime-recycle registration is not wired on this path).
   if (cr.usedRecycle === true) return false;
   // ── Pure ground-truth checks on the emission report (no code/source scans) ──
-  const emittedSymbols: readonly string[] = cr.emittedSymbols || [];
   const maybeHelperNames: readonly string[] = cr.maybeHelperNames || [];
   const referencedBindings: readonly string[] = cr.referencedBindings || [];
   // ({{#in-element}} left the block with the EMBER_IN_ELEMENT mode-arg
@@ -13456,9 +13188,7 @@ export function precompileTemplate(
     !!compilationResult.code && _gxtNativeTemplateEligible(compilationResult, options);
   if (__gxtUseNativeTemplateFn) {
     (compilationResult as any).__gxtNativePath = true;
-    _gxtNativePathStats.native++;
   } else if (compilationResult.code) {
-    _gxtNativePathStats.legacy++;
     let modifiedCode = compilationResult.code;
     // NOTE: sync-{{#each}} is a first-class emission (FORCE_SYNC_LIST in the
     // compile flags above; gxt >=0.0.72 buildEach + the #246 adapter fix) —
@@ -13578,7 +13308,6 @@ export function precompileTemplate(
       const needsSlots =
         (compilationResult as any).usedSlots === true || modifiedCode.includes('$slots');
       const needsFw = (compilationResult as any).usedFw === true || modifiedCode.includes('$fw');
-      const g = globalThis as any;
       // Inject Ember keyword helpers as local variables so GXT-compiled code
       // that references them as bare identifiers (e.g. inside {{#let}}) works.
       // GXT treats unknown helpers as scope variables in subexpression position.
@@ -13618,30 +13347,6 @@ export function precompileTemplate(
               }
             }
           }
-        }
-        // Also replace the Glimmer VM `on` modifier with a GXT-compatible version.
-        // GXT handles {{on "event" handler}} natively, so we provide a no-op modifier
-        // that the GXT compiler already transforms into event bindings.
-        //
-        // IMPORTANT: only replace when scope `on` is the canonical Glimmer-VM
-        // `on` definition (the OnModifierManager registered in
-        // `$_MANAGERS.modifier._builtinModifiers['on']`). Tests that
-        // intentionally shadow `on` with a user-defined modifier
-        // (`setModifierManager(() => mgr, {})`) put a different object on
-        // INTERNAL_MODIFIER_MANAGERS; the shadow must take effect — otherwise
-        // the built-in `on` runs instead and tests like
-        // `keyword modifier: on :: can be shadowed` fail with "passed
-        // undefined" because the built-in requires a 2nd handler arg.
-        const _canonicalOn = g.$_MANAGERS?.modifier?._builtinModifiers?.['on'];
-        if (
-          scopeVals['on'] !== undefined &&
-          typeof scopeVals['on'] !== 'function' &&
-          _canonicalOn !== undefined &&
-          scopeVals['on'] === _canonicalOn
-        ) {
-          // Only the canonical Glimmer-VM `on` is replaced; user-shadowed
-          // `on` modifiers fall through unchanged.
-          scopeVals['on'] = _emberBuiltinHelpers['on'] || scopeVals['on'];
         }
         // Deterministic key based on sorted scope key names AND the
         // template source so that distinct templates that happen to share
@@ -13781,8 +13486,6 @@ export function precompileTemplate(
           }
         }
       }
-      // each-in entries getter injections (now handled at AST level in GXT compiler)
-      const eachInInjections: string[] = [];
       // (unique-id outer-scope array retired — $_uid owns stability since gxt
       // 0.0.76.)
 
@@ -13867,8 +13570,7 @@ export function precompileTemplate(
           `var __ubReplay = Object.create(null);` +
           `var __ubLastLive = true;` +
           `function __gxtUnboundEval(cacheObj, id, valueFn) {` +
-          `var __ubFG = true;` +
-          `if (__ubFG && !__gxtGetTemplateThis()) {` +
+          `if (!__gxtGetTemplateThis()) {` +
           // Deferred (non-live) pass: replay the frozen live-pass values.
           `if (__ubLastLive) { __ubReplay = Object.create(null); __ubLastLive = false; }` +
           `var rSlot = __ubReplay[id] || 0;` +
@@ -13882,7 +13584,7 @@ export function precompileTemplate(
           `cacheObj[rKey] = rResult;` +
           `return rResult;` +
           `}` +
-          `if (__ubFG) __ubLastLive = true;` +
+          `__ubLastLive = true;` +
           `var slot = __ubSlots[id] || 0;` +
           `var key = id + ':' + slot;` +
           `__ubSlots[id] = slot + 1;` +
@@ -13936,7 +13638,6 @@ export function precompileTemplate(
 
           ${scopeInjections.join('\n          ')}
           ${helperInjections.join('\n          ')}
-          ${eachInInjections.join('\n          ')}
           return ${modifiedCode};
         };
       `;
@@ -13967,7 +13668,6 @@ export function precompileTemplate(
           '__gxtGetSlots',
           '__gxtGetFw',
           '__gxtGetScope',
-          '$_blockParam',
           ..._GXT_SYMBOL_PARAM_NAMES,
           templateFnCode
         )(
@@ -13979,7 +13679,6 @@ export function precompileTemplate(
           _gxtGetSlotsFn,
           _gxtGetFwFn,
           _gxtGetScopeFn,
-          _gxtBlockParam,
           ..._GXT_SYMBOL_PARAM_NAMES.map((n) => (globalThis as any)[n])
         );
         _functionCodeCache.set(templateFnCode, cachedFn);
@@ -14205,103 +13904,94 @@ export function precompileTemplate(
         // replay them into the effect's tracking frame on its first run (see the
         // `_firstRun` branch below). We forward captured cells into any AMBIENT
         // tracker so an enclosing formula still depends on them.
-        const _gxtFineGrained = true;
-        const _capturedDeps: Set<any> | null = _gxtFineGrained ? new Set() : null;
+        const _capturedDeps = new Set<any>();
         let result: any;
         let finalResult: any;
-        if (_gxtFineGrained) {
-          const _ambientTracker = _gxtGetTracker();
-          const _captureFrame = new Set<any>();
-          _gxtSetTracker(_captureFrame);
-          try {
-            result = item();
-            // Mirror the effect's read shape so the same cells are captured:
-            // the effect (subsequent runs) does `v = item(); typeof v === 'function' ? v() : v`.
-            // If result is a function, it's a nested getter (e.g. from $__if);
-            // do NOT call CurriedComponent functions — they need the reactive
-            // rendering path below.
-            finalResult =
-              typeof result === 'function' && !result.__isCurriedComponent ? result() : result;
-            // Walk every hash/array sub-value so each member's source cell is
-            // captured: a hash exposes lazy getters per key and the consumer
-            // only reads the keys it references, leaving sibling sub-values
-            // unsubscribed. Touch them all here.
-            _gxtCaptureHashArrayDeps(finalResult);
-            // Initial-undefined path subscription: when the bound path resolves
-            // to a value off an ABSENT property (`{{this.name}}` with `name` not
-            // yet on the context), reading it touches NO cell —
-            // `_captureFrame.size === 0` — so the effect subscribes to nothing
-            // and a later `set(context,'name',...)` never updates the text node.
-            // Materialize the leaf cell explicitly by walking the `this.<path>`
-            // chain on the parent render context and calling `cellFor(...).value`
-            // INSIDE this capture frame so the cell is recorded. Only fires when
-            // capture came up empty (so defined paths and helpers are untouched).
-            if (_captureFrame.size === 0) {
-              try {
-                const _path = extractThisPath(String(item));
-                const _pc = _gxtCurrentTemplateThis;
-                if (_path && _pc && typeof _pc === 'object') {
-                  let _cur: any = _pc;
-                  const _parts = _path.split('.');
-                  for (let _pi = 0; _pi < _parts.length; _pi++) {
-                    const _seg = _parts[_pi]!;
-                    if (!_cur || typeof _cur !== 'object') break;
-                    // Read through cellFor so the cell registers in the active
-                    // capture frame. skipDefine=false so an absent property gets
-                    // a real cell that `set()` will dirty.
-                    try {
-                      const _segCell = cellFor(_cur, _seg, /* skipDefine */ false);
-                      _cur = _segCell ? _segCell.value : _cur[_seg];
-                    } catch {
-                      _cur = _cur[_seg];
-                    }
-                  }
-                }
-              } catch {
-                /* best-effort cell materialization */
-              }
-            }
-          } finally {
-            _gxtSetTracker(_ambientTracker);
-            _captureFrame.forEach((c) => {
-              _capturedDeps!.add(c);
-              if (_ambientTracker) _ambientTracker.add(c);
-              // Slice C (nested-object subscription, fine-grained only): the
-              // text effect subscribes to the cells `item()` READ (e.g.
-              // cellFor(context, 'nullObject') for `this.nullObject.message`),
-              // but the LEAF access (`.message`) is plain JS — no cell read —
-              // so mutating the leaf object (`set(nullObject,'message',...)`)
-              // doesn't dirty any cell this effect tracks. Register the held
-              // object as a value-owner of the captured cell so the SyncCore
-              // reverse-lookup (`_objectValueCellMap`) dirties this captured
-              // cell when a property on the held object changes. This is what
-              // makes null-proto objects + non-component nested paths reactive
-              // with the morph off. Guard with the cell's recorded owner
-              // (added in glimmer-next rawCellFor); skip when unavailable.
-              try {
-                const _v = (c as any)._value;
-                const _ro = (c as any)._relatedObj;
-                const _rk = (c as any)._relatedKey;
-                if (
-                  _v &&
-                  typeof _v === 'object' &&
-                  _ro &&
-                  typeof _ro === 'object' &&
-                  typeof _rk === 'string'
-                ) {
-                  registerObjectValueOwner(_v, _ro, _rk);
-                }
-              } catch {
-                /* registration is best-effort */
-              }
-            });
-          }
-        } else {
+        const _ambientTracker = _gxtGetTracker();
+        const _captureFrame = new Set<any>();
+        _gxtSetTracker(_captureFrame);
+        try {
           result = item();
-          // If result is a function, it's a nested getter (e.g., from $__if)
-          // BUT: do NOT call CurriedComponent functions — they need the reactive rendering path below
+          // Mirror the effect's read shape so the same cells are captured:
+          // the effect (subsequent runs) does `v = item(); typeof v === 'function' ? v() : v`.
+          // If result is a function, it's a nested getter (e.g. from $__if);
+          // do NOT call CurriedComponent functions — they need the reactive
+          // rendering path below.
           finalResult =
             typeof result === 'function' && !result.__isCurriedComponent ? result() : result;
+          // Walk every hash/array sub-value so each member's source cell is
+          // captured: a hash exposes lazy getters per key and the consumer
+          // only reads the keys it references, leaving sibling sub-values
+          // unsubscribed. Touch them all here.
+          _gxtCaptureHashArrayDeps(finalResult);
+          // Initial-undefined path subscription: when the bound path resolves
+          // to a value off an ABSENT property (`{{this.name}}` with `name` not
+          // yet on the context), reading it touches NO cell —
+          // `_captureFrame.size === 0` — so the effect subscribes to nothing
+          // and a later `set(context,'name',...)` never updates the text node.
+          // Materialize the leaf cell explicitly by walking the `this.<path>`
+          // chain on the parent render context and calling `cellFor(...).value`
+          // INSIDE this capture frame so the cell is recorded. Only fires when
+          // capture came up empty (so defined paths and helpers are untouched).
+          if (_captureFrame.size === 0) {
+            try {
+              const _path = extractThisPath(String(item));
+              const _pc = _gxtCurrentTemplateThis;
+              if (_path && _pc && typeof _pc === 'object') {
+                let _cur: any = _pc;
+                const _parts = _path.split('.');
+                for (let _pi = 0; _pi < _parts.length; _pi++) {
+                  const _seg = _parts[_pi]!;
+                  if (!_cur || typeof _cur !== 'object') break;
+                  // Read through cellFor so the cell registers in the active
+                  // capture frame. skipDefine=false so an absent property gets
+                  // a real cell that `set()` will dirty.
+                  try {
+                    const _segCell = cellFor(_cur, _seg, /* skipDefine */ false);
+                    _cur = _segCell ? _segCell.value : _cur[_seg];
+                  } catch {
+                    _cur = _cur[_seg];
+                  }
+                }
+              }
+            } catch {
+              /* best-effort cell materialization */
+            }
+          }
+        } finally {
+          _gxtSetTracker(_ambientTracker);
+          _captureFrame.forEach((c) => {
+            _capturedDeps.add(c);
+            if (_ambientTracker) _ambientTracker.add(c);
+            // Slice C (nested-object subscription, fine-grained only): the
+            // text effect subscribes to the cells `item()` READ (e.g.
+            // cellFor(context, 'nullObject') for `this.nullObject.message`),
+            // but the LEAF access (`.message`) is plain JS — no cell read —
+            // so mutating the leaf object (`set(nullObject,'message',...)`)
+            // doesn't dirty any cell this effect tracks. Register the held
+            // object as a value-owner of the captured cell so the SyncCore
+            // reverse-lookup (`_objectValueCellMap`) dirties this captured
+            // cell when a property on the held object changes. This is what
+            // makes null-proto objects + non-component nested paths reactive
+            // with the morph off. Guard with the cell's recorded owner
+            // (added in glimmer-next rawCellFor); skip when unavailable.
+            try {
+              const _v = (c as any)._value;
+              const _ro = (c as any)._relatedObj;
+              const _rk = (c as any)._relatedKey;
+              if (
+                _v &&
+                typeof _v === 'object' &&
+                _ro &&
+                typeof _ro === 'object' &&
+                typeof _rk === 'string'
+              ) {
+                registerObjectValueOwner(_v, _ro, _rk);
+              }
+            } catch {
+              /* registration is best-effort */
+            }
+          });
         }
 
         // Curried dynamic helper in content position: {{@value}} where
@@ -14745,19 +14435,14 @@ export function precompileTemplate(
             let fv: any;
             if (_firstRun) {
               _firstRun = false;
-              // Fine-grained capture-replay (gated): the effect's formula is
-              // currently capturing deps inside this run. Replay the cells the
-              // outer `item()` read (captured above into `_capturedDeps`) into
-              // the active tracker so this effect SUBSCRIBES to them — without
-              // re-calling `item()` (which would double-dispatch a
-              // side-effecting helper). When the flag is OFF, `_capturedDeps`
-              // is null and this is identical to the shipping `_firstRun`
-              // behavior (the morph is the updater, no subscription needed).
-              if (_capturedDeps !== null) {
-                const _effectTracker = _gxtGetTracker();
-                if (_effectTracker) {
-                  _capturedDeps.forEach((c) => _effectTracker.add(c));
-                }
+              // Capture-replay: the effect's formula is capturing deps inside
+              // this run. Replay the cells the outer `item()` read (captured
+              // above into `_capturedDeps`) into the active tracker so this
+              // effect SUBSCRIBES to them — without re-calling `item()` (which
+              // would double-dispatch a side-effecting helper).
+              const _effectTracker = _gxtGetTracker();
+              if (_effectTracker) {
+                _capturedDeps.forEach((c) => _effectTracker.add(c));
               }
               fv = finalResult;
             } else {
@@ -14775,34 +14460,31 @@ export function precompileTemplate(
               // reverse-looks-up nothing and the bound text stays stale. Re-walk
               // the live tracker (the cells THIS run read, with their refreshed
               // `_value` = newPage) and re-register owners. Idempotent
-              // (registerObjectValueOwner dedupes by (obj,key)). GATED — the
-              // `else` branch only runs in fine-grained mode after first run.
-              if (_gxtFineGrained) {
-                try {
-                  const _tr = _gxtGetTracker();
-                  if (_tr) {
-                    _tr.forEach((c: any) => {
-                      try {
-                        const _v = c._value;
-                        const _ro = c._relatedObj;
-                        const _rk = c._relatedKey;
-                        if (
-                          _v &&
-                          typeof _v === 'object' &&
-                          _ro &&
-                          typeof _ro === 'object' &&
-                          typeof _rk === 'string'
-                        ) {
-                          registerObjectValueOwner(_v, _ro, _rk);
-                        }
-                      } catch {
-                        /* per-cell best-effort */
+              // (registerObjectValueOwner dedupes by (obj,key)).
+              try {
+                const _tr = _gxtGetTracker();
+                if (_tr) {
+                  _tr.forEach((c: any) => {
+                    try {
+                      const _v = c._value;
+                      const _ro = c._relatedObj;
+                      const _rk = c._relatedKey;
+                      if (
+                        _v &&
+                        typeof _v === 'object' &&
+                        _ro &&
+                        typeof _ro === 'object' &&
+                        typeof _rk === 'string'
+                      ) {
+                        registerObjectValueOwner(_v, _ro, _rk);
                       }
-                    });
-                  }
-                } catch {
-                  /* leaf-owner re-registration is best-effort */
+                    } catch {
+                      /* per-cell best-effort */
+                    }
+                  });
                 }
+              } catch {
+                /* leaf-owner re-registration is best-effort */
               }
             }
             if (fv instanceof Node) {
@@ -14961,7 +14643,6 @@ export function precompileTemplate(
     // Create a template object that Ember expects
     const template = {
       __gxtCompiled: true,
-      __gxtRuntimeCompiled: true,
       moduleName: options?.moduleName || 'gxt-runtime-template',
       id: templateId,
       result: 'ok' as const,
@@ -14998,7 +14679,6 @@ export function precompileTemplate(
 
         // Set up $slots and $fw as globals for the template function to access
         // The GXT runtime compiler generates code that references these directly
-        const g = globalThis as any;
         const prevSlots = _gxtCurrentSlots;
         const prevFw = _gxtCurrentFw;
 
@@ -15260,7 +14940,7 @@ export function precompileTemplate(
           // GXT compiles to $_maybeHelper("cond1", [], ctx). The scope is
           // checked to resolve the name. We set $_scope to the render context
           // so bare names resolve to component properties through cell getters.
-          const argsObj = renderContext['args'] || renderContext[$ARGS_KEY] || {};
+          const argsObj = renderContext['args'] || {};
           if (!argsObj.$_scope) {
             Object.defineProperty(argsObj, '$_scope', {
               value: renderContext,
@@ -15279,7 +14959,6 @@ export function precompileTemplate(
           // will track the cell, enabling reactive updates when set() is called later.
           // We walk the prototype chain (up to the base Ember component) to find
           // properties set via Component.extend({ fooBar: true }).
-          let _cellInstallCount = 0;
           try {
             const internalKeys = new Set([
               'args',
@@ -15341,7 +15020,6 @@ export function precompileTemplate(
                     // Install cell on the raw target (not the proxy)
                     // This ensures the same cell is used for reads and writes
                     cellFor(cellTarget, key as any, /* skipDefine */ false);
-                    _cellInstallCount++;
                     // Register reverse mapping: if this property holds an object,
                     // we need to dirty this cell when a property changes on that object.
                     // This enables {{this.m.formattedMessage}} to update when m.message changes.
@@ -15361,8 +15039,6 @@ export function precompileTemplate(
           } catch {
             /* ignore */
           }
-          // _cellInstallCount tracked for debugging
-
           // Cell promotion handled by __gxtForceEmberRerender (full re-render)
 
           // Call the compiled template function with the render context.
@@ -15467,58 +15143,6 @@ export function precompileTemplate(
             }
           }
 
-          // During morph re-renders the template was rendered into a throwaway
-          // tempContainer that the renderer.ts morph code will then diff against
-          // the LIVE DOM. The live DOM had its empty placeholder comments
-          // removed by `removeGxtArtifacts` after the initial render. Without
-          // the same cleanup here, the morph diff sees "extra" empty comment
-          // nodes in tempContainer that are not in the live DOM, and treats
-          // them as new children to insert — producing spurious mutations on
-          // observed subtrees (GH #14332).
-          //
-          // Conservative: only remove empty comments that are children of an
-          // ELEMENT (i.e. inside a wrapper like <ul>) and only when the wrapper
-          // contains real visible content (other element children). This skips
-          // top-level fragment children where empty comments may be
-          // each-block topMarkers/bottomMarkers needed for re-render alignment.
-          if (_gxtIsMorphRenderInProgress() && parentElement) {
-            try {
-              const _allElements: Element[] = [];
-              if ((parentElement as any).querySelectorAll) {
-                _allElements.push(...Array.from((parentElement as any).querySelectorAll('*')));
-              }
-              for (const _el of _allElements) {
-                // Only clean inside elements that have at least one element
-                // child (i.e. not a leaf). Leaf elements with comments may have
-                // them as part of dynamic content boundaries.
-                let _hasElementChild = false;
-                for (const _c of Array.from(_el.childNodes)) {
-                  if (_c.nodeType === 1) {
-                    _hasElementChild = true;
-                    break;
-                  }
-                }
-                if (!_hasElementChild) continue;
-                // Remove empty comments that are direct children of _el.
-                const _toRemove: Comment[] = [];
-                for (const _c of Array.from(_el.childNodes)) {
-                  if (_c.nodeType !== 8) continue;
-                  const _t = (_c as Comment).textContent || '';
-                  if (
-                    _t.includes('if-entry') ||
-                    _t.includes('each-entry') ||
-                    _t.includes('dc-placeholder')
-                  )
-                    continue;
-                  if (_t === '') _toRemove.push(_c as Comment);
-                }
-                for (const _c of _toRemove) _el.removeChild(_c);
-              }
-            } catch {
-              /* ignore artifact cleanup errors */
-            }
-          }
-
           // Restore previous global values
           _gxtCurrentSlots = prevSlots;
           _gxtCurrentFw = prevFw;
@@ -15560,13 +15184,8 @@ export function precompileTemplate(
 
   // Add properties to the factory function itself for compatibility
   (templateFactory as any).__gxtCompiled = true;
-  (templateFactory as any).__gxtRuntimeCompiled = true;
   (templateFactory as any).moduleName = options?.moduleName || 'gxt-runtime-template';
   (templateFactory as any).id = `gxt-factory-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  // Record the strictMode flag on the factory so the render path can opt
-  // into strict-mode resolution semantics (no container.lookup fallback for
-  // free identifiers inside $_maybeHelper).
-  (templateFactory as any).__gxtStrictMode = __strictModeFlag;
 
   // Cache the result
   templateCache.set(cacheKey, templateFactory);
@@ -15582,12 +15201,10 @@ export function compileTemplate(templateString: string, options?: any) {
 }
 
 /**
- * Register the template compiler (for compatibility)
+ * Part of the `@ember/template-compilation` surface. A no-op here: templates
+ * are compiled by `compileTemplate` above, not by a registered compiler.
  */
-export function __registerTemplateCompiler(compiler: any) {
-  // Store reference for debugging
-  (globalThis as any).__registeredTemplateCompiler = compiler;
-}
+export function __registerTemplateCompiler(_compiler: any) {}
 
 /**
  * Ember template compiler interface
@@ -15604,15 +15221,6 @@ export const __emberTemplateCompiler = {
     });
   },
 };
-
-export default function templateCompilation() {
-  return {
-    precompileTemplate,
-    compileTemplate,
-    __registerTemplateCompiler,
-    __emberTemplateCompiler,
-  };
-}
 
 // Register the GXT compiler globally for @ember/template-compiler to use.
 // Also exposed via the gxt-bridge as `compilePipeline.compileTemplate`. The
@@ -15632,21 +15240,6 @@ export default function templateCompilation() {
 // `__gxtCompileTemplate`.
 (globalThis as any).__gxtWithRootContext = _gxtWithRootContext;
 
-// @internal — exported for unit testing only
-export const __test_internals = {
-  hyphenToUnderscore,
-  doubleDashToSlash,
-  containsWord,
-  generateUUID,
-  extractThisPath,
-  hasBlockParamRef,
-  findBlockParamNames,
-  findDottedTags,
-  hasAttrsInBlockParams,
-  findAttrsPatterns,
-  findThisAttrsPatterns,
-};
-
 // Contribute compile.ts-owned function references to the bridge's
 // `compilePipeline` namespace. These functions cannot live in manager.ts
 // because they close over compile.ts module-local state:
@@ -15665,7 +15258,6 @@ import {
   installRenderPassPart,
   installBacktrackingPart,
   installViewUtilsPart,
-  installRuntimePart,
 } from './gxt-bridge';
 // Expose `registerObjectValueOwner` to glimmer-next so its reactive attribute /
 // inside-element bindings can register the LEAF object a binding's source cell
@@ -15859,13 +15451,6 @@ installCompilePipelinePart({
   // The canonical per-test GXT-state-reset routine, called from the
   // internal-test-helpers `afterEach` hooks.
   cleanupActiveComponents: _gxtCleanupActiveComponents,
-  // The "morph render in progress" flag + its companion modifier-invocations
-  // queue. The writer is `glimmer/lib/renderer.ts` (via `withMorphRender`);
-  // readers are manager.ts's modifier-manager `handle` and the intra-file
-  // `$_each` empty-comment cleanup gate.
-  withMorphRender: _gxtWithMorphRender,
-  isMorphRenderInProgress: _gxtIsMorphRenderInProgress,
-  getMorphModifierInvocations: _gxtGetMorphModifierInvocations,
   // Save-restore wrapper + read predicate for the "in outlet render" flag.
   // The writer is `glimmer/lib/templates/root.ts`'s outlet-render path; the
   // reader is manager.ts's `_buildRenderTree`.
@@ -15877,12 +15462,10 @@ installCompilePipelinePart({
   // in-outlet-render flag — one outlet-render state cluster.)
   setTopOutletRef: _gxtSetTopOutletRef,
   getTopOutletRef: _gxtGetTopOutletRef,
-  // Set/get for the captured "current helper scope". Written by
-  // `patchGlobalIf`/`wrapBranch` around branch evaluation; read by the $_tag
-  // class-helper creation path and by ember-gxt-wrappers.ts's `$_maybeHelper`
-  // paths to wire fresh helper instances to the enclosing `{{#if}}` branch's
-  // teardown set.
-  setCurrentHelperScope: _gxtSetCurrentHelperScope,
+  // Read accessor for the captured "current helper scope", which
+  // `patchGlobalIf`/`wrapBranch` set around branch evaluation. Read by
+  // ember-gxt-wrappers.ts's `$_maybeHelper` paths to wire fresh helper
+  // instances to the enclosing `{{#if}}` branch's teardown set.
   getCurrentHelperScope: _gxtGetCurrentHelperScope,
   // Save-restore wrapper + read predicate for the "is force-rerender" flag.
   // Written around `classicRoot.render()` in renderer.ts; read by many gates
