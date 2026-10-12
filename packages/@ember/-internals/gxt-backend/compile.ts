@@ -1033,6 +1033,92 @@ function namedArgsFromTagProps(tagProps: any): any {
   return namedArgs;
 }
 
+// Parents whose HTML parsing context decides which children of raw HTML
+// survive (`<tr>` in a `<table>`, `<option>` in a `<select>`); triple-stache
+// content inside them is parsed in a scratch element of the same tag.
+const _GXT_CONTEXTUAL_PARSE_TAGS: ReadonlySet<string> = new Set([
+  'table',
+  'thead',
+  'tbody',
+  'tfoot',
+  'tr',
+  'colgroup',
+  'select',
+  'optgroup',
+]);
+
+/**
+ * Render raw HTML that `getHtml()` returns (any value; falsy renders nothing)
+ * as a fragment of parsed nodes followed by a `/htmlRaw` end anchor, and keep
+ * it live with an effect that re-parses on change. While the HTML is empty an
+ * empty `<!---->` comment stands in for it, as in the Glimmer VM.
+ */
+function renderReactiveHtml(getHtml: () => any): DocumentFragment {
+  const placeholder = document.createComment('');
+  const fragment = document.createDocumentFragment();
+  // The end anchor stays in the DOM as the stable insertion point.
+  const endAnchor = document.createComment('/htmlRaw');
+  let contentNodes: Node[] = [];
+  let isEmpty = true;
+
+  const initialHtml = getHtml();
+  if (initialHtml) {
+    isEmpty = false;
+    const tpl = document.createElement('template');
+    tpl.innerHTML = initialHtml;
+    while (tpl.content.firstChild) {
+      const child = tpl.content.firstChild;
+      contentNodes.push(child);
+      fragment.appendChild(child);
+    }
+  } else {
+    fragment.appendChild(placeholder);
+  }
+  fragment.appendChild(endAnchor);
+
+  // Unchanged HTML keeps its nodes (DOM stability).
+  let lastHtml = initialHtml;
+  try {
+    gxtEffect(() => {
+      const html = getHtml();
+      const parent = endAnchor.parentNode;
+      if (!parent) return;
+      if (html === lastHtml) return;
+      lastHtml = html;
+      if (html) {
+        if (isEmpty && placeholder.parentNode === parent) {
+          parent.removeChild(placeholder);
+        }
+        for (const n of contentNodes) {
+          if (n.parentNode === parent) parent.removeChild(n);
+        }
+        const tpl = document.createElement('template');
+        tpl.innerHTML = html;
+        const newNodes: Node[] = [];
+        while (tpl.content.firstChild) {
+          const child = tpl.content.firstChild;
+          newNodes.push(child);
+          parent.insertBefore(child, endAnchor);
+        }
+        contentNodes = newNodes;
+        isEmpty = false;
+      } else {
+        for (const n of contentNodes) {
+          if (n.parentNode === parent) parent.removeChild(n);
+        }
+        contentNodes = [];
+        if (!isEmpty || !placeholder.parentNode) {
+          parent.insertBefore(placeholder, endAnchor);
+        }
+        isEmpty = true;
+      }
+    });
+  } catch {
+    /* effect setup may fail */
+  }
+  return fragment;
+}
+
 // Render `comp` through the Ember component manager; `handle` returns either
 // the rendered nodes or a thunk producing them.
 function handleEmberComponent(managers: any, comp: any, namedArgs: any, fw: any, ctx: any): any {
@@ -9557,15 +9643,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
         // Only use a scratch parent for tags whose parse context affects
         // what child elements survive. For generic containers, a plain
         // div scratch works.
-        const needsContext =
-          contextTag === 'table' ||
-          contextTag === 'thead' ||
-          contextTag === 'tbody' ||
-          contextTag === 'tfoot' ||
-          contextTag === 'tr' ||
-          contextTag === 'colgroup' ||
-          contextTag === 'select' ||
-          contextTag === 'optgroup';
+        const needsContext = _GXT_CONTEXTUAL_PARSE_TAGS.has(contextTag);
         const scratch = document.createElement(needsContext ? contextTag : 'div');
         try {
           scratch.innerHTML = rawHtml;
@@ -9624,15 +9702,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
         const parent = endAnchor.parentNode as Element | null;
         if (!parent || parent === reparsedForParent) return;
         const contextTag = (parent.tagName || '').toLowerCase();
-        const needsReparse =
-          contextTag === 'table' ||
-          contextTag === 'thead' ||
-          contextTag === 'tbody' ||
-          contextTag === 'tfoot' ||
-          contextTag === 'tr' ||
-          contextTag === 'colgroup' ||
-          contextTag === 'select' ||
-          contextTag === 'optgroup';
+        const needsReparse = _GXT_CONTEXTUAL_PARSE_TAGS.has(contextTag);
         if (!needsReparse) return;
         // Remove current content nodes, re-parse contextually, re-insert.
         for (const n of contentNodes) {
@@ -11711,15 +11781,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
     // (with browser-injected `<tbody>` etc.) is in place.
     if (result instanceof Element) {
       const tagLower = (result.tagName || '').toLowerCase();
-      const needsHtmlRawReparse =
-        tagLower === 'table' ||
-        tagLower === 'thead' ||
-        tagLower === 'tbody' ||
-        tagLower === 'tfoot' ||
-        tagLower === 'tr' ||
-        tagLower === 'colgroup' ||
-        tagLower === 'select' ||
-        tagLower === 'optgroup';
+      const needsHtmlRawReparse = _GXT_CONTEXTUAL_PARSE_TAGS.has(tagLower);
       if (needsHtmlRawReparse) {
         for (const child of Array.from(result.childNodes)) {
           if (child.nodeType === 8 /* COMMENT */ && (child as any).__gxtHtmlRawStart) {
@@ -13320,85 +13382,7 @@ export function precompileTemplate(
         // when content is empty (matches Glimmer VM's <!----> behavior),
         // and replace with actual HTML nodes when non-empty.
         if ((item as any).__htmlRaw) {
-          const placeholder = document.createComment('');
-          const fragment = document.createDocumentFragment();
-          // Track current content nodes so we can remove them on update.
-          // Also track an "end marker" comment that is always in the DOM
-          // so we have a stable insertion anchor.
-          const endAnchor = document.createComment('/htmlRaw');
-          let contentNodes: Node[] = [];
-          let isEmpty = true;
-
-          // Initial render
-          const initialHtml = item();
-          if (initialHtml) {
-            isEmpty = false;
-            const tpl = document.createElement('template');
-            tpl.innerHTML = initialHtml;
-            while (tpl.content.firstChild) {
-              const child = tpl.content.firstChild;
-              contentNodes.push(child);
-              fragment.appendChild(child);
-            }
-          } else {
-            // Empty content — show placeholder (renders as <!----> in innerHTML)
-            isEmpty = true;
-            fragment.appendChild(placeholder);
-          }
-          fragment.appendChild(endAnchor);
-
-          // Track last rendered HTML for DOM stability (skip update if unchanged)
-          let lastHtml = initialHtml;
-
-          // Reactive update
-          try {
-            gxtEffect(() => {
-              const html = item();
-              const parent = endAnchor.parentNode;
-              if (!parent) return;
-              // Skip update if HTML hasn't changed (preserves DOM node stability)
-              if (html === lastHtml) return;
-              lastHtml = html;
-
-              if (html) {
-                // Remove placeholder if present
-                if (isEmpty && placeholder.parentNode === parent) {
-                  parent.removeChild(placeholder);
-                }
-                // Remove old content nodes
-                for (const n of contentNodes) {
-                  if (n.parentNode === parent) parent.removeChild(n);
-                }
-                // Parse and insert new HTML before the end anchor
-                const tpl = document.createElement('template');
-                tpl.innerHTML = html;
-                const newNodes: Node[] = [];
-                while (tpl.content.firstChild) {
-                  const child = tpl.content.firstChild;
-                  newNodes.push(child);
-                  parent.insertBefore(child, endAnchor);
-                }
-                contentNodes = newNodes;
-                isEmpty = false;
-              } else {
-                // Content is now empty
-                // Remove old content nodes
-                for (const n of contentNodes) {
-                  if (n.parentNode === parent) parent.removeChild(n);
-                }
-                contentNodes = [];
-                // Insert placeholder before the end anchor if not already there
-                if (!isEmpty || !placeholder.parentNode) {
-                  parent.insertBefore(placeholder, endAnchor);
-                }
-                isEmpty = true;
-              }
-            });
-          } catch {
-            /* effect setup may fail */
-          }
-
-          return fragment;
+          return renderReactiveHtml(item);
         }
 
         // Check if item IS a CurriedComponent BEFORE calling it.
@@ -13810,67 +13794,7 @@ export function precompileTemplate(
               return '';
             }
           };
-          const placeholder = document.createComment('');
-          const endAnchor = document.createComment('/htmlRaw');
-          const fragment = document.createDocumentFragment();
-          let contentNodes: Node[] = [];
-          let htmlIsEmpty = true;
-          const initialHtml = getHtml();
-          if (initialHtml) {
-            htmlIsEmpty = false;
-            const tpl = document.createElement('template');
-            tpl.innerHTML = initialHtml;
-            while (tpl.content.firstChild) {
-              const child = tpl.content.firstChild;
-              contentNodes.push(child);
-              fragment.appendChild(child);
-            }
-          } else {
-            htmlIsEmpty = true;
-            fragment.appendChild(placeholder);
-          }
-          fragment.appendChild(endAnchor);
-          let lastHtml2 = initialHtml;
-          // Reactive update
-          try {
-            gxtEffect(() => {
-              const html = getHtml();
-              const parent = endAnchor.parentNode;
-              if (!parent) return;
-              if (html === lastHtml2) return;
-              lastHtml2 = html;
-              if (html) {
-                if (htmlIsEmpty && placeholder.parentNode === parent) {
-                  parent.removeChild(placeholder);
-                }
-                for (const n of contentNodes) {
-                  if (n.parentNode === parent) parent.removeChild(n);
-                }
-                const tpl = document.createElement('template');
-                tpl.innerHTML = html;
-                const newNodes: Node[] = [];
-                while (tpl.content.firstChild) {
-                  const child = tpl.content.firstChild;
-                  newNodes.push(child);
-                  parent.insertBefore(child, endAnchor);
-                }
-                contentNodes = newNodes;
-                htmlIsEmpty = false;
-              } else {
-                for (const n of contentNodes) {
-                  if (n.parentNode === parent) parent.removeChild(n);
-                }
-                contentNodes = [];
-                if (!htmlIsEmpty || !placeholder.parentNode) {
-                  parent.insertBefore(placeholder, endAnchor);
-                }
-                htmlIsEmpty = true;
-              }
-            });
-          } catch {
-            /* effect setup may fail */
-          }
-          return fragment;
+          return renderReactiveHtml(getHtml);
         }
 
         // If result is an object with GXT node structure, process it.
