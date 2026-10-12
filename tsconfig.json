@@ -13,7 +13,6 @@
     "types/stable",
     "types/preview",
     "packages/@ember/-internals/gxt-backend/**",
-    "packages/@glimmer/component-gxt/**",
-    "packages/demo/**"
+    "packages/@glimmer/component-gxt/**"
   ]
 }

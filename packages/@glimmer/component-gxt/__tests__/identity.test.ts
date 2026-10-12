@@ -14,14 +14,11 @@
  * DIFFERENT object, which is exactly the symbol-identity duplication RFC §6
  * warns about.
  *
- * How to run (this test and the gxt-backend compat-layer unit tests run
- * together through the demo workspace's vitest — the only one installed — via
- * one npm script):
+ * This vitest suite (like gxt-backend's __tests__/utils.test.ts) ran through
+ * the removed packages/demo workspace's vitest config; no workspace installs
+ * vitest now, so it has no runner until one is wired up.
  *
- *   cd packages/demo && pnpm test:gxt-unit
- *     # (vitest run --config ./vitest.gxt-unit.config.mts)
- *
- * The config aliases `@glimmer/component-gxt[/reactive]` and the two
+ * That config aliased `@glimmer/component-gxt[/reactive]` and the two
  * `@ember/-internals/gxt-backend/*` shim subpaths to their source files — the
  * same alias contract `rollup.config.mjs` applies for the GXT build — while
  * deliberately leaving `@glimmer/validator` resolving to the classic workspace

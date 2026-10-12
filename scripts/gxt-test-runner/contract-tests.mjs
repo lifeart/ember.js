@@ -98,7 +98,7 @@ function deriveRequiredImports() {
 
 // Symbols required by consumers OUTSIDE gxt-backend that the scan cannot see.
 const MANUAL_REQUIRED = {
-  // vite.config.mjs and packages/demo/vite.config.mts import the build-time compiler.
+  // vite.config.mjs imports the build-time compiler.
   '@lifeart/gxt/compiler': ['compiler'],
 };
 

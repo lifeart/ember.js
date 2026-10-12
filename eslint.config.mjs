@@ -33,11 +33,9 @@ export default [
       'packages/@handlebars/parser/src/**',
       'tracerbench-testing/',
       'packages/@ember/-internals/gxt-backend/**',
-      // Excluded from the root tsconfig project (like gxt-backend/demo), so
-      // the typed-lint parserOptions.project cannot parse it; it has its own
-      // vitest suite (packages/demo vitest.gxt-unit.config.mts).
+      // Excluded from the root tsconfig project (like gxt-backend), so the
+      // typed-lint parserOptions.project cannot parse it.
       'packages/@glimmer/component-gxt/**',
-      'packages/demo/**',
       'scripts/gxt-test-runner/**',
       'scripts/debug-artifacts/**',
       // Assembled ember-source-gxt package output (git-ignored build artifact;

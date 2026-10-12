@@ -287,7 +287,7 @@ export default defineConfig(({ mode }) => {
             {
               find: '@lifeart/gxt/runtime-compiler',
               replacement: resolveGxtPath(
-                `./packages/demo/node_modules/@lifeart/gxt/dist/gxt.runtime-compiler.es.js`
+                `./node_modules/@lifeart/gxt/dist/gxt.runtime-compiler.es.js`
               ),
             },
             {
@@ -299,14 +299,12 @@ export default defineConfig(({ mode }) => {
             {
               find: '@lifeart/gxt/glimmer-compatibility',
               replacement: resolveGxtPath(
-                `./packages/demo/node_modules/@lifeart/gxt/dist/gxt.glimmer-compat.es.js`
+                `./node_modules/@lifeart/gxt/dist/gxt.glimmer-compat.es.js`
               ),
             },
             {
               find: '@lifeart/gxt',
-              replacement: resolveGxtPath(
-                `./packages/demo/node_modules/@lifeart/gxt/dist/gxt.index.es.js`
-              ),
+              replacement: resolveGxtPath(`./node_modules/@lifeart/gxt/dist/gxt.index.es.js`),
             },
           ],
         }
@@ -470,7 +468,7 @@ function nativeConfig(mode) {
         {
           find: '@lifeart/gxt/runtime-compiler',
           replacement: resolveGxtPath(
-            `./packages/demo/node_modules/@lifeart/gxt/dist/gxt.runtime-compiler.es.js`
+            `./node_modules/@lifeart/gxt/dist/gxt.runtime-compiler.es.js`
           ),
         },
         {
@@ -481,15 +479,11 @@ function nativeConfig(mode) {
         },
         {
           find: '@lifeart/gxt/glimmer-compatibility',
-          replacement: resolveGxtPath(
-            `./packages/demo/node_modules/@lifeart/gxt/dist/gxt.glimmer-compat.es.js`
-          ),
+          replacement: resolveGxtPath(`./node_modules/@lifeart/gxt/dist/gxt.glimmer-compat.es.js`),
         },
         {
           find: '@lifeart/gxt',
-          replacement: resolveGxtPath(
-            `./packages/demo/node_modules/@lifeart/gxt/dist/gxt.index.es.js`
-          ),
+          replacement: resolveGxtPath(`./node_modules/@lifeart/gxt/dist/gxt.index.es.js`),
         },
       ],
     },
@@ -581,7 +575,7 @@ function gxtModuleDedup() {
   // path. Vite's dev server already follows symlinks for /@fs/ serving, so in
   // most cases this is a no-op. It provides a safety net for environments where
   // symlink resolution doesn't happen automatically.
-  const gxtDistDir = resolve(projectRoot, 'packages/demo/node_modules/@lifeart/gxt/dist');
+  const gxtDistDir = resolve(projectRoot, 'node_modules/@lifeart/gxt/dist');
   let gxtRealDistDir;
   try {
     gxtRealDistDir = realpathSync(gxtDistDir);

@@ -403,11 +403,6 @@ function packages() {
       'loader/**',
       'ember-template-compiler/**',
       'internal-test-helpers/**',
-      // The demo workspace (including compat/ shims and the vite-backed demo
-      // app) is not part of the published ember-source bundle. It gets pulled
-      // in because `packages()` globs every file under `packages/`, so exclude
-      // it to keep the classic rollup build reproducible.
-      'demo/**',
 
       // The gxt-backend package provides compat shims that are alias-injected
       // into the graph via resolvePackages when EMBER_RENDER_BACKEND=gxt. It

@@ -1190,8 +1190,10 @@ async function main() {
 
 function readGxtVersion() {
   try {
-    const pkg = JSON.parse(readFileSync(resolve(REPO_ROOT, 'packages/demo/package.json'), 'utf8'));
-    return pkg.dependencies?.['@lifeart/gxt'] || 'unknown';
+    const pkg = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, 'node_modules/@lifeart/gxt/package.json'), 'utf8')
+    );
+    return pkg.version || 'unknown';
   } catch {
     return 'unknown';
   }

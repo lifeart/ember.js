@@ -57,15 +57,15 @@ Only `gxt-summary.json` is checked into baselines and compared by `diff.mjs`.
 
 ### `meta`
 
-| field              | type    | notes                                              |
-| ------------------ | ------- | -------------------------------------------------- |
-| `runner`           | string  | runner identity + version tag                      |
-| `capturedAt`       | string  | ISO-8601 timestamp                                 |
-| `gxtVersion`       | string  | `@lifeart/gxt` version pulled from `packages/demo` |
-| `emberCommit`      | string  | short git SHA of ember.js at capture time          |
-| `totalTests`       | integer | sum of `modules.*.total`                           |
-| `totalModules`     | integer | count of modules that completed                    |
-| `quarantinedTests` | integer | count of tests with mixed retry outcomes           |
+| field              | type    | notes                                     |
+| ------------------ | ------- | ----------------------------------------- |
+| `runner`           | string  | runner identity + version tag             |
+| `capturedAt`       | string  | ISO-8601 timestamp                        |
+| `gxtVersion`       | string  | version of the installed `@lifeart/gxt`   |
+| `emberCommit`      | string  | short git SHA of ember.js at capture time |
+| `totalTests`       | integer | sum of `modules.*.total`                  |
+| `totalModules`     | integer | count of modules that completed           |
+| `quarantinedTests` | integer | count of tests with mixed retry outcomes  |
 
 ### `modules`
 
