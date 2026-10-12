@@ -24,11 +24,15 @@
 //     with the call site;
 //   - a plain function: the default (function) helper manager (manager-api
 //     DEFAULT_HELPER_MANAGER) — positional arguments + the named hash as a
-//     trailing argument when non-empty;
+//     trailing argument when non-empty. Driven directly (functionHelperCache):
+//     the call site's arguments are read straight into the call, with no
+//     manager delegate, no positional args proxy and no owner lookup;
 //   - an INTERNAL helper (`(capturedArgs, owner) => Reference`: `hash`,
 //     `array`, `concat`, `get`, `fn`, `and`, `or`, classic `unique-id` /
 //     `element`): one native reference per argument, the helper called once
-//     per call site;
+//     per call site — or, when the helper has a direct form (`fn`,
+//     runtime-helpers.ts `valueForCallSite`), that form's value, with no
+//     references at all;
 //   - a string: a loose-mode helper NAME (`(foo-bar)`, `attr={{foo-bar}}`, a
 //     `{{foo-bar}}` the host resolved to a helper — G11) or an unbound Ember
 //     keyword helper gxt does not compile natively (`neq`, `gt`, …; Ember
@@ -44,7 +48,12 @@ import {
 } from '@lifeart/gxt';
 import { argsProxyFor, unwrapArg, type ArgsSource } from './args';
 import { _hasDestroyableChildren, destroy, isDestroying } from './destroyable';
-import { getInternalHelperManager, CustomHelperManager, type HelperDelegate } from './manager-api';
+import {
+  DEFAULT_HELPER_MANAGER,
+  getInternalHelperManager,
+  CustomHelperManager,
+  type HelperDelegate,
+} from './manager-api';
 import { OWNER } from './managers';
 import { createComputeRef, valueForRef, type Reference } from './reference';
 import { helperNotFound, lookupHelper } from './resolver';
@@ -55,17 +64,59 @@ interface HelperInstance {
   readonly definition: unknown;
   /** The call site's current arguments (updated per evaluation). */
   readonly source: ArgsSource;
-  readonly cache: Cache;
+  /**
+   * What the call site evaluates. `null` for an internal helper's direct form,
+   * whose value (`value`) is computed once and never changes.
+   */
+  readonly cache: Cache | null;
+  readonly value?: unknown;
   /** What destroying the call site destroys (Ember destroyable), if any. */
   readonly destroyable: object | null;
 }
 
 const NO_NAMED: Readonly<Record<string, unknown>> = Object.freeze({});
 
+const valueOf = (instance: HelperInstance): unknown =>
+  instance.cache === null ? instance.value : getValue(instance.cache);
+
 function ownerOf(ctx: unknown): object | undefined {
   if (ctx === null || ctx === undefined) return undefined;
   const owner = getContext<object>(ctx as never, OWNER, false);
   return owner === null ? undefined : owner;
+}
+
+const hasOwn = Object.prototype.hasOwnProperty;
+
+function hasNamedArgs(named: Readonly<Record<string, unknown>>): boolean {
+  for (const key in named) if (hasOwn.call(named, key)) return true;
+  return false;
+}
+
+/**
+ * A plain function helper (Glimmer's FunctionHelperManager, manager-api
+ * DEFAULT_HELPER_MANAGER), driven directly: `helper(...positional)`, plus the
+ * named arguments object as a trailing argument when the call site passes any
+ * named argument (Glimmer: `Object.keys(args.named).length > 0`). Each argument
+ * is read inside the cache, so the cache consumes exactly what the call reads.
+ * The trailing object is the same named args proxy the manager path passes,
+ * created once per call site; no positional proxy, no delegate, and no owner
+ * (the default manager does not use it).
+ */
+function functionHelperCache(helper: (...args: unknown[]) => unknown, source: ArgsSource): Cache {
+  let named: Record<string, unknown> | null = null;
+  return createCache(
+    () => {
+      const positional = source.positional;
+      const args: unknown[] = [];
+      for (let i = 0; i < positional.length; i++) args.push(unwrapArg(positional[i]));
+      if (hasNamedArgs(source.named)) {
+        named ??= argsProxyFor(source, 'helper').named;
+        args.push(named);
+      }
+      return helper(...args);
+    },
+    DEBUG && (helper.name ? `(helper function ${helper.name})` : '(anonymous helper function)')
+  );
 }
 
 function describe(value: unknown): string {
@@ -79,18 +130,32 @@ function describe(value: unknown): string {
  * current arguments; it is updated on every evaluation of the call site.
  * `key` is what the call site evaluates (a definition or a helper NAME) — a
  * name resolves here, once per instance (Glimmer resolves a free name once
- * per template + owner).
+ * per template + owner). The owner is looked up (a render-tree walk from
+ * `ctx`) only for the shapes that use it.
  */
-function createInstance(
-  key: object | string,
-  owner: object | undefined,
-  source: ArgsSource
-): HelperInstance {
-  const definition = typeof key === 'string' ? resolveHelperName(key, owner) : key;
+function createInstance(key: object | string, ctx: unknown, source: ArgsSource): HelperInstance {
+  let owner: object | undefined;
+  let definition: object;
+  if (typeof key === 'string') {
+    owner = ownerOf(ctx);
+    definition = resolveHelperName(key, owner);
+  } else {
+    definition = key;
+  }
   const manager = getInternalHelperManager(definition) as
     | CustomHelperManager
     | InternalHelper
     | undefined;
+
+  if (manager === DEFAULT_HELPER_MANAGER) {
+    const cache = functionHelperCache(definition as (...args: unknown[]) => unknown, source);
+    return { definition: key, source, cache, destroyable: null };
+  }
+  if (typeof manager === 'function' && manager.valueForCallSite !== undefined) {
+    const value = manager.valueForCallSite(source);
+    return { definition: key, source, cache: null, value, destroyable: null };
+  }
+  if (typeof key !== 'string') owner = ownerOf(ctx);
 
   if (typeof manager === 'function') {
     // Internal helper (Glimmer protocol): one reference per argument over the
@@ -174,7 +239,7 @@ function instanceFor(
   // First evaluation — or a dynamic helper (`{{(this.helper) …}}`) whose
   // definition changed: a new instance; the outgoing one is destroyed.
   if (instance !== undefined) destroyInstance(instance);
-  instance = createInstance(definition, ownerOf(ctx), { positional, named });
+  instance = createInstance(definition, ctx, { positional, named });
   sites.set(site, instance);
   return instance;
 }
@@ -208,17 +273,15 @@ function handle(
   if (definition === null || definition === undefined || definition === '') return undefined;
 
   if (ctx !== null && typeof ctx === 'object' && typeof site === 'number') {
-    return getValue(
-      instanceFor(ctx, site, definition as object | string, positional, namedArgs).cache
-    );
+    return valueOf(instanceFor(ctx, site, definition as object | string, positional, namedArgs));
   }
   // No call site to own it (not compiler-emitted): a one-shot invocation.
-  const instance = createInstance(definition as object | string, ownerOf(ctx), {
+  const instance = createInstance(definition as object | string, ctx, {
     positional,
     named: namedArgs,
   });
   try {
-    return getValue(instance.cache);
+    return valueOf(instance);
   } finally {
     destroyInstance(instance);
   }

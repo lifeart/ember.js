@@ -3,6 +3,7 @@
 // manager), class `Helper` (+ recompute / destroy / owner), `helper()`,
 // `setHelperManager` custom managers, `invokeHelper`, the `@ember/helper`
 // built-ins and the keyword helpers (Ember toBool / value semantics, G-kw).
+import { DEBUG } from '@glimmer/env';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import Helper, { helper as functionHelper } from '@ember/component/helper';
@@ -20,6 +21,8 @@ import {
 } from '@ember/helper';
 import { registerDestructor } from '@ember/destroyable';
 import { getValue } from '@glimmer/tracking/primitives/cache';
+import { getInternalModifierManager } from '@glimmer/manager';
+import { on } from '@ember/modifier';
 import Service, { service } from '@ember/service';
 import { run } from '@ember/runloop';
 import { setupNativeRendering, textOf, htmlOf } from './-helpers';
@@ -47,6 +50,46 @@ module('gxt-native | helpers', function (hooks) {
     assert.deepEqual(seen[0], ['x', 2], 'no trailing hash without named args');
     assert.strictEqual(seen[1][0], 'x');
     assert.deepEqual({ ...seen[1][1] }, { currency: 'USD' }, 'named args = trailing hash');
+  });
+
+  test('plain function: the named object goes only to a call site with named args (even an undefined one) and reads current values', function (assert) {
+    const seen = [];
+    let root;
+    const fmt = (...args) => {
+      seen.push(args);
+      const last = args[args.length - 1];
+      // reading a named value consumes it (Glimmer: only what the helper reads)
+      return typeof last === 'object' ? `${args.length}:${last.unit}` : `${args.length}`;
+    };
+    class Root extends Component {
+      @tracked a = 'x';
+      @tracked unit = 'USD';
+      constructor(owner, args) {
+        super(owner, args);
+        root = this;
+      }
+      <template>
+        <i>{{fmt}}</i>
+        <b>{{fmt this.a}}</b>
+        <s>{{fmt this.a unit=this.unit}}</s>
+        <u>{{fmt unit=undefined}}</u>
+      </template>
+    }
+    this.render(Root);
+    assert.strictEqual(
+      htmlOf(this.element).replace(/\s+/g, ''),
+      '<i>0</i><b>1</b><s>2:USD</s><u>1:undefined</u>'
+    );
+    assert.deepEqual(seen[0], [], 'no arguments at all');
+    assert.deepEqual(seen[1], ['x'], 'positional only: no trailing object');
+    const [, withUnit] = seen[2];
+    assert.deepEqual({ ...withUnit }, { unit: 'USD' }, 'the named object');
+    assert.deepEqual(Object.keys(seen[3][0]), ['unit'], 'a named arg whose value is undefined still counts');
+    assert.strictEqual(seen[3][0].unit, undefined);
+    run(() => (root.unit = 'EUR'));
+    assert.strictEqual(seen.length, 5, 'only the call site reading `unit` recomputed');
+    assert.strictEqual(this.element.querySelector('s').textContent, '2:EUR');
+    assert.strictEqual(seen[4][1], withUnit, 'the same named object, reading the current value');
   });
 
   test('plain function: computed ONCE per render, recomputed once per argument change', function (assert) {
@@ -325,6 +368,93 @@ module('gxt-native | helpers', function (hooks) {
     ]);
     assert.strictEqual(handlers.size, 1, 'the fn result keeps its identity');
   });
+
+  test('fn in {{on}}: the callback and bound args are read when invoked; the listener is never re-attached', function (assert) {
+    const calls = [];
+    const counters = () => ({ ...getInternalModifierManager(on).counters });
+    const start = counters();
+    let root;
+    class Root extends Component {
+      @tracked rows = [
+        { id: 1, label: 'a' },
+        { id: 2, label: 'b' },
+      ];
+      @tracked select = (row, extra, evt) => calls.push(['first', row.label, extra, evt.type]);
+      @tracked extra = 1;
+      constructor(owner, args) {
+        super(owner, args);
+        root = this;
+      }
+      <template>
+        {{#each this.rows key="id" as |row|}}
+          <button {{on "click" (fn this.select row this.extra)}}>{{row.label}}</button>
+        {{/each}}
+      </template>
+    }
+    this.render(Root);
+    const click = (i) => run(() => this.element.querySelectorAll('button')[i].click());
+    click(1);
+    run(() => (root.extra = 2));
+    click(0);
+    run(() => (root.select = (row, extra) => calls.push(['second', row.label, extra])));
+    click(1);
+    assert.deepEqual(calls, [
+      ['first', 'b', 1, 'click'],
+      ['first', 'a', 2, 'click'],
+      ['second', 'b', 2],
+    ]);
+    const end = counters();
+    assert.strictEqual(end.adds - start.adds, 2, 'one listener per row');
+    assert.strictEqual(end.removes - start.removes, 0, 'never re-attached');
+  });
+
+  if (DEBUG) {
+    test('fn asserts (DEV) when its first argument is undefined', function (assert) {
+      const missing = undefined;
+      const Child = <template>{{if @go "set"}}</template>;
+      assert.throws(
+        () => this.render(<template><Child @go={{fn missing 1}} /></template>),
+        /You must pass a function as the `fn` helper's first argument, you passed undefined\./
+      );
+    });
+
+    test('fn asserts (DEV) when its first argument is null', function (assert) {
+      const empty = null;
+      const Child = <template>{{if @go "set"}}</template>;
+      assert.throws(
+        () => this.render(<template><Child @go={{fn empty}} /></template>),
+        /You must pass a function as the `fn` helper's first argument, you passed null\./
+      );
+    });
+
+    test('fn asserts (DEV) when its callback stops being a function before it is invoked', function (assert) {
+      let root;
+      let child;
+      class Child extends Component {
+        constructor(owner, args) {
+          super(owner, args);
+          child = this;
+        }
+        <template>{{if @go "set"}}</template>
+      }
+      class Root extends Component {
+        @tracked go = () => 'ok';
+        constructor(owner, args) {
+          super(owner, args);
+          root = this;
+        }
+        <template><Child @go={{fn this.go}} /></template>
+      }
+      this.render(Root);
+      assert.strictEqual(child.args.go(), 'ok');
+      const stashed = child.args.go;
+      run(() => (root.go = 'nope'));
+      assert.throws(
+        () => stashed(),
+        /You must pass a function as the `fn` helper's first argument, you passed nope\./
+      );
+    });
+  }
 
   test('keyword helpers use Ember toBool and return values (and / or / not / if / eq)', function (assert) {
     let root;

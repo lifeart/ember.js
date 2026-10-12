@@ -22,7 +22,7 @@ import { DEBUG } from '@glimmer/env';
 import { getOwner } from '@ember/-internals/owner';
 import { get as emberGet } from '@ember/-internals/metal/lib/property_get';
 import toBool from '@ember/-internals/glimmer/lib/utils/to-bool';
-import type { Arguments } from './args';
+import { unwrapArg, type Arguments, type ArgsSource } from './args';
 import {
   associateDestroyableChild,
   isDestroyed,
@@ -49,10 +49,25 @@ export interface CapturedArguments {
   named: Record<string, Reference<any>>;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Reference<T> is invariant
-export type InternalHelper = (args: CapturedArguments, owner: object | undefined) => Reference<any>;
+export type InternalHelper = ((
+  args: CapturedArguments,
+  owner: object | undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Reference<T> is invariant
+) => Reference<any>) & {
+  /**
+   * A direct form (native/helper-manager.ts): the helper's value for a call
+   * site, computed ONCE from the call site's literal-or-thunk arguments with
+   * no reference per argument. Only for a helper whose value never changes
+   * and consumes nothing: `fn`.
+   */
+  valueForCallSite?: (source: ArgsSource) => unknown;
+};
 
-function internalHelper(helper: InternalHelper): object {
+function internalHelper(
+  helper: InternalHelper,
+  valueForCallSite?: (source: ArgsSource) => unknown
+): object {
+  if (valueForCallSite !== undefined) helper.valueForCallSite = valueForCallSite;
   return setInternalHelperManager(helper, {});
 }
 
@@ -133,38 +148,59 @@ export const get = /*#__PURE__*/ internalHelper(({ positional }) => {
 
 const fnContext = buildUntouchableThis('`fn` helper');
 
-function assertCallbackIsFn(callbackRef: Reference | undefined): void {
-  if (!(callbackRef && typeof valueForRef(callbackRef) === 'function')) {
+function assertCallbackIsFn(callback: unknown, debugLabel: string | undefined): void {
+  if (typeof callback !== 'function') {
     throw new Error(
-      `You must pass a function as the \`fn\` helper's first argument, you passed ${
-        callbackRef ? String(valueForRef(callbackRef)) : String(callbackRef)
-      }. While rendering:\n\n${callbackRef?.debugLabel}`
+      `You must pass a function as the \`fn\` helper's first argument, you passed ${String(
+        callback
+      )}. While rendering:\n\n${debugLabel}`
     );
   }
+}
+
+function callFn(callback: unknown, args: unknown[], invocationArgs: unknown[]): unknown {
+  return (callback as (...a: unknown[]) => unknown).call(fnContext, ...args, ...invocationArgs);
 }
 
 // The returned function reads the CURRENT arguments when it is invoked, and the
 // reference itself consumes nothing — so its identity is stable across renders
 // (an `{{on}}` handler built with `fn` is never re-attached by a re-render).
+//
+// Direct form (a compiler-emitted call site, native/helper-manager.ts): the
+// same function over the call site's literal-or-thunk arguments, which it
+// reads when invoked — no compute reference per argument. The arguments carry
+// no source label, so the assertion's label is `undefined`, as for an
+// unlabeled reference.
+function fnForCallSite(source: ArgsSource): unknown {
+  if (DEBUG) assertCallbackIsFn(unwrapArg(source.positional[0]), undefined);
+  // a regular function: never mistaken for a compiler getter by gxt
+  return function fnHelper(...invocationArgs: unknown[]): unknown {
+    const positional = source.positional;
+    const callback = unwrapArg(positional[0]);
+    if (DEBUG) assertCallbackIsFn(callback, undefined);
+    const args: unknown[] = [];
+    for (let i = 1; i < positional.length; i++) args.push(unwrapArg(positional[i]));
+    return callFn(callback, args, invocationArgs);
+  };
+}
+
 export const fn = /*#__PURE__*/ internalHelper(({ positional }) => {
   const callbackRef = positional[0];
-  if (DEBUG) assertCallbackIsFn(callbackRef);
+  if (DEBUG) {
+    assertCallbackIsFn(callbackRef && valueForRef(callbackRef), callbackRef?.debugLabel);
+  }
   return createComputeRef(
     () =>
       // a regular function: never mistaken for a compiler getter by gxt
       function fnHelper(...invocationArgs: unknown[]): unknown {
         const [callback, ...args] = reifyPositional(positional);
-        if (DEBUG) assertCallbackIsFn(callbackRef);
-        return (callback as (...a: unknown[]) => unknown).call(
-          fnContext,
-          ...args,
-          ...invocationArgs
-        );
+        if (DEBUG) assertCallbackIsFn(callback, callbackRef?.debugLabel);
+        return callFn(callback, args, invocationArgs);
       },
     null,
     'fn'
   );
-});
+}, fnForCallSite);
 
 export const and = /*#__PURE__*/ internalHelper(({ positional }) => {
   if (DEBUG && positional.length < 2) {
