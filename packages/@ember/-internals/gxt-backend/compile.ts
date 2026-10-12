@@ -701,8 +701,7 @@ function _gxtRootIsStale(root: any): boolean {
 
 // Canonical state for the ambient GXT root context, owned by this file.
 // Cross-file lazy-init writers/readers (glimmer/lib/renderer.ts,
-// glimmer/lib/templates/root.ts, gxt-backend/outlet.gts,
-// gxt-backend/runtime-hbs.ts) route through
+// glimmer/lib/templates/root.ts, gxt-backend/outlet.gts) route through
 // `compilePipeline.getRootContext?.()` / `compilePipeline.setRootContext?.(v)`.
 let _gxtRootContext: any = null;
 function _getGxtRootContext(): any {
@@ -978,10 +977,7 @@ installEmberWrappers();
 // implementations. Build-time-compiled template Function() bodies read these
 // as bare identifiers (resolved via globalThis), so the override must be
 // installed on globalThis after `setupGlobalScope` (which copies the GXT
-// originals onto globalThis). Symbols imported via the wrapper module — see
-// `gxt-with-runtime-hbs.ts` for the body. The wrapper module isn't imported
-// at module init (it's only loaded by runtime-hbs.ts), so we replicate the
-// override inline to avoid pulling its full transitive graph in here.
+// originals onto globalThis).
 //
 // Semantics:
 //   - and: short-circuit; return first falsy value, else last value;
@@ -3870,8 +3866,7 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
         }
       } catch (e) {
         // Accessing .queryParams on an arbitrary controller-shaped object
-        // should never throw, but if a getter rejects, fall through quietly
-        // (visible warn rather than silent swallow per CLAUDE.md).
+        // should never throw, but if a getter rejects, warn and fall through.
         console.warn('[gxt] QP-key detection on controller failed', e);
       }
     }
@@ -3886,9 +3881,8 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
           // `{{@model.…}}` bindings). QP keys keep the legacy full re-render.
           _ctrlHook(obj, keyName);
         } catch (e) {
-          // Match the existing post-trigger error handling shape — log but
-          // don't break the canonical trigger body (per CLAUDE.md no
-          // silent swallow: visible warn).
+          // Match the existing post-trigger error handling shape — warn but
+          // don't break the canonical trigger body.
           console.warn('[gxt] controller-set outlet rerender hook failed', e);
         }
       }
@@ -15495,8 +15489,8 @@ installCompilePipelinePart({
   pushHelperInstance: _gxtPushHelperInstance,
   setHelperInstancePushHook: _gxtSetHelperInstancePushHook,
   // Paired accessors for the module-local `_gxtRootContext` binding. Cross-file
-  // lazy-init writers/readers (renderer.ts, root.ts, outlet.gts, runtime-hbs.ts)
-  // route through these; intra-file consumers read the module-local directly.
+  // lazy-init writers/readers (renderer.ts, root.ts, outlet.gts) route through
+  // these; intra-file consumers read the module-local directly.
   getRootContext: _getGxtRootContext,
   setRootContext: _setGxtRootContext,
   // Phase 4.1 SSR consumer plumbing (RFC §7.1.1 step 2): synchronous per-root
@@ -15547,24 +15541,3 @@ installViewUtilsPart({
   // manager.ts (the in-element deferred-render drain).
   afterFlushAfterInsertQueue: _afterFlushAfterInsertQueue,
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// LANDING NOTE — `transforms` AST hook dependency
-//
-// The dialect AST visitors built by `buildGxtDialectTransforms` (the
-// `{{outlet}}`, `{{#@arg}}`, quoted-attribute bare-helper, `{{#each-in}}`, and
-// `{{on}}`→`{{on-ext}}` visitors) are wired into `gxtCompileTemplate(...)` via
-// the public `CompileOptions.transforms` hook. That hook ships in glimmer-next
-// PR #217 and is present in the LOCALLY COPIED `@lifeart/gxt` dist used for
-// testing — but it is NOT in the published `@lifeart/gxt@0.0.63` that ember's
-// PR #21340 CI installs. The published `compile()` silently ignores an unknown
-// `transforms` field, so on published gxt these dialect rewrites would no-op
-// and `{{outlet}}` / `{{#@arg}}` / quoted-attr-helper / `{{#each-in}}` / `{{on}}`
-// handling would regress.
-//
-// THEREFORE: landing this commit on PR #21340 REQUIRES, in order:
-//   1. a glimmer-next release that publishes the `CompileOptions.transforms`
-//      hook (>= the next release after 0.0.63), and
-//   2. an ember bump of the `@lifeart/gxt` dependency to consume it.
-// Until both land, keep this on the `gxt-fine-grained` branch only (do not push).
-// ─────────────────────────────────────────────────────────────────────────────

@@ -111,11 +111,9 @@ interface GxtAstEnv {
 /**
  * `{{outlet}}` → `<ember-outlet />`.
  *
- * Mirrors the build-time transform in
- * packages/demo/compat/gxt-template-compiler-plugin.mjs so that templates
- * compiled at runtime (via `compile()` / `precompileTemplate()` from
- * addTemplate(), rendering test helpers, etc.) get the same handling as
- * templates compiled at build time. Without it, the GXT compiler treats
+ * Applied to templates compiled at runtime (via `compile()` /
+ * `precompileTemplate()` from addTemplate(), rendering test helpers, etc.).
+ * Without it, the GXT compiler treats
  * `{{outlet}}` like `{{yield}}` (a default-slot yield) and no `<ember-outlet>`
  * element is produced — which breaks nested route rendering.
  *
