@@ -1332,7 +1332,8 @@ function _emberTagFastPathEligible(tag: unknown, tagProps: any): boolean {
  *
  * This inner layer is wrapped again by compile.ts's `$_tag_ember` for
  * runtime-compiled templates, but build-time .gts/.gjs templates import it
- * directly as `$_tag` (re-exported via gxt-with-runtime-hbs). For valid
+ * directly as `$_tag` (vite's `gxtEmberWrapperRedirect` points their `$_tag`
+ * import here). For valid
  * .gts/.gjs, the by-name component lookup, `<this.foo/>`, `:named-block` and
  * helper-fallback branches are believed unreachable (strict mode compiles
  * those shapes to `$_c` / `$_dc` / slots / `() => helper` instead of

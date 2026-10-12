@@ -1,8 +1,7 @@
 # GXT test runner
 
-A production-grade Playwright + QUnit runner for the Ember.js GXT compat
-layer. Replaces the earlier `run-gxt-tests.mjs` prototype, which used a
-stuck-detection heuristic that could turn hangs into false "pass" reports.
+A Playwright + QUnit runner for the Ember.js GXT test pages (compat
+`index.html` and gxt-native `native.html`).
 
 ## Design rules
 
