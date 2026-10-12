@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-11T20:59:30.305Z",
+    "capturedAt": "2026-10-12T02:45:39.840Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "77d4dcf500",
-    "totalTests": 3049,
+    "emberCommit": "1df13a8f43",
+    "totalTests": 3060,
     "totalModules": 213,
     "quarantinedTests": 0,
-    "totalAssertions": 13945,
-    "totalAssertionsPassing": 13936
+    "totalAssertions": 13984,
+    "totalAssertionsPassing": 13975
   },
   "modules": {
     "<LinkTo /> component (rendering tests)": {
@@ -1213,10 +1213,10 @@
       "failingTests": []
     },
     "gxt-native | attributes": {
-      "total": 5,
-      "passing": 5,
-      "assertionsTotal": 23,
-      "assertionsPassing": 23,
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 44,
+      "assertionsPassing": 44,
       "failingTests": []
     },
     "gxt-native | components": {
@@ -1255,10 +1255,10 @@
       "failingTests": []
     },
     "gxt-native | helpers": {
-      "total": 16,
-      "passing": 16,
-      "assertionsTotal": 54,
-      "assertionsPassing": 54,
+      "total": 21,
+      "passing": 21,
+      "assertionsTotal": 70,
+      "assertionsPassing": 70,
       "failingTests": []
     },
     "gxt-native | loose-mode resolution": {
@@ -1269,10 +1269,10 @@
       "failingTests": []
     },
     "gxt-native | modifiers": {
-      "total": 9,
-      "passing": 9,
-      "assertionsTotal": 29,
-      "assertionsPassing": 29,
+      "total": 10,
+      "passing": 10,
+      "assertionsTotal": 31,
+      "assertionsPassing": 31,
       "failingTests": []
     },
     "gxt-native | outlet": {
