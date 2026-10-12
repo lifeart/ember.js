@@ -4,7 +4,6 @@
 // VM global context). Registers once; named imports only, so nothing else of
 // gxt is retained.
 import { DEBUG } from '@glimmer/env';
-import { _getProp } from '@ember/-internals/metal';
 import { registerHostHooks, registerHostManagers } from '@lifeart/gxt';
 import {
   installRenderLoop,
@@ -18,7 +17,7 @@ import { componentManager, resolveComponentName } from './managers';
 import { modifierManager } from './modifier-manager';
 import { Outlet } from './outlet';
 import { assertLooseBuiltins, resolveComponentOrHelper } from './resolver';
-import { classifyContent, eachInEntries, hostAssert } from './content';
+import { classifyContent, eachInEntries, getProp, hostAssert } from './content';
 
 let installed = false;
 
@@ -41,8 +40,8 @@ export function install(): void {
     // NATIVE_FLAGS.EMBER_PROPERTY_TAGS): Glimmer's global-context getProp —
     // consumes tagFor(obj, key) (+ the `[]` tag of an array value) and honours
     // `unknownProperty`, so `set()` / `notifyPropertyChange()` on untracked
-    // properties re-render.
-    getProp: _getProp,
+    // properties re-render; plus an ArrayProxy's iteration tag (content.ts).
+    getProp,
     // Loose-mode ambiguous append (a content-position `{{name …}}` in a
     // loose template compiles to `$_looseAppend` under
     // NATIVE_FLAGS.EMBER_LOOSE_COMPONENTS): component, else helper.

@@ -16,8 +16,11 @@
 //                    `set(obj, 'newKey', v)` re-iterates).
 //   assert           gxt's host-parity runtime checks (in-element destination /
 //                    insertBefore) through `@ember/debug`.
+//   getProp          template property reads: Glimmer's global-context getProp
+//                    plus the iteration tag of an Ember array value (below).
 import { assert } from '@ember/debug';
-import { get, tagForObject } from '@ember/-internals/metal';
+import { _getProp, get, tagForObject, tagForProperty } from '@ember/-internals/metal';
+import { isEmberArray } from '@ember/array/-internals';
 import { isProxy } from '@ember/-internals/utils';
 import { consumeTag, isTracking, tagFor } from '@glimmer/validator';
 import { CURRIED_COMPONENT, CURRIED_HELPER, getCurried } from '@lifeart/gxt';
@@ -88,6 +91,26 @@ export function eachInEntries(source: object): Pair[] {
     return values.map((value, i): Pair => [isMapLike ? keys[i] : i, value]);
   }
   return fromIndexable(obj as Record<string, unknown>);
+}
+
+// Template property reads (every member segment of a `this.*` / `@arg.*` /
+// block-param path). Metal's `_getProp` is Glimmer's global-context getProp:
+// it consumes tagFor(obj, key), plus the plain `[]` tag of an array value.
+//
+// An Ember array that is not a native array (an ArrayProxy) also has a custom
+// `[]` tag that follows its `content` / `arrangedContent`. Glimmer consumes
+// that tag when `{{#each}}` iterates the value through `length` /
+// `objectAt`, which also sets the proxy up (`_revalidate`). gxt's `{{#each}}`
+// reads the proxy's `content` directly instead, so nothing consumed it: a
+// proxy whose `content` was replaced after the first render, such as a
+// PromiseArray that resolves, never re-rendered. Consume it here, in the read
+// that produced the value.
+export function getProp(obj: object, key: string): unknown {
+  const value = _getProp(obj, key);
+  if (isTracking() && !Array.isArray(value) && isEmberArray(value)) {
+    consumeTag(tagForProperty(value, '[]'));
+  }
+  return value;
 }
 
 export function hostAssert(message: string): void {
