@@ -80,8 +80,7 @@ function emberDistResolver(distDir, mode) {
 const pkgDir = (name) => realpathSync(join(EMBER_ROOT, 'node_modules', name));
 
 /**
- * The from-dist vite config for one app dir — shared by the modern app (default
- * export below) and the krausest benchmark app (smoke-tests/krausest-app).
+ * The from-dist vite config for one app dir (used by the default export below).
  *
  *   appDir     the app root (vite `root`; its `app*` source dirs go through babel)
  *   input      the HTML entry
