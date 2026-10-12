@@ -174,7 +174,7 @@ export class CustomModifierManager extends CustomManagerRecord<ModifierDelegate>
 }
 
 /** Arguments handed to custom managers (lazy args proxies, native/args.ts). */
-export interface ManagerArgs {
+interface ManagerArgs {
   positional: readonly unknown[];
   named: Record<string, unknown>;
 }

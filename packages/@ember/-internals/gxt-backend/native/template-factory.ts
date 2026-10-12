@@ -19,9 +19,7 @@
 import { $SELF, $template, cId, COMPONENT_ID_PROPERTY, isTemplateFn } from '@lifeart/gxt';
 
 export type GxtTemplate = (...args: unknown[]) => unknown;
-export type NativeTemplateFactory = ((owner?: unknown) => GxtTemplate) & {
-  readonly __fn?: GxtTemplate;
-};
+export type NativeTemplateFactory = (owner?: unknown) => GxtTemplate;
 
 const NATIVE_TEMPLATE_FACTORIES = new WeakSet<object>();
 // Loose templates (see markLooseTemplate below).
@@ -32,7 +30,7 @@ const LOOSE_TEMPLATES = new WeakSet<object>();
 // has no template cache, so the counters stay 0.
 export const templateCacheCounters = { cacheHit: 0, cacheMiss: 0 };
 
-export function isNativeTemplateFactory(value: unknown): value is NativeTemplateFactory {
+function isNativeTemplateFactory(value: unknown): value is NativeTemplateFactory {
   return typeof value === 'function' && NATIVE_TEMPLATE_FACTORIES.has(value);
 }
 
@@ -44,13 +42,11 @@ function brand(factory: NativeTemplateFactory): NativeTemplateFactory {
 /** A TemplateFactory over a gxt template function (same template for every owner). */
 export function factoryForTemplate(template: GxtTemplate): NativeTemplateFactory {
   const factory = (() => template) as NativeTemplateFactory;
-  Object.defineProperty(factory, '__fn', { value: template });
   return brand(factory);
 }
 
 /**
- * A TemplateFactory whose template is made on first use (`factory(owner)` /
- * `__fn`): the G10 build-time `precompileTemplate` maker runs lazily, so its
+ * A TemplateFactory whose template is made on first use (`factory(owner)`): the G10 build-time `precompileTemplate` maker runs lazily, so its
  * `scope` values are read when the template is first needed, not when the
  * module evaluates (Glimmer reads `scope()` lazily too).
  */
@@ -58,7 +54,6 @@ export function lazyFactoryForTemplate(make: () => GxtTemplate): NativeTemplateF
   let template: GxtTemplate | undefined;
   const get = (): GxtTemplate => (template ??= make());
   const factory = (() => get()) as NativeTemplateFactory;
-  Object.defineProperty(factory, '__fn', { get });
   return brand(factory);
 }
 

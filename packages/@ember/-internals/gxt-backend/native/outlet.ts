@@ -299,7 +299,7 @@ export function Outlet(this: GxtNode): unknown {
  * `template:-outlet`: the route template that renders only `{{outlet}}` — the
  * top level, and every route without a template of its own.
  */
-export const OutletTemplate = $_tpl(function OutletTemplate(this: GxtNode): unknown {
+const OutletTemplate = $_tpl(function OutletTemplate(this: GxtNode): unknown {
   // eslint-disable-next-line prefer-rest-params
   $_GET_ARGS(this as never, arguments);
   return $_fin([$_outlet(this as never)], this as never);

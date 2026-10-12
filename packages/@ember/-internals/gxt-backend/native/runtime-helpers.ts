@@ -428,7 +428,7 @@ function checkBooleanOption(name: string, value: unknown): boolean | undefined {
   return value as boolean | undefined;
 }
 
-export class OnModifierState {
+class OnModifierState {
   listener: Listener | null = null;
 
   constructor(
