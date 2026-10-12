@@ -1920,8 +1920,7 @@ function createComponentInstance(
             }
             if (effectPrimed && v !== lastEffectValue) {
               try {
-                const dirty = classicDirtyTagForGuarded;
-                if (dirty) dirty(instance, key);
+                classicDirtyTagForGuarded(instance, key);
               } catch {
                 /* noop */
               }
@@ -1940,9 +1939,7 @@ function createComponentInstance(
             // arg from inside a createCache callback bypasses the tag tracker
             // entirely because the arg getter reads the parent's cell directly.
             try {
-              const consume = _classicConsumeTagHook;
-              const tagFn = _classicTagForHook;
-              if (consume && tagFn) consume(tagFn(instance, key));
+              _classicConsumeTagHook(_classicTagForHook(instance, key));
             } catch {
               /* noop */
             }
@@ -1993,8 +1990,7 @@ function createComponentInstance(
             // Dirty the classic tag so any createCache (invokeHelper) or
             // observer watching `key` on this instance is invalidated.
             try {
-              const dirty = classicDirtyTagForGuarded;
-              if (dirty) dirty(instance, key);
+              classicDirtyTagForGuarded(instance, key);
             } catch {
               /* noop */
             }
@@ -2651,9 +2647,7 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
                 // Route through classic @glimmer/validator tag system so
                 // createCache / invokeHelper consumers track this property.
                 try {
-                  const consume = _classicConsumeTagHook;
-                  const tagFn = _classicTagForHook;
-                  if (consume && tagFn) consume(tagFn(instance, key));
+                  _classicConsumeTagHook(_classicTagForHook(instance, key));
                 } catch {
                   /* noop */
                 }
@@ -2692,8 +2686,7 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
                   }
                 }
                 try {
-                  const dirty = classicDirtyTagForGuarded;
-                  if (dirty) dirty(instance, key);
+                  classicDirtyTagForGuarded(instance, key);
                 } catch {
                   /* noop */
                 }
@@ -2725,14 +2718,12 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
               // and may trigger notifyPropertyChange, but the cascade body it
               // schedules is deferred, so the cell must be hot by this point.
               try {
-                if (typeof _gxtCellFor === 'function') {
-                  // skipDefine=true: don't install a cell-backed property
-                  // descriptor; the cascade body (when it runs) creates the
-                  // cell on demand. Using false here would replace the
-                  // tracked-property descriptor and break two-way bindings.
-                  const _cell = _gxtCellFor(instance, key, /* skipDefine */ true);
-                  _cell?.update?.(newValue);
-                }
+                // skipDefine=true: don't install a cell-backed property
+                // descriptor; the cascade body (when it runs) creates the
+                // cell on demand. Using false here would replace the
+                // tracked-property descriptor and break two-way bindings.
+                const _cell = _gxtCellFor(instance, key, /* skipDefine */ true);
+                _cell?.update?.(newValue);
               } catch (cellErr) {
                 if (DEBUG) {
                   // eslint-disable-next-line no-console
@@ -2786,11 +2777,9 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
             // value is visible to any synchronous reader. See the arg-pass site
             // above.
             try {
-              if (typeof _gxtCellFor === 'function') {
-                // skipDefine=true: see the arg-pass site above.
-                const _cell = _gxtCellFor(instance, key, /* skipDefine */ true);
-                _cell?.update?.(undefined);
-              }
+              // skipDefine=true: see the arg-pass site above.
+              const _cell = _gxtCellFor(instance, key, /* skipDefine */ true);
+              _cell?.update?.(undefined);
             } catch (cellErr) {
               if (DEBUG) {
                 // eslint-disable-next-line no-console
@@ -4052,12 +4041,10 @@ function _gxtSyncAllWrappersBody(): void {
                   // `cellFor(instance, key)` is a distinct slot (one per
                   // (instance, key) pair) and must be updated separately.
                   try {
-                    if (typeof _gxtCellFor === 'function') {
-                      // skipDefine=true: don't replace the tracked descriptor.
-                      // See the arg-pass site above for rationale.
-                      const _cell = _gxtCellFor(entry.instance, key, /* skipDefine */ true);
-                      _cell?.update?.(newValue);
-                    }
+                    // skipDefine=true: don't replace the tracked descriptor.
+                    // See the arg-pass site above for rationale.
+                    const _cell = _gxtCellFor(entry.instance, key, /* skipDefine */ true);
+                    _cell?.update?.(newValue);
                   } catch (cellErr) {
                     if (DEBUG) {
                       // eslint-disable-next-line no-console
@@ -4165,12 +4152,10 @@ function _gxtSyncAllWrappersBody(): void {
                   // the curly two-way-binding upstream-flow path; the cell must be hot
                   // before the (deferred) cascade body runs. See the arg-pass site above.
                   try {
-                    if (typeof _gxtCellFor === 'function') {
-                      // skipDefine=true: don't replace the tracked descriptor.
-                      // See the arg-pass site above for rationale.
-                      const _cell = _gxtCellFor(entry.instance, key, /* skipDefine */ true);
-                      _cell?.update?.(newValue);
-                    }
+                    // skipDefine=true: don't replace the tracked descriptor.
+                    // See the arg-pass site above for rationale.
+                    const _cell = _gxtCellFor(entry.instance, key, /* skipDefine */ true);
+                    _cell?.update?.(newValue);
                   } catch (cellErr) {
                     if (DEBUG) {
                       // eslint-disable-next-line no-console
@@ -5906,9 +5891,6 @@ function wrapNestedObjectForTracking(obj: any): any {
   // Don't wrap if already a Proxy created by us
   if (_nestedTrackingProxies.has(obj)) return _nestedTrackingProxies.get(obj);
 
-  const _cellFor = _gxtCellFor;
-  if (!_cellFor) return obj;
-
   const proxy = new Proxy(obj, {
     get(target, prop, _receiver) {
       if (typeof prop !== 'string') return Reflect.get(target, prop, target);
@@ -5936,7 +5918,7 @@ function wrapNestedObjectForTracking(obj: any): any {
       // with the actual property value and read cell.value for GXT
       // formula tracking.
       try {
-        const cell = _cellFor(target, prop, /* skipDefine */ true);
+        const cell = _gxtCellFor(target, prop, /* skipDefine */ true);
         if (cell) {
           // Sync cell value silently (bypass update() to avoid dirty marking)
           if (cell._value !== value) {
@@ -6090,7 +6072,6 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
 
   // Set up attrs proxy for this.attrs.argName.value / this.args.argName access
   const attrsProxy: Record<string, any> = {};
-  const cellForFn = _gxtCellFor;
   // Store arg cells for reactive updates
   const argCells: Record<string, any> = {};
   // Build Ember-style attrs object separately: mut→mutCell, readonly→plain, regular→{value,update()}
@@ -6139,10 +6120,10 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
           }
         : undefined;
 
-      if (cellForFn && getter) {
+      if (getter) {
         // Create a cell for this arg so GXT's formula tracking picks up the dependency.
         // When the parent context changes, we update this cell which triggers re-evaluation.
-        const cell = cellForFn(attrsProxy, key, /* skipDefine */ false);
+        const cell = _gxtCellFor(attrsProxy, key, /* skipDefine */ false);
         cell.update(initialVal);
         argCells[key] = { cell, getter: unwrappingGetter || getter };
         // When the arg VALUE is an object, register it as an
@@ -6410,7 +6391,6 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
   // NOT as properties on `this` (this.foo). Installing getters on the bare
   // renderContext {} would make {{this.foo}} resolve to the arg value, which
   // violates Ember's template-only component contract.
-  const cellForFn2 = _gxtCellFor;
   const renderCtxArgCells: Record<string, any> = {};
   const argGetters = instance?.__argGetters || {};
 
@@ -6528,7 +6508,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
       }
     }
 
-    if (cellForFn2 && getter) {
+    if (getter) {
       // Fast path: if we already installed our marker-tagged descriptor
       // on renderContext[key] during a previous createRenderContext pass,
       // just refresh the arg cell mapping and continue. Reading the
@@ -6541,7 +6521,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
         );
         if (_crcAlreadyInstalled) {
           try {
-            const cell = cellForFn2(renderContext, key, /* skipDefine */ true);
+            const cell = _gxtCellFor(renderContext, key, /* skipDefine */ true);
             const _savedOverride = instance?.__gxtInitOverrides?.[key];
             renderCtxArgCells[key] = {
               cell,
@@ -6651,7 +6631,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
           let useLocal = true;
           // Create a cell with skipDefine=true to avoid cellFor installing
           // its own getter/setter (we'll install our own below).
-          const cell = cellForFn2(renderContext, key, /* skipDefine */ true);
+          const cell = _gxtCellFor(renderContext, key, /* skipDefine */ true);
           if (cell) cell.update(localVal);
           // For init-overridden properties, track the cell but mark it as init-overridden.
           // `_gxtSyncAllWrappers` will skip the cell update and instead check the getter
@@ -6771,7 +6751,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
             } catch {
               /* ignore — fall through to cellFor */
             }
-            const cell = cellForFn2(renderContext, key, /* skipDefine */ true);
+            const cell = _gxtCellFor(renderContext, key, /* skipDefine */ true);
             cell.update(initialVal);
             renderCtxArgCells[key] = { cell, getter, lastArgValue: initialVal };
             // Register the array value as an owner of this arg cell via the
@@ -6822,7 +6802,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
               // current (updated on the setter below + the effect) so
               // `this.args.<key>` reads stay reactive.
               let _nativeGetterWrapper: any = undefined;
-              if (_useCachedNativeGetter && _gxtCached) {
+              if (_useCachedNativeGetter) {
                 let _wmap = __gxtPureGetterCache.get(instance!);
                 if (!_wmap) {
                   _wmap = new Map<string, any>();
@@ -6841,9 +6821,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
               }
               const rcHasCompGet: any = function () {
                 try {
-                  const consume = _classicConsumeTagHook;
-                  const tagFn = _classicTagForHook;
-                  if (consume && tagFn) consume(tagFn(renderContext, key));
+                  _classicConsumeTagHook(_classicTagForHook(renderContext, key));
                 } catch {
                   /* noop */
                 }
@@ -6887,8 +6865,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
                     }
                   }
                   try {
-                    const dirty = classicDirtyTagForGuarded;
-                    if (dirty) dirty(renderContext, key);
+                    classicDirtyTagForGuarded(renderContext, key);
                   } catch {
                     /* noop */
                   }
@@ -6915,8 +6892,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
                 }
                 if (effectPrimed4 && v !== lastEffectValue4) {
                   try {
-                    const dirty = classicDirtyTagForGuarded;
-                    if (dirty) dirty(renderContext, key);
+                    classicDirtyTagForGuarded(renderContext, key);
                   } catch {
                     /* noop */
                   }
@@ -6944,7 +6920,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
         } else {
           // Plain data property — use skipDefine=true with custom getter/setter for local override tracking.
           try {
-            const cell = cellForFn2(renderContext, key, /* skipDefine */ true);
+            const cell = _gxtCellFor(renderContext, key, /* skipDefine */ true);
             const initialVal = argVal;
             cell.update(initialVal);
             renderCtxArgCells[key] = { cell, getter, lastArgValue: initialVal };
@@ -6974,9 +6950,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
                 /* ignore */
               }
               try {
-                const consume = _classicConsumeTagHook;
-                const tagFn = _classicTagForHook;
-                if (consume && tagFn) consume(tagFn(renderContext, key));
+                _classicConsumeTagHook(_classicTagForHook(renderContext, key));
               } catch {
                 /* noop */
               }
@@ -7001,8 +6975,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
                 }
               }
               try {
-                const dirty = classicDirtyTagForGuarded;
-                if (dirty) dirty(renderContext, key);
+                classicDirtyTagForGuarded(renderContext, key);
               } catch {
                 /* noop */
               }
@@ -7035,8 +7008,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
                 }
                 if (effectPrimed3 && v !== lastEffectValue3) {
                   try {
-                    const dirty = classicDirtyTagForGuarded;
-                    if (dirty) dirty(renderContext, key);
+                    classicDirtyTagForGuarded(renderContext, key);
                   } catch {
                     /* noop */
                   }
@@ -7073,19 +7045,6 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
             }
           }
         }
-      }
-    } else if (getter) {
-      try {
-        const g = getter;
-        Object.defineProperty(renderContext, key, {
-          get() {
-            return g();
-          },
-          enumerable: true,
-          configurable: true,
-        });
-      } catch {
-        /* ignore */
       }
     }
   }
@@ -7186,7 +7145,6 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
   // reads cell.value, and the effect tracks the cell as a dependency.
   // The trigger-re-render path (compile.ts `_gxtTriggerReRender`) also uses
   // cellFor on the instance, so both reads and writes use the same cell.
-  const _cellFor = _gxtCellFor;
   const SKIP_CELL_PROPS = new Set([
     'constructor',
     'args',
@@ -7227,7 +7185,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
   // Bridge accessors for registerArrayOwner / registerObjectValueOwner (used
   // inside the loop below).
   const _gxtCp = getGxtRenderer()?.compilePipeline;
-  if (_cellFor && instance) {
+  if (instance) {
     // Install cells for all enumerable properties on the instance and its prototype
     const seen = new Set<string>();
     let obj = instance;
@@ -7274,11 +7232,11 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
             // Probe with skipDefine=true first; if the cell already exists and
             // is formula-backed, leave the raw data property in place so the
             // formula's __fn reads the data directly.
-            const _existing = _cellFor(instance, key, /* skipDefine */ true);
+            const _existing = _gxtCellFor(instance, key, /* skipDefine */ true);
             if (_existing && typeof (_existing as any).__fn === 'function') {
               continue;
             }
-            const _c = _cellFor(instance, key, /* skipDefine */ false);
+            const _c = _gxtCellFor(instance, key, /* skipDefine */ false);
             // Reconcile: cellFor(skipDefine=false) may install a fresh getter/setter
             // backed by a cell that doesn't know the current data value (it was set
             // via this.set() BEFORE the cell was installed, e.g., in didReceiveAttrs).
@@ -7379,7 +7337,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
         const setterFn = foundDesc?.set as any;
         const isTrackedGetter = !!getterFn?.__isTrackedGetter;
         const isTrackedSetter = !!setterFn?.__isTrackedSetter;
-        if (_gxtCached && getterFn && !setterFn && !isTrackedGetter && !isTrackedSetter) {
+        if (getterFn && !setterFn && !isTrackedGetter && !isTrackedSetter) {
           let wrapper = gxtGetterCache.get(prop);
           if (!wrapper) {
             wrapper = _gxtCached(() => getterFn.call(target), 'ember-getter:' + prop);
@@ -7417,20 +7375,18 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
         return value;
       }
 
-      if (_cellFor) {
-        try {
-          const cell = _cellFor(target, prop, /* skipDefine */ false);
-          if (cell) {
-            const cellVal = cell.value;
-            // Wrap nested Ember objects so sub-property reads are tracked
-            if (cellVal !== null && typeof cellVal === 'object' && !(cellVal instanceof Node)) {
-              return wrapNestedObjectForTracking(cellVal);
-            }
-            return cellVal;
+      try {
+        const cell = _gxtCellFor(target, prop, /* skipDefine */ false);
+        if (cell) {
+          const cellVal = cell.value;
+          // Wrap nested Ember objects so sub-property reads are tracked
+          if (cellVal !== null && typeof cellVal === 'object' && !(cellVal instanceof Node)) {
+            return wrapNestedObjectForTracking(cellVal);
           }
-        } catch {
-          /* ignore */
+          return cellVal;
         }
+      } catch {
+        /* ignore */
       }
 
       // Wrap nested Ember objects for tracking even without cells
@@ -10786,14 +10742,13 @@ function _installCustomManagedArgEffect(o: {
   // Nothing to subscribe to (no live arg sources) → no effect.
   if (namedKeys.length === 0 && posGetters.length === 0) return;
 
-  const _cellFor = _gxtCellFor;
   const _recompute = (obj: any, changedKey: string) => {
     try {
       const deps = getGxtRenderer()?.compilePipeline.recomputeDependents?.(obj, changedKey);
       if (deps) {
         for (const { key, value } of deps) {
           try {
-            const dc = _cellFor(obj, key, /* skipDefine */ true);
+            const dc = _gxtCellFor(obj, key, /* skipDefine */ true);
             if (dc) {
               dc.update(value);
               // This effect runs DURING the GXT sync drain (it was re-fired by
