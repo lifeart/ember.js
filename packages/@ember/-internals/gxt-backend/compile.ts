@@ -539,6 +539,8 @@ function hasAttrsInBlockParams(str: string): boolean {
 import { buildUntouchableThis } from '@glimmer/debug-util';
 // The key of a classic `Helper` instance's recompute tag.
 import { RECOMPUTE_TAG } from '@ember/-internals/glimmer/lib/helper';
+// The class of `templateOnly()` component definitions.
+import { TemplateOnlyComponentDefinition } from '@glimmer/runtime/lib/component/template-only';
 // Import the GXT runtime compiler
 // @ts-ignore - direct path to avoid GXT Babel plugin
 import {
@@ -15430,12 +15432,15 @@ installCompilePipelinePart({
   // harness probes and dev-debug scripts that read/wrap it.
   syncDomNow: _gxtSyncDomNow,
   // manager.ts and ember-gxt-wrappers.ts cannot import glimmer/lib/helper.ts
-  // (it imports the manager shim), so they read the tag through here.
+  // or the template-only module (both import the manager shim), so they read
+  // the tag and test definitions through here.
   getHelperRecomputeTag: (instance: object) => (instance as any)[RECOMPUTE_TAG],
+  isTemplateOnlyDefinition: (value: unknown) => value instanceof TemplateOnlyComponentDefinition,
 });
 // manager.ts calls these members without a fallback.
 assertCompilePipelineInstalled([
   'getHelperRecomputeTag',
+  'isTemplateOnlyDefinition',
   'withSyncing',
   'withSuppressDirtyInRcSet',
   'isSyncIsPropertyDriven',

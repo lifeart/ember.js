@@ -1885,7 +1885,7 @@ function _renderComponentGxt(
     const isTemplateOnly =
       !isClass ||
       (component as any).__templateOnly === true ||
-      (component as any).constructor?.name === 'TemplateOnlyComponentDefinition' ||
+      getGxtRenderer()?.compilePipeline.isTemplateOnlyDefinition?.(component) === true ||
       getGxtRenderer()?.registries.internalManagers.has(component) === true;
 
     let instance: any = null;

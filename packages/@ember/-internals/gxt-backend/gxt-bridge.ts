@@ -566,6 +566,9 @@ export interface GxtCompilePipelineCapabilities {
    */
   getHelperRecomputeTag?(instance: object): unknown;
 
+  /** Whether `value` is a `templateOnly()` component definition. */
+  isTemplateOnlyDefinition?(value: unknown): boolean;
+
   /**
    * Recompute the cached computed properties of `obj` that depend on
    * `changedKey` and return their new values; returns `[]` inside a

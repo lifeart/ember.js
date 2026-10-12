@@ -205,7 +205,7 @@ export function peekInstanceCapture(): any {
 const _gxtBridgeDestroyDestroyable = _destroySyncNow;
 
 // PROPERTY_DID_CHANGE symbol — imported lazily to avoid circular dependency
-import { PROPERTY_DID_CHANGE } from '@ember/-internals/metal';
+import { PROPERTY_DID_CHANGE, TrackedDescriptor } from '@ember/-internals/metal';
 import { peekMeta } from '@ember/-internals/meta';
 import { _instrumentStart as _gxtInstrumentStart } from '@ember/instrumentation';
 export { CustomHelperManager, FunctionHelperManager, FROM_CAPABILITIES } from './helper-manager';
@@ -3254,6 +3254,10 @@ export function checkBacktracking(targetObj: any, key: string): void {
     assert(msg, false);
   }
 }
+
+// Thrown for a block invocation (`{{#name}}…{{/name}}`) of a name that resolves
+// to a helper; the owner-lookup catch around it rethrows only this class.
+class GxtHelperAsBlockError extends Error {}
 
 export function captureRenderError(err: unknown): void {
   if (err instanceof Error) {
@@ -6440,7 +6444,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
             p = Object.getPrototypeOf(p);
           }
         }
-        if (d && d.constructor && d.constructor.name === 'TrackedDescriptor') {
+        if (d instanceof TrackedDescriptor) {
           hasTrackedDescriptor = true;
         }
       } catch {
@@ -7039,7 +7043,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
           p = Object.getPrototypeOf(p);
         }
       }
-      if (d && d.constructor && d.constructor.name === 'TrackedDescriptor') return true;
+      if (d instanceof TrackedDescriptor) return true;
     } catch {
       /* ignore */
     }
@@ -7632,7 +7636,7 @@ function resolveComponent(
   if (factory?.class) {
     const cls = factory.class;
     const isTO =
-      cls.constructor?.name === 'TemplateOnlyComponentDefinition' ||
+      getGxtRenderer()!.compilePipeline.isTemplateOnlyDefinition!(cls) ||
       (cls as any).__templateOnly === true ||
       (cls as any).moduleName === '@glimmer/component/template-only';
     if (isTO) {
@@ -8235,13 +8239,12 @@ const $_MANAGERS = {
             const hf = owner.factoryFor?.(`helper:${helperName}`);
             const hl = !hf ? owner.lookup?.(`helper:${helperName}`) : null;
             if (hf || hl) {
-              const notFoundErr = new Error(
+              throw new GxtHelperAsBlockError(
                 `Attempted to resolve \`${helperName}\`, which was expected to be a component, but nothing was found.`
               );
-              throw notFoundErr;
             }
           } catch (e) {
-            if ((e as any)?.message?.includes('Attempted to resolve')) throw e;
+            if (e instanceof GxtHelperAsBlockError) throw e;
             // Other lookup errors: fall through to normal flow.
           }
         }
@@ -10070,7 +10073,7 @@ function handleStringComponent(
       // don't need an instance. Just render the template directly.
       const isTemplateOnly =
         factory?.class &&
-        (factory.class.constructor?.name === 'TemplateOnlyComponentDefinition' ||
+        (getGxtRenderer()!.compilePipeline.isTemplateOnlyDefinition!(factory.class) ||
           factory.class.__templateOnly === true ||
           factory.class.moduleName === '@glimmer/component/template-only' ||
           (INTERNAL_MANAGERS.has?.(factory.class) && !factory.class.prototype?.init));
@@ -11549,6 +11552,17 @@ const _managedComponentCache = new WeakMap<
     callCounter: Map<any, number>;
   }
 >();
+// Per-component-class id for the slot keys above.
+const _managedComponentIds = new WeakMap<object, number>();
+let _nextManagedComponentId = 0;
+function _managedComponentId(komp: object): number {
+  let id = _managedComponentIds.get(komp);
+  if (id === undefined) {
+    id = _nextManagedComponentId++;
+    _managedComponentIds.set(komp, id);
+  }
+  return id;
+}
 
 // Build a named-arg getter map from the current `args` object. Used both
 // at initial construction (by argsForInternalManager via refSlots below) and
@@ -11783,7 +11797,7 @@ function handleManagedComponent(
 
     const callIdx = cache.callCounter.get(komp) || 0;
     cache.callCounter.set(komp, callIdx + 1);
-    const slotKey = `${komp?.toString?.() || 'unknown'}#${callIdx}`;
+    const slotKey = `${_managedComponentId(komp)}#${callIdx}`;
 
     const cached = cache.slots.get(slotKey);
     if (cached) {
@@ -12394,7 +12408,7 @@ function handleManagedComponent(
     // The slot index was already incremented in the cache-check above,
     // so the current slot is (counter - 1).
     const callIdx = (cache.callCounter.get(komp) || 1) - 1;
-    const slotKey = `${komp?.toString?.() || 'unknown'}#${callIdx}`;
+    const slotKey = `${_managedComponentId(komp)}#${callIdx}`;
     cache.slots.set(slotKey, slotRef);
   }
 
