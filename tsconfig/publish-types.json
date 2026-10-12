@@ -35,6 +35,10 @@
     "../**/@glimmer/encoder/**/*.ts",
     "../**/@glimmer/env/**/*.ts",
     "../**/@glimmer/local-debug-flags/**/*.ts",
-    "../**/@glimmer/wire-format/**/*.ts"
+    "../**/@glimmer/wire-format/**/*.ts",
+
+    // the gxt-native layer: reached only through the gxt-native build's module
+    // aliases (scripts/gxt-alias-map.mjs), never imported by a public module
+    "../**/@ember/-internals/gxt-backend/native/**/*.ts"
   ]
 }
