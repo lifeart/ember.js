@@ -24,12 +24,25 @@ export class Row {
   }
 }
 
+// `?rows=if` mode: a row with a tracked flag its `{{#if row.flag}}` cell reads.
+export class FlagRow extends Row {
+  @tracked flag = true;
+}
+
 let nextId = 1;
 
 export function buildData(count) {
   const data = new Array(count);
   for (let i = 0; i < count; i++) {
     data[i] = new Row(nextId++, `${A[random(A.length)]} ${C[random(C.length)]} ${N[random(N.length)]}`);
+  }
+  return data;
+}
+
+export function buildFlagData(count) {
+  const data = new Array(count);
+  for (let i = 0; i < count; i++) {
+    data[i] = new FlagRow(nextId++, `${A[random(A.length)]} ${C[random(C.length)]} ${N[random(N.length)]}`);
   }
   return data;
 }

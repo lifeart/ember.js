@@ -1,10 +1,14 @@
-import { ComponentBench, InlineBench } from '../components/bench.gjs';
+import { ComponentBench, IfBench, InlineBench } from '../components/bench.gjs';
 
-const ROW_COMPONENT = new URLSearchParams(location.search).get('rows') === 'component';
+const ROWS = new URLSearchParams(location.search).get('rows');
+const ROW_COMPONENT = ROWS === 'component';
+const IF_ROWS = ROWS === 'if';
 
 <template>
   {{#if ROW_COMPONENT}}
     <ComponentBench />
+  {{else if IF_ROWS}}
+    <IfBench />
   {{else}}
     <InlineBench />
   {{/if}}

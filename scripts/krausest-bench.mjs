@@ -12,8 +12,8 @@
 //           and prints boot-JS raw/gzip/brotli. Default variants: classic and
 //           gxt-native from the snapshots `node scripts/bundle-modern-app.mjs
 //           --from-dist --build-dists` leaves in smoke-tests/modern-app/dist/ember-dist/.
-//   bench   --variants a,b[,…] [--reps 10] [--rows inline|component] [--json out.json]
-//           the 9 krausest ops, every variant once per rep in a FRESH page, variants
+//   bench   --variants a,b[,…] [--reps 10] [--rows inline|component|if] [--json out.json]
+//           the 9 krausest ops (`--rows if`: the `{{#if}}` micro-benchmark ops, IF_OPS), every variant once per rep in a FRESH page, variants
 //           interleaved (order alternates per rep). Per op: krausest warmups, gc(),
 //           krausest CPU slowdown on the measured op, `script` = click → end of
 //           the run loop it starts (20 microtask ticks; backburner's autorun ends
@@ -250,6 +250,18 @@ function pageKit(firstRenderSelector) {
           Boolean(tr.querySelector('td.col-md-1 > a[data-test-remove] > span.glyphicon-remove')),
       ];
     });
+  // `?rows=if`: [id, label, has the select anchor, has the remove anchor, cell count]
+  kb.ifState = () =>
+    [...kb.rows()].map((tr) => {
+      const cells = tr.children;
+      return [
+        cells[0]?.textContent.trim() ?? '',
+        cells[1]?.textContent.trim() ?? '',
+        Boolean(tr.querySelector('td.col-md-4 > a[data-test-select]')),
+        Boolean(tr.querySelector('td.col-md-1 > a[data-test-remove] > span.glyphicon-remove')),
+        cells.length,
+      ];
+    });
   // Canonical row markup: sorted attributes, comments and whitespace-only text
   // dropped, whitespace runs collapsed. An empty `class` counts as absent: Glimmer removes the attribute
   // for a falsy `class={{if …}}`, gxt-native leaves `class=""` (a reported parity
@@ -375,10 +387,107 @@ const OPS = {
     check: (_pre, post) => post.length === 0,
   },
 };
-const OP_NAMES = Object.keys(OPS);
 
 const structureOk = (state) =>
   state.every((r) => r[3] === 4 && r[4] === true && /^\d+$/.test(r[0]) && r[1].length > 0);
+
+// `--rows if` (`?rows=if`, IfBench): every row's label cell is `{{#if
+// showLabels}}` (one condition for all rows) and its remove cell `{{#if
+// row.flag}}…{{else}}…{{/if}}` (one per row). States are `kb.ifState()`:
+// [id, label, select anchor, remove anchor, cells].
+const sameIds = (pre, post) =>
+  post.length === pre.length && post.every((r, i) => r[0] === pre[i][0]);
+const IF_OPS = {
+  create1k: {
+    cpu: 1,
+    again: ['#clear'],
+    warm: range(5, () => ['#run', '#clear']).flat(),
+    target: '#run',
+    check: (_pre, post) =>
+      post.length === 1000 && post.every((r) => r[1].length > 0 && r[2] && r[3]),
+  },
+  hideAll: {
+    cpu: 1,
+    again: ['#togglelabels'],
+    setup: ['#run'],
+    warm: range(5, () => ['#togglelabels', '#togglelabels']).flat(),
+    target: '#togglelabels',
+    check: (pre, post) =>
+      sameIds(pre, post) && post.every((r, i) => r[1] === '' && !r[2] && r[3] === pre[i][3]),
+  },
+  showAll: {
+    cpu: 1,
+    again: ['#togglelabels'],
+    setup: ['#run'],
+    warm: [...range(5, () => ['#togglelabels', '#togglelabels']).flat(), '#togglelabels'],
+    target: '#togglelabels',
+    check: (pre, post) =>
+      sameIds(pre, post) &&
+      pre.every((r) => r[1] === '') &&
+      post.every((r, i) => r[1].length > 0 && r[2] && r[3] === pre[i][3]),
+  },
+  toggle10th: {
+    cpu: 4,
+    setup: ['#run'],
+    warm: range(5, () => '#toggle10th'),
+    target: '#toggle10th',
+    check: (pre, post) =>
+      sameIds(pre, post) &&
+      post.every((r, i) => r[1] === pre[i][1] && r[3] === (i % 10 === 0 ? !pre[i][3] : pre[i][3])),
+  },
+  toggleOne: {
+    cpu: 4,
+    setup: ['#run'],
+    warm: range(5, () => '#toggleone'),
+    target: '#toggleone',
+    check: (pre, post) =>
+      sameIds(pre, post) && post.every((r, i) => r[3] === (i === 1 ? !pre[i][3] : pre[i][3])),
+  },
+  swap: {
+    cpu: 4,
+    setup: ['#run', '#toggle10th'],
+    warm: range(5, () => '#swaprows'),
+    target: '#swaprows',
+    check: (pre, post) =>
+      post.length === pre.length &&
+      post.every((r, i) => {
+        const from = pre[i === 1 ? 998 : i === 998 ? 1 : i];
+        return r[0] === from[0] && r[1] === from[1] && r[3] === from[3];
+      }),
+  },
+  remove: {
+    cpu: 2,
+    setup: ['#run'],
+    warm: range(5, (i) => `remove:${10 - i}`),
+    target: 'remove:4',
+    check: (pre, post) => {
+      const expected = ids(pre).filter((_, i) => i !== 3);
+      return post.length === pre.length - 1 && ids(post).every((id, i) => id === expected[i]);
+    },
+  },
+  clear1k: {
+    cpu: 4,
+    again: ['#run'],
+    setup: ['#clear'],
+    warm: [...range(5, () => ['#run', '#clear']).flat(), '#run'],
+    target: '#clear',
+    check: (_pre, post) => post.length === 0,
+  },
+};
+const ifStructureOk = (state) => state.every((r) => r[4] === 4 && /^\d+$/.test(r[0]));
+
+// Per `--rows` mode: the op table, the page's row-state function, the structure check.
+const MODES = {
+  inline: { ops: OPS, state: 'state', structure: structureOk },
+  component: { ops: OPS, state: 'state', structure: structureOk },
+  if: { ops: IF_OPS, state: 'ifState', structure: ifStructureOk },
+};
+function modeOf(rows) {
+  const mode = MODES[rows];
+  if (mode === undefined)
+    throw new Error(`unknown --rows ${rows} (${Object.keys(MODES).join('|')})`);
+  return mode;
+}
 
 async function openPage(browser, url, selector) {
   const context = await browser.newContext();
@@ -415,7 +524,8 @@ const setCpu = (cdp, rate) => cdp.send('Emulation.setCPUThrottlingRate', { rate 
 
 // One fresh page: boot + every op. Returns { boot, ops: {name: {script,total,ok,digest,why}}, heap10k }.
 async function runPage(browser, origin, label, rows, profile) {
-  const query = rows === 'component' ? '?rows=component' : '';
+  const mode = modeOf(rows);
+  const query = rows === 'inline' ? '' : `?rows=${rows}`;
   const { context, page, cdp, errors } = await openPage(browser, `${origin}/k/${label}/`, '#run');
   const result = { label, ops: {}, errors };
   try {
@@ -425,15 +535,15 @@ async function runPage(browser, origin, label, rows, profile) {
       await cdp.send('Profiler.enable');
       await cdp.send('Profiler.setSamplingInterval', { interval: profile.interval });
     }
-    for (const name of profile?.ops ?? OP_NAMES) {
-      const op = OPS[name];
+    for (const name of profile?.ops ?? Object.keys(mode.ops)) {
+      const op = mode.ops[name];
       const iters = profile ? profile.iters : 1;
       for (let iter = 0; iter < iters; iter++) {
         // setup + warmups once; a repeated (profile) iteration first restores the
         // op's precondition (`again`: e.g. clear before create, re-select another row)
         const steps = iter === 0 ? [...(op.setup ?? []), ...op.warm] : (op.again ?? []);
         await page.evaluate((t) => window.__kb.steps(t), steps);
-        const pre = await page.evaluate(() => window.__kb.state());
+        const pre = await page.evaluate((fn) => window.__kb[fn](), mode.state);
         await page.evaluate(() => window.gc?.());
         if (op.cpu !== 1 && !profile) await setCpu(cdp, op.cpu);
         if (profile) await cdp.send('Profiler.start');
@@ -451,10 +561,10 @@ async function runPage(browser, origin, label, rows, profile) {
           const { profile: cpu } = await cdp.send('Profiler.stop');
           profile.collect(name, iter, cpu, times);
         }
-        const post = await page.evaluate(() => window.__kb.state());
+        const post = await page.evaluate((fn) => window.__kb[fn](), mode.state);
         const digest = await page.evaluate(() => window.__kb.digest());
         const okCheck = op.check(pre, post);
-        const okStructure = structureOk(post);
+        const okStructure = mode.structure(post);
         const why = [
           okCheck ? '' : 'check',
           okStructure ? '' : 'structure',
@@ -538,7 +648,7 @@ async function bench() {
     await browser.close();
     server.close();
   }
-  const summary = summarize(runs, variants);
+  const summary = summarize(runs, variants, rows);
   printSummary(summary, variants, reps, rows);
   if (mismatches.length) log(`DIGEST MISMATCHES: ${JSON.stringify(mismatches.slice(0, 10))}`);
   const json = opt('--json', null);
@@ -549,11 +659,11 @@ async function bench() {
     );
 }
 
-function summarize(runs, variants) {
+function summarize(runs, variants, rows = 'inline') {
   const out = {};
   for (const v of variants) {
     const ops = {};
-    for (const name of OP_NAMES) {
+    for (const name of Object.keys(modeOf(rows).ops)) {
       const samples = runs[v].map((r) => r.ops[name]).filter(Boolean);
       const okSamples = samples.filter((o) => o.ok);
       const script = okSamples.map((o) => o.script);
@@ -602,8 +712,9 @@ function printSummary(summary, variants, reps, rows) {
     'n ok',
   ];
   console.log(`| ${head.join(' | ')} |\n|${head.map(() => '---').join('|')}|`);
-  for (const name of OP_NAMES) {
-    const cells = [name, `${OPS[name].cpu}x`];
+  const modeOps = modeOf(rows).ops;
+  for (const name of Object.keys(modeOps)) {
+    const cells = [name, `${modeOps[name].cpu}x`];
     for (const v of variants) {
       const s = summary[v].ops[name].script;
       cells.push(`${fmt(s.median)} [${fmt(s.p25)}–${fmt(s.p75)}]`);
@@ -879,9 +990,9 @@ function srcSnippet(source, line, col) {
 
 async function profileCmd() {
   const variant = opt('--variant', 'gxt-native');
-  const ops = opt('--ops', OP_NAMES.join(',')).split(',');
-  const iters = Number(opt('--iters', '5'));
   const rows = opt('--rows', 'inline');
+  const ops = opt('--ops', Object.keys(modeOf(rows).ops).join(',')).split(',');
+  const iters = Number(opt('--iters', '5'));
   const outDir = opt('--out', null);
   if (!outDir) throw new Error('--out <dir> is required');
   mkdirSync(outDir, { recursive: true });
