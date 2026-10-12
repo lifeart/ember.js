@@ -78,6 +78,7 @@ Keys are QUnit module names (from `QUnit.config.modules[].name`). Values:
 | `assertionsTotal`   | integer | QUnit `stats.all` (cumulative across retries)              |
 | `assertionsPassing` | integer | `assertionsTotal - stats.bad`                              |
 | `failingTests`      | array   | one entry per **final-failing** test (see below)           |
+| `skippedTests`      | array   | `QUnit.skip` test names, counted in `passing`; optional    |
 
 Passing modules have `failingTests: []`.
 

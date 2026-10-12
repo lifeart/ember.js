@@ -649,7 +649,7 @@ async function installCollectorInitScript(ctx, opts) {
             outcomes: [],
             lastAssertions: [],
           };
-          outcomes.outcomes.push(d.failed > 0 ? 'fail' : 'pass');
+          outcomes.outcomes.push(d.skipped ? 'skip' : d.failed > 0 ? 'fail' : 'pass');
           if (d.failed > 0) {
             outcomes.lastAssertions = window.__gxtCollector.currentTestAssertions.slice(0, 5);
           }
@@ -829,6 +829,11 @@ async function runModule(browser, url, moduleName, opts) {
       const quarantined = failingTests.filter((t) => t.status === 'quarantined').length;
       const hardFailing = failingTests.filter((t) => t.status !== 'quarantined').length;
       const passing = total - hardFailing - quarantined;
+      // QUnit.skip tests: counted in `passing` (they did not fail) and listed
+      // here, so a skip never reads as a silent pass.
+      const skippedTests = allTests
+        .filter((t) => t.outcomes.length > 0 && t.outcomes.every((o) => o === 'skip'))
+        .map((t) => t.name);
       const statsAll = (QUnit.config.stats && QUnit.config.stats.all) || 0;
       const statsBad = (QUnit.config.stats && QUnit.config.stats.bad) || 0;
       return {
@@ -837,6 +842,7 @@ async function runModule(browser, url, moduleName, opts) {
         failing: hardFailing,
         quarantined,
         failingTests,
+        skippedTests,
         assertionsTotal: statsAll,
         assertionsFailing: statsBad,
         runEnd: c.runEnd && {
@@ -1073,6 +1079,7 @@ async function main() {
           assertionsTotal: r.assertionsTotal,
           assertionsPassing: r.assertionsTotal - r.assertionsFailing,
           failingTests: failingTestEntries,
+          ...(r.skippedTests.length ? { skippedTests: r.skippedTests } : {}),
         };
         summary.meta.totalTests += r.total;
         summary.meta.totalAssertions = (summary.meta.totalAssertions || 0) + r.assertionsTotal;
@@ -1098,6 +1105,7 @@ async function main() {
           `[${String(i + 1).padStart(4)}/${modules.length}] ${symbol} ` +
             `${r.passing}/${r.total}` +
             (r.quarantined ? ` (q=${r.quarantined})` : '') +
+            (r.skippedTests.length ? ` (skipped=${r.skippedTests.length})` : '') +
             ` ${secs}s  ${name}\n`
         );
       } else if (r.status === 'timeout') {
@@ -1131,6 +1139,10 @@ async function main() {
     );
     const totalPassing = Object.values(summary.modules).reduce((a, m) => a + m.passing, 0);
     const totalTests = Object.values(summary.modules).reduce((a, m) => a + m.total, 0);
+    const totalSkipped = Object.values(summary.modules).reduce(
+      (a, m) => a + (m.skippedTests ? m.skippedTests.length : 0),
+      0
+    );
 
     const totalAssertions = summary.meta.totalAssertions || 0;
     const totalAssertionsPassing = summary.meta.totalAssertionsPassing || 0;
@@ -1139,6 +1151,7 @@ async function main() {
         `tests: ${totalPassing}/${totalTests}, ` +
         `assertions: ${totalAssertionsPassing}/${totalAssertions} ` +
         `across ${summary.meta.totalModules} module(s)` +
+        (totalSkipped ? `, skipped=${totalSkipped}` : '') +
         (summary.meta.quarantinedTests ? `, quarantined=${summary.meta.quarantinedTests}` : '') +
         (lastRun.timeouts.length ? `, timeouts=${lastRun.timeouts.length}` : '') +
         (lastRun.harnessErrors.length ? `, harness-errors=${lastRun.harnessErrors.length}` : '') +
