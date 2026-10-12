@@ -209,10 +209,9 @@ export interface GxtCompilePipelineCapabilities {
 
   /**
    * Compile a template string into a GXT template factory. Contributed by
-   * compile.ts, which also publishes it as `globalThis.__gxtCompileTemplate`.
-   * Besides Ember's compile options it takes `plugins.ast` (AST plugins, run
-   * in the gxt compiler's transform hook) and `throwOnCompileError` (throw the
-   * compiler's errors instead of logging them).
+   * compile.ts. Besides Ember's compile options it takes `plugins.ast` (AST
+   * plugins, run in the gxt compiler's transform hook) and
+   * `throwOnCompileError` (throw the compiler's errors instead of logging).
    */
   compileTemplate?(templateString: string, options?: unknown): unknown;
 
@@ -397,12 +396,6 @@ export interface GxtCompilePipelineCapabilities {
   subscribeCell?(obj: object, key: string): void;
   /** The raw object behind an `{{#each}}` item proxy, or `undefined`. */
   eachItemRawFor?(maybeProxy: unknown): unknown;
-  /** Turn rehydration mode on or off (rehydration test delegate). */
-  setRehydrationMode?(value: boolean): void;
-  /** The element the rehydration delegate is rendering into, if set. */
-  getInElementRenderTarget?(): unknown;
-  /** Set the target read by `getInElementRenderTarget`. */
-  setInElementRenderTarget?(target: unknown): void;
   /** manager.ts's `$_MANAGERS` table, by reference. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getManagers?(): { component: any; modifier: any; helper: any };

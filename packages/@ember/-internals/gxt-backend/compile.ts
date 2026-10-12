@@ -1626,18 +1626,6 @@ function _afterFlushAfterInsertQueue(): void {
     // We detect self-insertion heuristically: the target is empty AND we
     // are currently inside a render pass. Standard `{{#in-element
     // externalTarget}}` into a non-rendering target is unaffected.
-    // Suppress self-insert when a delegate explicitly tells us the current
-    // render target is *not* the in-element destination. The rehydration
-    // delegate sets __gxtInElementRenderTarget to the element it's
-    // rendering into; if that's not `appendRef`, the `{{#in-element}}` is
-    // targeting an EXTERNAL element and must render there directly —
-    // even if the external element is currently empty and we're inside
-    // an active render pass.
-    const explicitRenderTarget = _gxtInElementRenderTarget;
-    const isExternalTarget =
-      explicitRenderTarget !== undefined &&
-      explicitRenderTarget !== null &&
-      explicitRenderTarget !== appendRef;
     // Self-insert applies in two cases:
     //   (a) appendRef is empty AND we're inside an active render pass —
     //       classic first-render of a self-targeted in-element block. We
@@ -1653,7 +1641,6 @@ function _afterFlushAfterInsertQueue(): void {
     //       our content alongside the surrounding literal siblings.
     const isSelfInsert =
       insertBefore === null &&
-      !isExternalTarget &&
       _gxtIsRendering() &&
       (appendRef.childNodes.length === 0 || __outerRerenderInFlight);
     if (isSelfInsert) {
@@ -2830,7 +2817,7 @@ function registerArrayOwner(array: any, ownerObj: object, ownerKey: string) {
 // call sites. See `installCompilePipelinePart` call at module bottom.
 
 // Pending if-watcher notifications accumulated during __gxtTriggerReRender.
-// Flushed in __gxtSyncDomNow after all cells have been updated atomically.
+// Flushed in _gxtSyncDomNow after all cells have been updated atomically.
 // This prevents IfCondition branch switching during batched property changes
 // (e.g., set(cond2, true); set(cond1, false) in a single runTask), which
 // could create components in branches that will be removed when the outer
@@ -3130,7 +3117,7 @@ function _gxtConsumeTrackedSetSinceRerender(): boolean {
 
 // Monotonic sync-cycle counter.
 //
-//   Writer (intra-file only): `__gxtSyncDomNow` bumps the cycle ID once per
+//   Writer (intra-file only): `_gxtSyncDomNow` bumps the cycle ID once per
 //   sync flush via `_gxtIncrementSyncCycleId()`. This is the only canonical
 //   writer; the counter increases monotonically across the renderer's lifetime.
 //
@@ -3155,7 +3142,7 @@ function _gxtGetSyncCycleId(): number {
   return _gxtSyncCycleId;
 }
 
-// Read-side predicate for the "syncing" flag toggled by `__gxtSyncDomNow` and
+// Read-side predicate for the "syncing" flag toggled by `_gxtSyncDomNow` and
 // the post-render-hook re-entry save-restore in `manager.ts`. Returns `true`
 // iff the current synchronous stack is nested inside the GXT post-`runTask` DOM
 // sync flush. Read by the `@ember/object/core.ts` DEBUG proxy trap's
@@ -3170,12 +3157,12 @@ function _gxtSetSyncing(on: boolean): void {
   _gxtSyncingFlag = on;
 }
 // Save-restore wrapper for the "syncing" flag, taking the new flag value as an
-// argument. The compile.ts `__gxtSyncDomNow` body uses straight-line
+// argument. The compile.ts `_gxtSyncDomNow` body uses straight-line
 // set-true/set-false rather than this wrapper (its try/finally already provides
 // cleanup pairing; no nested caller writes the flag to a different value
 // mid-body). The cross-package `manager.ts` post-render-hook re-entry site uses
 // this helper via the bridge with `value=false` to temporarily clear the flag
-// so the nested `__gxtSyncDomNow` invocation bypasses the re-entrancy guard.
+// so the nested `_gxtSyncDomNow` invocation bypasses the re-entrancy guard.
 function _gxtWithSyncing<T>(value: boolean, fn: () => T): T {
   const wasSyncing = _gxtSyncingFlag;
   _gxtSyncingFlag = value;
@@ -3208,7 +3195,7 @@ function _gxtWithSuppressDirtyInRcSet<T>(fn: () => T): T {
   }
 }
 
-// "Sync is property-driven" flag. Set at the start of `__gxtSyncDomNow`
+// "Sync is property-driven" flag. Set at the start of `_gxtSyncDomNow`
 // (mirroring `_gxtHadPendingSyncFlag` but surviving `__gxtForceEmberRerender`'s
 // finally-block clear) so downstream phases — specifically
 // `__gxtDestroyUnclaimedPoolEntries` in manager.ts — can still tell whether the
@@ -3228,7 +3215,7 @@ function _gxtSetSyncIsPropertyDriven(on: boolean): void {
 
 // "Had pending sync" flag, paired with a 2-method get/set bridge surface
 // (`getHadPendingSync` + `setHadPendingSync`). The flag survives
-// `__gxtSyncDomNow`'s Phase-1 gxtSyncDom call but is cleared by
+// `_gxtSyncDomNow`'s Phase-1 gxtSyncDom call but is cleared by
 // `__gxtForceEmberRerender`'s finally-block (its companion flag
 // `_gxtSyncIsPropertyDrivenFlag` exists precisely because this flag is cleared
 // mid-flush). Intra-`compile.ts` writers/readers use `_gxtSetHadPendingSync` /
@@ -3249,7 +3236,7 @@ function _gxtSetHadPendingSync(on: boolean): void {
 
 // "Had nested object change" flag, paired with a 2-method get/set bridge
 // surface (`getHadNestedObjectChange` + `setHadNestedObjectChange`). The flag
-// survives `__gxtSyncDomNow`'s Phase-1 sync but is cleared by
+// survives `_gxtSyncDomNow`'s Phase-1 sync but is cleared by
 // `_gxtForceEmberRerender`'s finally-block (in renderer.ts) and by the
 // between-test reset block in `compile.ts`. It is set TRUE inside
 // `__gxtTriggerReRender`'s nested-object-change detection (and by the
@@ -3445,7 +3432,7 @@ let _gxtDeferredSyncError: unknown = null;
 // DOM sync (cell.update via GXT's external-schedule hook, a real property change
 // observed by `__gxtTriggerReRender`, force-rerender invalidation, outlet model
 // update, route transition, post-render hook re-entry) and cleared at well-known
-// boundaries: at the start of `__gxtSyncDomNow` (after gating its body), in
+// boundaries: at the start of `_gxtSyncDomNow` (after gating its body), in
 // cross-test teardown, in `__gxtPostRenderHooks` save/restore around
 // `didUpdate`/`didRender` (so hooks can detect their own dirty contributions),
 // in `wrapHandler`'s tail finally (so user-interaction handler property changes
@@ -3473,7 +3460,7 @@ function _gxtSetPendingSync(on: boolean): void {
 // in `glimmer/lib/renderer.ts` (`_backburner` end listener) and
 // `runloop/index.ts` (runloop `onEnd` hook). Set TRUE during the body of
 // `runTask` / `runAppend` (test-helper writers) to tell the runloop `onEnd` and
-// `_backburner` end listeners to SKIP the post-end `__gxtSyncDomNow` flush —
+// `_backburner` end listeners to SKIP the post-end `_gxtSyncDomNow` flush —
 // `runTask` / `runAppend` perform their own explicit sync after the user's task
 // completes. Cleared in the `finally` at the end of each helper. The test-helper
 // writers and the two cross-package readers route through the bridge methods.
@@ -3646,9 +3633,9 @@ function _gxtWithRootContext<T>(ctx: GxtRootContextState | null | undefined, fn:
 // "Pending sync from property change" flag, paired with a 2-method get/set
 // bridge surface (`getPendingSyncFromPropertyChange` +
 // `setPendingSyncFromPropertyChange`). Set TRUE when `__gxtTriggerReRender`
-// observes a real property change (so `__gxtSyncDomNow` can distinguish a
+// observes a real property change (so `_gxtSyncDomNow` can distinguish a
 // property-driven sync from a cell-creation-during-initial-render sync) and
-// cleared at well-known boundaries: at the start of `__gxtSyncDomNow` (after
+// cleared at well-known boundaries: at the start of `_gxtSyncDomNow` (after
 // capturing into `_gxtHadPendingSyncFlag` and `_gxtSyncIsPropertyDrivenFlag`),
 // at the end of every `runTask` / `runAppend` (so the setInterval fallback does
 // not pick up stale sync state for the next test), in the cross-test teardown
@@ -4445,7 +4432,7 @@ type IfWatcherCb = ((notifiedTarget: object) => void) & {
 };
 let ifWatchers = new WeakMap<object, Map<string, Set<IfWatcherCb>>>();
 
-// The pre-flush FALSE-flip block in `__gxtSyncDomNow` stashes the set of cbs
+// The pre-flush FALSE-flip block in `_gxtSyncDomNow` stashes the set of cbs
 // already fired here so the later flush can skip them. Both writer and reader
 // live in the same scheduler tick.
 let _gxtPreFlushFiredFalse: Set<IfWatcherCb> | undefined;
@@ -6826,10 +6813,7 @@ function _resetTemplateOnlyState() {
 // Called after runTask() completes so test assertions see updated DOM.
 //
 // Exposed through the `compilePipeline.syncDomNow` typed-bridge method
-// (registered in `installCompilePipelinePart` at file EOF); the
-// `(globalThis as any).__gxtSyncDomNow` slot is also retained for dual exposure
-// so the test-harness probes and dev scripts that read/wrap the slot keep
-// working.
+// (registered in `installCompilePipelinePart` at file EOF).
 function _gxtSyncDomNow(): void {
   // Re-entrancy guard: prevent infinite sync loops when force-rerender
   // triggers cell updates that schedule additional syncs.
@@ -7344,13 +7328,8 @@ function _gxtSyncDomNow(): void {
   }
 }
 
-// Dual-publish the canonical `_gxtSyncDomNow` on `globalThis` so the harness
-// probes and dev-debug scripts that read/wrap the slot keep working. In-package
-// readers route through `compilePipeline.syncDomNow?.()` via the bridge.
-(globalThis as any).__gxtSyncDomNow = _gxtSyncDomNow;
-
 // Also schedule a fallback setTimeout flush for non-test scenarios
-// where __gxtSyncDomNow isn't called explicitly.
+// where _gxtSyncDomNow isn't called explicitly.
 // Guards:
 // 1. Skip if no pending sync (`_gxtGetPendingSync()`).
 // 2. Skip if __gxtSyncing is stuck true (prevents piling up on a hung sync).
@@ -8512,12 +8491,6 @@ const _gxtGetFwFn = () => _gxtCurrentFw;
 // .__gxtScope_<hash>` keys. Same late-binding semantics: each compile
 // overwrites its storeKey entry, and compiled bodies read through the
 // injected `__gxtGetScope` accessor parameter PER INVOCATION.
-// Rehydration-mode flag + explicit in-element render target — written by the
-// rehydration test delegate through the compilePipeline setters (the retired
-// `__gxtRehydrationMode` / `__gxtInElementRenderTarget` globals).
-let _gxtRehydrationMode = false;
-let _gxtInElementRenderTarget: unknown;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _gxtScopeStore = new Map<string, any>();
 const _gxtGetScopeFn = (key: string) => _gxtScopeStore.get(key);
@@ -12007,34 +11980,13 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
           }
           // HTML boolean attributes: only when the SOURCE is a literal `true`
           // (static `<option selected>`) do we write the bare form. Dynamic
-          // bindings (`selected={{this.x}}`) keep `String(value)` so tests
-          // that compare against `selected="true"` still match — this mirrors
-          // how classic Glimmer serializes DYNAMIC boolean-true attribute
-          // bindings under rehydration mode.
+          // bindings (`selected={{this.x}}`) keep `String(value)`.
           const isLiteralTrueBoolean = value === true;
           const isBoolAttr = typeof key === 'string' && _HTML_BOOLEAN_ATTRS.has(key.toLowerCase());
-          const inRehydration = _gxtRehydrationMode === true;
-          const isDynamicBinding = typeof value === 'function';
           let serialized: string;
           if (isLiteralTrueBoolean && isBoolAttr) {
             // Static `<option selected>` → bare attribute.
             serialized = '';
-          } else if (
-            inRehydration &&
-            isBoolAttr &&
-            isDynamicBinding &&
-            resolved !== null &&
-            resolved !== undefined &&
-            resolved !== false
-          ) {
-            // Rehydration-mode DYNAMIC boolean attribute binding: classic
-            // Glimmer-VM serializes any truthy value as the literal "true"
-            // so `selected={{true}}` and `selected={{'is-true'}}` both
-            // produce `selected="true"` in the rehydration SSR output.
-            // Only applies to dynamic (function-valued) bindings — static
-            // string literals like `<input checked='checked'>` preserve the
-            // original string.
-            serialized = 'true';
           } else {
             serialized = String(resolved);
           }
@@ -12047,17 +11999,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
           // Set up a reactive effect for dynamic values so the attribute
           // updates on cell changes. Only when the source value is a
           // function — static strings don't need re-tracking.
-          //
-          // NOTE: in rehydration mode, dynamic boolean attribute bindings are
-          // FROZEN to the server-rendered value. Classic Glimmer-VM's SSR
-          // builder emits `selected="true"` as a literal in the server HTML
-          // and the rehydration phase preserves that attribute even when the
-          // underlying DOM property flips (e.g. `element.selected = false`).
-          // Matching that semantic here: skip the reactive effect entirely
-          // for boolean HTML attrs under rehydration mode so the attribute
-          // we just set stays pinned across rerenders.
-          const isBoolAttrInRehydration = inRehydration && isBoolAttr;
-          if (typeof value === 'function' && !isBoolAttrInRehydration) {
+          if (typeof value === 'function') {
             try {
               gxtEffect(() => {
                 const v = value();
@@ -12443,13 +12385,6 @@ function _gxtNativeTemplateEligible(
 ): boolean {
   if (!cr || typeof cr.templateFn !== 'function') return false;
   if (cr.errors && cr.errors.length > 0) return false;
-  // REHYDRATION stays legacy (the P4 design's SSR exclusion): the rehydration
-  // delegate sets the mode BEFORE compiling, so this is compile-time-visible.
-  // Gate-proven: when the `].join("")` blocker retirement let rehydration
-  // templates slip into the native population, all 26 null/undefined-attribute
-  // rehydration tests regressed (native $attr writes vs the legacy wrapper's
-  // claim-vs-write rehydration handling).
-  if (_gxtRehydrationMode) return false;
   // Increment 2: NON-STRICT scoped templates are eligible when their
   // scopeValues were threaded into gxtCompileTemplate as native Function
   // params (all keys plain identifiers — see _gxtScopeValuesNativeSafe) AND no
@@ -13026,7 +12961,8 @@ export function precompileTemplate(
       //     the flag on, 14 rehydration tests regress ("top-level unescaped tr/td
       //     inside tr contextualElement"). $_html's create+insert range conflicts
       //     with rehydration's claim-vs-write model for trusted table/select
-      //     content (rehydration is a deliberate legacy-path exclusion elsewhere).
+      //     content (measured with the earlier rehydration test delegate, which
+      //     kept rehydration templates on the legacy path).
       // NET: LOW VALUE right now — `EmberHtmlRaw` must stay REGARDLESS (it backs
       // HTML-comment preservation via gxtHtmlCommentTransform AND, per gap 4,
       // rehydration), so enabling the flag deletes only the content-triple
@@ -13106,7 +13042,7 @@ export function precompileTemplate(
     // the `$_each(` -> `$_eachSync(` belt regex that used to live here was
     // retired after verifying flag emission is byte-identical to the regex
     // output with the flags actually applying (the duplicate-flags-key bug
-    // fixed). WHY sync: classic Ember's synchronous __gxtSyncDomNow/morph
+    // fixed). WHY sync: classic Ember's synchronous _gxtSyncDomNow/morph
     // flush requires the row DOM mutated before the flush inspects it; async
     // AsyncListComponent applies on a microtask and destroys keyed-row DOM
     // identity. Async element destructors (the reason gxt defaults to async)
@@ -15106,22 +15042,9 @@ export const __emberTemplateCompiler = {
   },
 };
 
-// Register the GXT compiler globally for @ember/template-compiler to use.
-// Also exposed via the gxt-bridge as `compilePipeline.compileTemplate`. The
-// globalThis writer is retained alongside the bridge install because
-// `@glimmer-workspace/integration-tests/.../gxt-delegate.ts` reads this hook via
-// globalThis and cannot depend on `@ember/-internals`.
-(globalThis as any).__gxtCompileTemplate = compileTemplate;
-
-// Phase 4.1 SSR consumer plumbing (RFC §7.1.1 step 2). Dual-published alongside
-// the bridge entry above so an out-of-package SSR driver (or a harness probe) that
-// cannot import `@ember/-internals/gxt-backend/compile` can reach the per-root
-// runner via globalThis — exactly as `gxt-delegate.ts` reads `__gxtCompileTemplate`.
-
 // Deliberate external surface (see the `withRootContext` pipeline-member doc):
 // an out-of-package FastBoot/SSR driver that cannot import `@ember/-internals`
-// reaches the per-request root-context runner through this global, mirroring
-// `__gxtCompileTemplate`.
+// reaches the per-request root-context runner through this global.
 (globalThis as any).__gxtWithRootContext = _gxtWithRootContext;
 
 // Contribute compile.ts-owned function references to the bridge's
@@ -15232,7 +15155,7 @@ installCompilePipelinePart({
   // Save-restore wrapper for the "syncing" flag, taking the new value as an
   // argument. The cross-package `manager.ts` post-render-hook re-entry calls it
   // with `value=false` to bypass the re-entrancy guard on the nested
-  // `__gxtSyncDomNow` invocation.
+  // `_gxtSyncDomNow` invocation.
   withSyncing: _gxtWithSyncing,
   // Save-restore wrapper + read predicate for the "currently rendering" flag
   // (distinct from the render-pass depth counter). The writer is manager.ts's
@@ -15245,7 +15168,7 @@ installCompilePipelinePart({
   markTrackedSetSinceRerender: _gxtMarkTrackedSetSinceRerender,
   consumeTrackedSetSinceRerender: _gxtConsumeTrackedSetSinceRerender,
   // Read-only accessor for the monotonic sync-cycle counter (incremented once
-  // per `__gxtSyncDomNow` flush by the intra-file `_gxtIncrementSyncCycleId`).
+  // per `_gxtSyncDomNow` flush by the intra-file `_gxtIncrementSyncCycleId`).
   getSyncCycleId: _gxtGetSyncCycleId,
   // Read predicate for the "sync is property-driven" flag, read by manager.ts's
   // `__gxtDestroyUnclaimedPoolEntries` destroy-error capture gate.
@@ -15275,13 +15198,6 @@ installCompilePipelinePart({
   getBuiltinHelpers: () => _emberBuiltinHelpers,
   subscribeCell: _gxtSubscribeCellFn,
   eachItemRawFor: _gxtEachItemRawFor,
-  setRehydrationMode: (value) => {
-    _gxtRehydrationMode = value;
-  },
-  getInElementRenderTarget: () => _gxtInElementRenderTarget,
-  setInElementRenderTarget: (target) => {
-    _gxtInElementRenderTarget = target;
-  },
   // Paired get/set for the "run task active" flag, written by the test helpers
   // and read together with the pending-sync flag in the `_backburner` end gate
   // (renderer.ts) and the runloop `onEnd` hook.
@@ -15379,8 +15295,8 @@ installCompilePipelinePart({
   // Phase 4.1 SSR consumer plumbing (RFC §7.1.1 step 2): synchronous per-root
   // save/swap/restore runner. ADDITIVE — no browser-path caller; dormant until a
   // FastBoot/SSR driver wraps each request in `withRootContext(freshCtx, () => …)`.
-  // Also dual-published on `globalThis.__gxtWithRootContext` (mirroring
-  // `__gxtCompileTemplate`) so an out-of-package SSR driver that cannot import
+  // Also dual-published on `globalThis.__gxtWithRootContext` so an
+  // out-of-package SSR driver that cannot import
   // `@ember/-internals` can still reach it — a DELIBERATE external surface,
   // kept alongside the debug toggles in the globalThis-retirement audit.
   withRootContext: _gxtWithRootContext,
@@ -15392,9 +15308,7 @@ installCompilePipelinePart({
   getComponentContextsMap: _getOrCreateGxtComponentContexts,
   // The canonical sync-pipeline flush function. Cross-file readers route through
   // `getGxtRenderer()?.compilePipeline.syncDomNow?.()`; the intra-file 16ms
-  // setInterval calls the module-local `_gxtSyncDomNow` directly. The
-  // `(globalThis as any).__gxtSyncDomNow` slot is also dual-published for the
-  // harness probes and dev-debug scripts that read/wrap it.
+  // setInterval calls the module-local `_gxtSyncDomNow` directly.
   syncDomNow: _gxtSyncDomNow,
   // manager.ts and ember-gxt-wrappers.ts cannot import glimmer/lib/helper.ts
   // or the template-only module (both import the manager shim), so they read
