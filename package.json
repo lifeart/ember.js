@@ -129,7 +129,6 @@
     "kill-port-process": "^3.2.1",
     "mitata": "^1.0.34",
     "mocha": "^11.0.0",
-    "node-gzip": "^1.1.2",
     "npm-run-all2": "^8.0.0",
     "playwright": "^1.59.1",
     "prettier": "^3.5.3",
@@ -153,7 +152,6 @@
   },
   "pnpm": {
     "overrides": {
-      "socket.io": "^4.7.0",
       "rollup": "^4.2.0",
       "ember-cli-htmlbars": "^7.0.0",
       "babel-plugin-ember-template-compilation": "^4.0.0",

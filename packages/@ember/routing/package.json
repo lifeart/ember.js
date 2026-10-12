@@ -38,7 +38,6 @@
     "dag-map": "^2.0.2",
     "expect-type": "^0.15.0",
     "internal-test-helpers": "workspace:*",
-    "router_js": "workspace:*",
-    "@lifeart/gxt": "0.0.82"
+    "router_js": "workspace:*"
   }
 }
