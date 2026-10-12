@@ -1730,23 +1730,16 @@ if (ENV._DEBUG_RENDER_TREE && !__GXT_MODE__) {
 // (its outlet/engine/route-template node structure is produced by the Glimmer
 // VM's DebugRenderTree, which is purged from the GXT build). Under GXT,
 // `renderer.debugRenderTree` is instead backed by `@lifeart/gxt`'s
-// `captureRenderTree` (0.0.79) — see the `debugRenderTree` getter in
-// renderer.ts. This exercises that wiring end-to-end.
+// `captureRenderTree` — see the `debugRenderTree` getter in renderer.ts. This
+// exercises that wiring end-to-end.
 //
-// SEAM STATUS: the shape seam is verified identical — gxt returns
-// `CapturedRenderNode[]` nodes `{ id, type:'component', name, args:{positional,
-// named}, instance, bounds:{parentElement,firstNode,lastNode}|null, children }`
-// (plus a harmless extra `template:null`), matching @glimmer/interfaces exactly.
-// gxt >=0.0.80 (glimmer-next #262) added the cycle/visited guard to
-// `componentToRenderTree` that the earlier foundation commit was blocked on
-// (0.0.79's walk overflowed on the bridged graph's `prevComponent` sibling
-// back-edge), so `.capture()` now returns the REAL, well-formed tree. This test
-// asserts (1) the getter is wired (no throw) and (2) `.capture()` returns a
-// non-trivial tree whose every node conforms to the `CapturedRenderNode` shape.
-// NOTE (gxt-side polish, not a foundation blocker): gxt currently reports each
-// node's `name` as its (minified) runtime class name and leaves `bounds` null —
-// so this test does NOT assert on friendly names or non-null bounds. Those are
-// follow-on gxt improvements for full Inspector element-highlighting.
+// gxt returns `CapturedRenderNode[]` nodes `{ id, type:'component', name,
+// args:{positional, named}, instance, bounds:{parentElement,firstNode,lastNode}|null,
+// children }` (plus an extra `template:null`), matching @glimmer/interfaces.
+// This test asserts (1) the getter is wired (no throw) and (2) `.capture()`
+// returns a non-trivial tree whose every node conforms to the
+// `CapturedRenderNode` shape. gxt reports each node's `name` as its runtime
+// class name and leaves `bounds` null, so names and bounds are not asserted.
 if (ENV._DEBUG_RENDER_TREE && __GXT_MODE__) {
   moduleFor(
     'Application test: GXT debug render tree (captureRenderTree)',
@@ -1777,7 +1770,7 @@ if (ENV._DEBUG_RENDER_TREE && __GXT_MODE__) {
           'debugRenderTree exposes a capture() method'
         );
 
-        // 2. capture() returns a real, well-formed tree (gxt >=0.0.80 cycle guard).
+        // 2. capture() returns a real, well-formed tree.
         //    `@ember/debug`'s captureRenderTree(owner) delegates to this path.
         const tree = captureRenderTree(this.applicationInstance!);
         assert.ok(Array.isArray(tree), 'captureRenderTree returns an array (no overflow)');

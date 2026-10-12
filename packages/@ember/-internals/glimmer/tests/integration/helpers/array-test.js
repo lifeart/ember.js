@@ -336,9 +336,8 @@ moduleFor(
     // (createComputeRef in @glimmer/runtime/lib/helpers/array.ts): stable
     // identity across an unchanged re-render, fresh only on a real input change.
     //
-    // GXT CONVERGENT BEHAVIOR (pinned below, @lifeart/gxt 0.0.69 — `cachedHelper`
-    // memoization, glimmer-next PR #233/#234): GXT now memoizes the (array)
-    // identity to match the classic contract — stable across reads and unrelated
+    // GXT BEHAVIOR (pinned below; gxt's `cachedHelper` memoization): GXT
+    // memoizes the (array) identity to match the classic contract — stable across reads and unrelated
     // re-renders, and a FRESH identity only when an element actually changes.
     // Unlike (hash) (whose members are live getters, so its identity is
     // value-stable), (array) eagerly snapshots its elements, so a real element

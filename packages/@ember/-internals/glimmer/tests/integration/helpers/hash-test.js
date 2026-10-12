@@ -255,17 +255,16 @@ moduleFor(
     // so a child that `===`-compares the arg (or whose manager tag-compares it)
     // does NOT spuriously fire `didUpdateAttrs`.
     //
-    // GXT CONVERGENT BEHAVIOR (pinned below, @lifeart/gxt 0.0.69 — `cachedHelper`
-    // memoization, glimmer-next PR #233/#234): GXT now MEMOIZES the (hash)
-    // identity:
+    // GXT BEHAVIOR (pinned below; gxt's `cachedHelper` memoization): GXT
+    // MEMOIZES the (hash) identity:
     //   1. Consecutive reads of the same (hash) arg return the SAME object — the
     //      over-fetching "fresh object per read" divergence is gone.
     //   2. A (hash)'s members are live getters and the identity is value-stable,
     //      so the curly component's `didUpdateAttrs` does NOT fire on an unrelated
-    //      re-render or a forced no-op `rerender()` — the over-invalidation the
-    //      RFC flagged is fixed. The child still reflects a real member change
-    //      because the member is tracked fine-grained (the consuming text/each
-    //      re-pulls the live value), NOT via an arg-identity swap.
+    //      re-render or a forced no-op `rerender()`. The child still reflects a
+    //      real member change because the member is tracked fine-grained (the
+    //      consuming text/each re-pulls the live value), NOT via an arg-identity
+    //      swap.
     //
     // Guarded to GXT (the classic backend already satisfies the stable-identity
     // contract by construction).

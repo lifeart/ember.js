@@ -100,11 +100,10 @@
       // during module initialization (before compile.ts sets it)
       globalThis.__GXT_MODE__ = true;
 
-      // R6 (census-shave, EXPERIMENTAL): skip the nested each-body proxy wrap
-      // for self-reactive wrapper instances (e.g. RFC#1071 cells) whose reads
-      // entangle their OWN native reactivity, so the wrap's per-prop cell is
-      // dead weight. Default ON so the --full gate exercises it; set false to
-      // revert. See `_isSelfReactiveWrapper` in compile.ts.
+      // Skip the nested each-body proxy wrap for self-reactive wrapper
+      // instances (e.g. RFC#1071 cells) whose reads entangle their own native
+      // reactivity. Only this test page sets the flag; see
+      // `_isSelfReactiveWrapper` in compile.ts.
       if (typeof globalThis.__gxtR6SkipSelfReactive === 'undefined') {
         globalThis.__gxtR6SkipSelfReactive = true;
       }
