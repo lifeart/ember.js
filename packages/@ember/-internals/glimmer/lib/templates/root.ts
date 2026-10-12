@@ -28,10 +28,7 @@ let gxtDomApi: any = null;
 // own closure + parentElement and don't clobber each other. Keyed by
 // `instance.outletRef` (each visit creates a fresh one); the root-outlet
 // rerender dispatcher looks up the closure for the incoming outletRef.
-const _gxtRootOutletRerenderMap = new Map<
-  any,
-  (ref: any, forceFull?: boolean, cellOnlyKey?: string) => void
->();
+const _gxtRootOutletRerenderMap = new Map<any, (ref: any, cellOnlyKey?: string) => void>();
 
 // Maps each controller bound to a rendered outlet to that outlet's
 // `outletRef`, so a controller property write can find the outlet and run its
@@ -71,14 +68,13 @@ if (__GXT_MODE__) {
     //   changed key is forwarded so the fast path can refresh that key's
     //   renderContext cell directly.
     // - interior model mutation (`set(model, 'color', 'blue')`, keyName
-    //   undefined): handled by the cell-only path's `modelInteriorChanged`
-    //   detection + leaf-owner re-registration.
-    const _cellOnly = true;
+    //   undefined): the interior leaf cell was already dirtied by the `set()`,
+    //   and the cell-only path's `syncDomNow()` flushes it.
     _gxtInControllerRerender = true;
     try {
       // Cell-only fast path; the changed key is forwarded so its renderContext
       // cell is refreshed before syncDomNow().
-      rerender(outletRef, /* forceFull */ !_cellOnly, keyName);
+      rerender(outletRef, keyName);
     } catch (e) {
       // Surface via warn rather than swallowing. Rerender failures shouldn't
       // break the set() that triggered them; the next legitimate
@@ -869,12 +865,6 @@ function createRootTemplate(_owner: any) {
       // detect "outlet model hasn't changed" and avoid clobbering fresher
       // values set by the controller's tracked-property propagation.
       lastPropagatedModel = model;
-      try {
-        _lastModelSnapshot =
-          model != null && typeof model === 'object' ? JSON.stringify(model) : undefined;
-      } catch {
-        _lastModelSnapshot = undefined;
-      }
       // Remember the template that was actually rendered so the re-render
       // fast-path (same route name) can detect template-identity changes.
       // Needed for `@ember/test-helpers` emulation tests that call
@@ -906,11 +896,6 @@ function createRootTemplate(_owner: any) {
     // Overwriting the ctx cell back to the stale model in that case clobbers
     // the fresh value and the template renders the old value.
     let lastPropagatedModel: any = undefined;
-    // Snapshot of the last propagated model's shallow shape (JSON.stringify).
-    // Used to detect "same reference but interior shape changed" cases like
-    // `set(model, 'color', 'blue')`, which mutate in place without changing
-    // the cell value's identity.
-    let _lastModelSnapshot: string | undefined = undefined;
     // Identity of the template that was last rendered for the current route.
     // Used by the re-render fast-path to detect a template swap (the same
     // route name but a freshly `compile()`d template, as used by
@@ -954,11 +939,7 @@ function createRootTemplate(_owner: any) {
     // (Ember Islands) each get their own closure + parentElement and don't
     // clobber each other. The root-outlet rerender dispatcher registered
     // below looks up the closure by the outletRef it is passed.
-    const rerenderForThisRoot = (
-      outletRef: any,
-      forceFull: boolean = false,
-      cellOnlyKey?: string
-    ) => {
+    const rerenderForThisRoot = (outletRef: any, cellOnlyKey?: string) => {
       let mainOutlet = outletRef?.outlets?.main;
 
       // When the main outlet is a -outlet template, look at the nested route
@@ -1014,30 +995,7 @@ function createRootTemplate(_owner: any) {
       // If same route template AND nested outlets haven't changed, update
       // existing cells in place to preserve DOM node identity (model swaps and
       // interior model mutations included, see below).
-      const modelGenuinelyChanged =
-        lastPropagatedModel !== undefined && newModel !== lastPropagatedModel;
-      // Also detect interior model mutations: same object reference, but the
-      // shape has changed (e.g., `set(model, 'color', 'blue')` mutated the
-      // existing model in place). A shallow JSON snapshot of the model is
-      // compared to detect them.
-      let modelInteriorChanged = false;
-      try {
-        if (
-          !modelGenuinelyChanged &&
-          newModel != null &&
-          typeof newModel === 'object' &&
-          lastPropagatedModel === newModel
-        ) {
-          const _snap = JSON.stringify(newModel);
-          if (_lastModelSnapshot !== undefined && _snap !== _lastModelSnapshot) {
-            modelInteriorChanged = true;
-          }
-          _lastModelSnapshot = _snap;
-        }
-      } catch {
-        /* ignore JSON.stringify errors (circular, etc.) — fall back to
-           cell-only path for that rerender */
-      }
+      //
       // A route-MODEL identity swap on the SAME route+template (e.g.
       // `/page/:name` first→second, or `transitionTo` with a fresh model
       // object) is handled by the cell-only fast path — updating the `@model`
@@ -1055,12 +1013,7 @@ function createRootTemplate(_owner: any) {
       // already dirtied by the `set()` that triggered this rerender, so the
       // cell-only fast path's `syncDomNow()` flushes the subscribed text effect
       // in place.
-      const _fineGrainedModelSwapCellPath = modelGenuinelyChanged;
-      const _fineGrainedModelInteriorCellPath = modelInteriorChanged;
       if (
-        !forceFull &&
-        (!modelGenuinelyChanged || _fineGrainedModelSwapCellPath) &&
-        (!modelInteriorChanged || _fineGrainedModelInteriorCellPath) &&
         lastRenderContext &&
         lastArgsObj &&
         newRouteName &&
@@ -1109,14 +1062,6 @@ function createRootTemplate(_owner: any) {
             }
             if (!isPhantomRerender) {
               lastPropagatedModel = newModel;
-              try {
-                _lastModelSnapshot =
-                  newModel != null && typeof newModel === 'object'
-                    ? JSON.stringify(newModel)
-                    : undefined;
-              } catch {
-                _lastModelSnapshot = undefined;
-              }
             }
             // For a non-model controller-property write (QP key, etc.) the
             // changed key's renderContext cell was already dirtied by
@@ -1176,9 +1121,7 @@ function createRootTemplate(_owner: any) {
       }
 
       // The text-only model-swap / interior-mutation cases take the cell-only
-      // fast path above (model swap → `_fineGrainedModelSwapCellPath`; interior
-      // mutation → `_fineGrainedModelInteriorCellPath`), preserving text-node
-      // identity in place. Any full re-render reaching here is a genuine route
+      // fast path above, preserving text-node identity in place. Any full re-render reaching here is a genuine route
       // / template / nested-outlet TRANSITION where node identity is not
       // preserved by design — clear + renderOutletState is correct.
       parentElement.innerHTML = '';

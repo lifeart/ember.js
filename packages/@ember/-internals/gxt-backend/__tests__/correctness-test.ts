@@ -3,8 +3,10 @@
  * classic Ember. The test page loads this file only in GXT builds
  * (`virtual:gxt-tests`).
  */
-import { moduleFor, RenderingTestCase } from 'internal-test-helpers';
+import { moduleFor, RenderingTestCase, ApplicationTestCase } from 'internal-test-helpers';
 import ObjectProxy from '@ember/object/proxy';
+import Route from '@ember/routing/route';
+import { precompileTemplate } from '@ember/template-compilation';
 import { VERSION } from '@ember/version';
 import * as templateCompiler from 'ember-template-compiler';
 import { CustomComponentManager, componentCapabilities } from '../manager';
@@ -92,6 +94,36 @@ moduleFor(
         full: ObjectProxy.create({ content: {} }),
       });
       this.assertText('no|yes');
+    }
+  }
+);
+
+moduleFor(
+  'GXT correctness: route models',
+  class extends ApplicationTestCase {
+    async ['@test rendering a route does not serialize its model'](assert: any) {
+      let serialized = 0;
+      const model = {
+        name: 'Tomster',
+        toJSON() {
+          serialized++;
+          return {};
+        },
+      };
+      this.add(
+        'route:application',
+        class extends Route {
+          model() {
+            return model;
+          }
+        }
+      );
+      this.add('template:application', precompileTemplate('{{@model.name}}'));
+
+      await this.visit('/');
+
+      this.assertText('Tomster');
+      assert.strictEqual(serialized, 0, 'the model was never passed to JSON.stringify');
     }
   }
 );
