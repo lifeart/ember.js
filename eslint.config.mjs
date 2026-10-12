@@ -310,19 +310,6 @@ export default [
     },
   },
   {
-    // GXT integration scaffolding in core glimmer files: debug logging gated
-    // behind DEBUG_TEMPLATE_LOOKUP / similar runtime flags.
-    files: [
-      'packages/@ember/-internals/glimmer/lib/templates/**/*.ts',
-      'packages/@ember/-internals/glimmer/lib/renderer.ts',
-      'packages/@ember/-internals/glimmer/lib/component-managers/unwrap-template.ts',
-    ],
-    rules: {
-      'no-console': 'off',
-      'no-implicit-coercion': 'off',
-    },
-  },
-  {
     files: ['tests/node-blueprints/**/*.js'],
 
     languageOptions: {

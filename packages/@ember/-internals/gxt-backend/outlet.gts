@@ -1,5 +1,4 @@
 import { Component, createRoot, setParentContext, getParentContext } from '@lifeart/gxt';
-// (Cluster B slice 6) Bridge reader for `registerObjectValueOwner`.
 import {
   getGxtRenderer,
   getCurrentOutletState,
@@ -14,7 +13,7 @@ import {
  *
  * GXT compiles {{outlet}} (transformed to <ember-outlet />) as $_tag("ember-outlet", ...),
  * which creates this custom element. The element then renders the nested route template
- * by reading from the outlet state stored in globalThis.__currentOutletState.
+ * by reading the current outlet state from the gxt-bridge.
  *
  * This approach bridges GXT's compilation model with Ember's routing/outlet system.
  */
@@ -29,10 +28,6 @@ class EmberOutletElement extends HTMLElement {
   connectedCallback() {
     // Get outlet state from the global context
     this._outletState = getCurrentOutletState();
-
-    if ((globalThis as any).__DEBUG_GXT_RENDER) {
-      console.log('[ember-outlet] connectedCallback, outletState:', this._outletState ? 'exists' : 'null');
-    }
 
     // Register this outlet element for state change notifications
     getActiveOutletElements().add(this);
@@ -98,28 +93,18 @@ class EmberOutletElement extends HTMLElement {
 
     const outletState = this._outletState;
     if (!outletState) {
-      if ((globalThis as any).__DEBUG_GXT_RENDER) {
-        console.log('[ember-outlet] No outlet state available');
-      }
       return;
     }
 
     // Get the nested outlet (outlets.main)
     const nestedOutlet = outletState?.outlets?.main;
     if (!nestedOutlet?.render?.template) {
-      if ((globalThis as any).__DEBUG_GXT_RENDER) {
-        console.log('[ember-outlet] No nested template to render');
-      }
       return;
     }
 
     // Use 'tpl' instead of 'template' to avoid GXT's CallExpression transform
     // GXT's Babel plugin treats any function named 'template' as an Ember template function
     const { template: tpl, controller, model, owner } = nestedOutlet.render;
-
-    if ((globalThis as any).__DEBUG_GXT_RENDER) {
-      console.log('[ember-outlet] Rendering nested template:', tpl?.moduleName || typeof tpl);
-    }
 
     // Build the args object with proper GXT symbols so @model, @controller work
     const $ARGS_KEY = Symbol.for('gxt-args');
@@ -159,10 +144,8 @@ class EmberOutletElement extends HTMLElement {
       // GXT's internal tree requires a parent context; without this,
       // rendering inside the outlet fails with "Cannot read properties
       // of undefined (reading 'Symbol()')" because te() returns undefined.
-      // Use the shared root context (same as runtime-hbs uses).
-      // Slice-119 (Cluster B): canonical state lives in compile.ts as the
-      // module-local `_gxtRootContext`. Read/write via the
-      // `compilePipeline.getRootContext` / `setRootContext` bridge.
+      // Use the shared root context (owned by compile.ts, read/written via the
+      // `compilePipeline.getRootContext` / `setRootContext` bridge).
       const savedParent = getParentContext();
       const _cp119 = getGxtRenderer()?.compilePipeline;
       let gxtRoot = _cp119?.getRootContext?.();
@@ -175,10 +158,9 @@ class EmberOutletElement extends HTMLElement {
       // Install GXT cells on the context so property reads inside formulas
       // are tracked. Without this, set(model, 'color', 'blue') won't trigger
       // re-renders because the formula never tracked cell(context, 'model').
-      // Use the global cellFor to ensure we use the SAME module instance as
-      // compile.ts (which handles __gxtTriggerReRender).
+      // Use the bridge's cellFor so the cells come from the same module
+      // instance as compile.ts (which handles re-render triggers).
       const _cellFor = getGxtRenderer()?.compilePipeline.cellFor;
-      // (Cluster B slice 6) Bridge reader for registerObjectValueOwner.
       const registerOwner = getGxtRenderer()?.compilePipeline.registerObjectValueOwner;
       if (_cellFor) {
         try {
@@ -286,8 +268,7 @@ class EmberMountElement extends HTMLElement {
     this._rendered = false;
     // During force-rerender elements are removed and recreated; don't destroy
     // the engine instance — it will be reused via the shared engine cache
-    // (slice 90: `compilePipeline.getEngineInstances()`).
-    // Slice-112 (Cluster B): routed through `compilePipeline.isForceRerender?.() ?? false`.
+    // (`compilePipeline.getEngineInstances()`).
     if (!(getGxtRenderer()?.compilePipeline.isForceRerender?.() ?? false)) {
       if (this._engineInstance && typeof this._engineInstance.destroy === 'function') {
         try { this._engineInstance.destroy(); } catch { /* ignore */ }
@@ -309,13 +290,8 @@ class EmberMountElement extends HTMLElement {
 
     // Use a shared cache to prevent duplicate engine instances when the
     // application template is re-rendered (which creates new <ember-mount> elements).
-    // Cluster B slice 90: graduated from the pre-slice-90
-    // `globalThis.__gxtEngineInstances` slot to the module-local
-    // `_gxtEngineInstances` Map in `compile.ts`, accessed through the typed
-    // bridge `compilePipeline.getEngineInstances()`. The optional-chain short-
-    // circuits to `undefined` for classic-Ember builds (where gxt-backend is
-    // never loaded and `<ember-mount>` is never constructed); the body bails
-    // early in that case. See `getEngineInstances` doc in gxt-bridge.ts.
+    // The cache is compile.ts's `_gxtEngineInstances` Map, reached through
+    // `compilePipeline.getEngineInstances()`; without the bridge, bail out.
     const engineCache = getGxtRenderer()?.compilePipeline.getEngineInstances?.();
     if (!engineCache) return;
 
@@ -349,9 +325,6 @@ class EmberMountElement extends HTMLElement {
         // Look up the engine class from the application
         const engineFactory = owner.factoryFor?.(`engine:${engineName}`);
         if (!engineFactory) {
-          if ((globalThis as any).__DEBUG_GXT_RENDER) {
-            console.warn(`[ember-mount] Engine "${engineName}" not found in container`);
-          }
           return;
         }
 
@@ -394,9 +367,6 @@ class EmberMountElement extends HTMLElement {
       }
 
       if (!tpl) {
-        if ((globalThis as any).__DEBUG_GXT_RENDER) {
-          console.warn(`[ember-mount] Engine "${engineName}" has no application template`);
-        }
         return;
       }
 
@@ -415,10 +385,8 @@ class EmberMountElement extends HTMLElement {
       const previousOwner = getAmbientOwner();
       setAmbientOwner(engineInstance);
 
-      // Set up GXT rendering context
-      // Slice-119 (Cluster B): canonical state lives in compile.ts as the
-      // module-local `_gxtRootContext`. Read/write via the
-      // `compilePipeline.getRootContext` / `setRootContext` bridge.
+      // Set up GXT rendering context (the shared root context, owned by
+      // compile.ts and read/written via the compilePipeline bridge).
       const savedParent = getParentContext();
       const _cp119 = getGxtRenderer()?.compilePipeline;
       let gxtRoot = _cp119?.getRootContext?.();
@@ -454,8 +422,6 @@ class EmberMountElement extends HTMLElement {
       const capture = getGxtRenderer()?.compilePipeline.captureRenderError;
       if (typeof capture === 'function') {
         capture(e);
-      } else if ((globalThis as any).__DEBUG_GXT_RENDER) {
-        console.warn(`[ember-mount] Engine render failed:`, e?.message);
       }
     }
   }

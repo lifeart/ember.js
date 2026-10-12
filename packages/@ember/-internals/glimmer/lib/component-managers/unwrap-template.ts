@@ -69,6 +69,7 @@ function createFallbackCompilableProgram(template: any, moduleName: string): Com
     },
     compile(_context: any) {
       // Return 0 which will fail but with a clearer error
+      // eslint-disable-next-line no-console
       console.warn(
         `Template "${moduleName}" was not properly compiled. This may be a build configuration issue.`
       );

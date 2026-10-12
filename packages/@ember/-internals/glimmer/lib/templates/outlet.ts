@@ -18,7 +18,6 @@ import {
 // Classic-build template compiler (build-time macro in classic pipelines; the
 // GXT-aliased shim in GXT mode, where the call site below is dead-branched).
 import { precompileTemplate } from '@ember/template-compilation';
-import { DEBUG } from '@glimmer/env';
 import { outletHelper } from '../syntax/outlet';
 
 // SSR/Node-safety: a module-scope `class ... extends HTMLElement` evaluates
@@ -54,13 +53,6 @@ if (__GXT_MODE__) {
 
             // Get the current outlet state from the bridge
             this._outletState = getCurrentOutletState();
-
-            if (DEBUG && (globalThis as any).__DEBUG_GXT_RENDER) {
-              console.log(
-                '[ember-outlet] connectedCallback, outletState:',
-                this._outletState ? 'exists' : 'null'
-              );
-            }
 
             this.renderOutlet();
 
@@ -105,17 +97,6 @@ if (__GXT_MODE__) {
             const leafOutlet = nestedOutlet?.outlets?.main;
             const newTemplate = leafOutlet?.render?.template ?? nestedOutlet?.render?.template;
 
-            if (DEBUG && (globalThis as any).__DEBUG_GXT_RENDER) {
-              console.log(
-                '[ember-outlet] updateOutletState: newTemplate=',
-                newTemplate?.moduleName || typeof newTemplate,
-                'lastRendered=',
-                this._lastRenderedTemplate?.moduleName || typeof this._lastRenderedTemplate,
-                'changed=',
-                newTemplate !== this._lastRenderedTemplate
-              );
-            }
-
             if (newTemplate !== this._lastRenderedTemplate) {
               // Schedule re-render outside of the backburner run loop to avoid
               // infinite synchronous loops. GXT template rendering during backburner's
@@ -144,18 +125,12 @@ if (__GXT_MODE__) {
 
             const outletState = this._outletState;
             if (!outletState) {
-              if (DEBUG && (globalThis as any).__DEBUG_GXT_RENDER) {
-                console.log('[ember-outlet] No outlet state available');
-              }
               return;
             }
 
             // Get the nested outlet (outlets.main)
             const nestedOutlet = outletState?.outlets?.main;
             if (!nestedOutlet?.render?.template) {
-              if (DEBUG && (globalThis as any).__DEBUG_GXT_RENDER) {
-                console.log('[ember-outlet] No nested template to render');
-              }
               return;
             }
 
@@ -165,13 +140,6 @@ if (__GXT_MODE__) {
 
             // Track which template we rendered so we can detect changes
             this._lastRenderedTemplate = tpl;
-
-            if (DEBUG && (globalThis as any).__DEBUG_GXT_RENDER) {
-              console.log(
-                '[ember-outlet] Rendering nested template:',
-                tpl?.moduleName || typeof tpl
-              );
-            }
 
             // Build context from controller via prototype chain.
             const nestedContext: any = controller ? Object.create(controller) : {};
@@ -354,30 +322,11 @@ function createOutletTemplate(_owner: any) {
     // The outlet state comes from the context - root.ts passes outletState directly
     const outletState = context?.outletState || context?.state || context;
 
-    if (DEBUG && (globalThis as any).__DEBUG_GXT_RENDER) {
-      console.log('[outlet.ts] render called');
-      console.log(
-        '[outlet.ts] context keys:',
-        context ? Object.keys(context).slice(0, 8).join(',') : 'null'
-      );
-      console.log('[outlet.ts] outletState:', outletState ? 'exists' : 'null');
-    }
-
     // The outlet state has the CURRENT route's info in .render
     // and NESTED route's info in .outlets.main
     // For the {{outlet}} helper, we want to render the nested route
     const nestedOutlet = outletState?.outlets?.main;
     const nestedTemplate = nestedOutlet?.render?.template;
-
-    if (DEBUG && (globalThis as any).__DEBUG_GXT_RENDER) {
-      console.log('[outlet.ts] nestedOutlet:', nestedOutlet ? 'exists' : 'null');
-      console.log(
-        '[outlet.ts] nestedTemplate:',
-        nestedTemplate ? 'exists' : 'null',
-        'type:',
-        typeof nestedTemplate
-      );
-    }
 
     // The factory render path is used for `{{outlet}}` invocations that
     // appear inside another component's yield block (e.g. `{{#x-toggle

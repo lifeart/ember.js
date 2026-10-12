@@ -3,7 +3,6 @@
 // would resolve to the real VM source in GXT builds (scripts/gxt-alias-map.mjs).
 // eslint-disable-next-line ember-local/no-barrel-imports
 import { getComponentTemplate } from '@glimmer/manager';
-import { DEBUG } from '@glimmer/env';
 // Classic-build template compiler (build-time macro in classic pipelines; the
 // GXT-aliased shim in GXT mode, where the call site below is dead-branched).
 import { precompileTemplate } from '@ember/template-compilation';
@@ -84,6 +83,7 @@ if (__GXT_MODE__) {
       // Surface via warn rather than swallowing. Rerender failures shouldn't
       // break the set() that triggered them; the next legitimate
       // setOutletState will retry.
+      // eslint-disable-next-line no-console
       console.warn('[gxt] controller-outlet-rerender failed', e);
     } finally {
       _gxtInControllerRerender = false;
@@ -167,7 +167,6 @@ class RootTemplate {
 // Helper to render a template with context
 function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: any, depth = 0) {
   if (depth > 5) {
-    if (DEBUG_TEMPLATE_LOOKUP) console.warn('[root.ts] Max render depth exceeded');
     return;
   }
 
@@ -187,48 +186,16 @@ function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: a
     ctx.args = {};
   }
 
-  if (DEBUG_TEMPLATE_LOOKUP) {
-    const tplName =
-      tpl?.moduleName ||
-      tpl?.id ||
-      tpl?.name ||
-      (tpl?.constructor?.name !== 'Function' ? tpl?.constructor?.name : null);
-    const tplKeys = tpl ? Object.keys(tpl).slice(0, 5).join(',') : 'null';
-    const hasGxtCompiled = !!tpl?.__gxtCompiled;
-    const hasGxtFactory = !!tpl?.__gxtFactory;
-    console.log(
-      '[root.ts] renderTemplateWithContext depth:',
-      depth,
-      'type:',
-      typeof tpl,
-      'hasRender:',
-      typeof tpl?.render,
-      'name:',
-      tplName,
-      'gxt:',
-      hasGxtCompiled,
-      'factory:',
-      hasGxtFactory,
-      'keys:',
-      tplKeys
-    );
-  }
-
   // PRIORITY 1: If it has a render method, use it directly.
   // NOTE: throws from `tpl.render` (init-phase user errors, assertion
   // failures, etc.) propagate up to `renderer.ts`'s try/catch around
   // `template.render(...)`, which clears the partially-rendered DOM and
   // re-throws. Do not swallow them here.
   if (typeof tpl?.render === 'function') {
-    if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] Calling tpl.render()');
     tpl.render(ctx, target);
-    if (DEBUG_TEMPLATE_LOOKUP)
-      console.log('[root.ts] After render, target innerHTML length:', target.innerHTML?.length);
   }
   // PRIORITY 2: If it's a function without render, call it as factory
   else if (typeof tpl === 'function') {
-    if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] Calling tpl as factory');
-
     // Check if it's a class constructor (needs 'new')
     let template: any;
     const fnStr = tpl.toString();
@@ -236,7 +203,6 @@ function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: a
 
     if (isClass) {
       // It's a class (GXT Component) - instantiate with new
-      if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] Function is a class, using new');
       try {
         // Check if it's a GXT Component class (has $template symbol or extends GxtComponent)
         const lib = _gxtLib();
@@ -248,8 +214,6 @@ function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: a
 
         if (isGxtComponent) {
           // Use GXT's proper rendering flow for GXT components
-          if (DEBUG_TEMPLATE_LOOKUP)
-            console.log('[root.ts] Using gxtRenderComponent for GXT component');
           lib.renderComponent(tpl, {
             element: target,
             args: ctx?.args || {},
@@ -265,17 +229,13 @@ function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: a
         // The function must be called with the component instance as `this`
         const templateProp = componentInstance.template || componentInstance['template'];
         if (typeof templateProp === 'function') {
-          if (DEBUG_TEMPLATE_LOOKUP)
-            console.log('[root.ts] Calling component.template() as method');
           // Call the template function bound to the component instance
           template = templateProp.call(componentInstance);
         } else {
           // No template property, use the instance itself
           template = componentInstance;
         }
-      } catch (e: any) {
-        if (DEBUG_TEMPLATE_LOOKUP)
-          console.warn('[root.ts] Failed to instantiate class:', e?.message);
+      } catch {
         return;
       }
     } else {
@@ -283,19 +243,6 @@ function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: a
       // Bind the context as `this` because GXT-compiled templates use
       // $_GET_ARGS(this, arguments) which requires a valid `this` context.
       template = tpl.call(ctx || {}, owner);
-    }
-
-    if (DEBUG_TEMPLATE_LOOKUP) {
-      console.log(
-        '[root.ts] Factory result:',
-        template ? 'exists' : 'null',
-        'type:',
-        typeof template,
-        'hasRender:',
-        typeof template?.render,
-        'same:',
-        template === tpl
-      );
     }
 
     // Check if the result has $nodes array (GXT template result)
@@ -336,7 +283,6 @@ function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: a
     const nodesArray = gxtNodes || template?.nodes || template?.$nodes;
     const hasNodes = nodesArray && Array.isArray(nodesArray);
     if (hasNodes) {
-      if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] Template has $nodes, appending to target');
       for (const node of nodesArray) {
         if (node instanceof Node) {
           target.appendChild(node);
@@ -352,14 +298,11 @@ function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: a
       template.render(ctx, target);
     } else if (template && typeof template.render === 'function') {
       // Template has render even if it's same as factory
-      if (DEBUG_TEMPLATE_LOOKUP)
-        console.log('[root.ts] Calling template.render from factory result');
       template.render(ctx, target);
     }
   }
   // PRIORITY 3: Check create method (Ember factory pattern)
   else if (typeof tpl?.create === 'function') {
-    if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] Using create method');
     const created = tpl.create({ owner });
     if (created && typeof created.render === 'function') {
       created.render(ctx, target);
@@ -367,46 +310,16 @@ function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: a
   }
   // PRIORITY 4: Check if it's an object with a nested template property
   else if (tpl && typeof tpl === 'object' && 'template' in tpl) {
-    if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] Found nested template property');
     renderTemplateWithContext(tpl.template, target, ctx, owner, depth + 1);
-  }
-  // PRIORITY 5: If it has __wire__, it's a Glimmer compiled template - try to use ember-template-compiler
-  else if (tpl && typeof tpl === 'object') {
-    if (DEBUG_TEMPLATE_LOOKUP)
-      console.log('[root.ts] Object without render - trying runtime compilation');
-    // Try to get the template source if available and compile at runtime.
-    // For now, just log that this can't be rendered.
-    if (DEBUG_TEMPLATE_LOOKUP) console.warn('[root.ts] Cannot render template:', tpl);
-  } else {
-    if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] No render path matched for template');
   }
 }
 
-// Debug flag for template lookup. `DEBUG &&` makes the whole expression fold to
-// a literal `false` in production rollup builds (DEBUG is the inlined build-time
-// macro), so rollup propagates the const and dead-strips every
-// `if (DEBUG_TEMPLATE_LOOKUP) …` diagnostic block out of the GXT prod dist.
-// In dev the runtime `__DEBUG_GXT_RENDER` toggle still works.
-const DEBUG_TEMPLATE_LOOKUP = DEBUG && ((globalThis as any).__DEBUG_GXT_RENDER || false);
-
 // Helper to get component's template
 function getTemplateForComponent(component: any, owner: any): any {
-  if (DEBUG_TEMPLATE_LOOKUP) {
-    console.log('[root.ts] getTemplateForComponent called');
-    console.log('[root.ts]   layoutName:', component?.layoutName);
-    console.log('[root.ts]   hasLayout:', !!component?.layout);
-    console.log('[root.ts]   hasOwner:', !!owner);
-    console.log(
-      '[root.ts]   componentKeys:',
-      component ? Object.keys(component).slice(0, 8).join(',') : 'null'
-    );
-  }
-
   // Try getComponentTemplate from @glimmer/manager
   try {
     const tpl = getComponentTemplate(component.constructor || component);
     if (tpl) {
-      if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] Found via getComponentTemplate');
       return tpl;
     }
   } catch {
@@ -418,35 +331,19 @@ function getTemplateForComponent(component: any, owner: any): any {
   if (globalTemplates) {
     const tpl = globalTemplates.get(component.constructor) || globalTemplates.get(component);
     if (tpl) {
-      if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] Found via COMPONENT_TEMPLATES');
       return tpl;
     }
   }
 
   // Try layout or layoutName lookup
   if (component.layout) {
-    if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] Found via component.layout');
     return component.layout;
   }
 
   if (component.layoutName && owner) {
     const tpl = owner.lookup(`template:${component.layoutName}`);
     if (tpl) {
-      if (DEBUG_TEMPLATE_LOOKUP) {
-        console.log('[root.ts] Found via layoutName lookup:', component.layoutName);
-        console.log(
-          '[root.ts] Template from lookup has render:',
-          typeof tpl?.render,
-          'gxt:',
-          !!tpl?.__gxtCompiled,
-          'keys:',
-          tpl ? Object.keys(tpl).slice(0, 5).join(',') : 'null'
-        );
-      }
       return tpl;
-    } else {
-      if (DEBUG_TEMPLATE_LOOKUP)
-        console.log('[root.ts] layoutName lookup failed:', component.layoutName);
     }
   }
 
@@ -455,13 +352,10 @@ function getTemplateForComponent(component: any, owner: any): any {
   if (componentName && owner) {
     const tpl = owner.lookup(`template:components/${componentName}`);
     if (tpl) {
-      if (DEBUG_TEMPLATE_LOOKUP)
-        console.log('[root.ts] Found via component name lookup:', componentName);
       return tpl;
     }
   }
 
-  if (DEBUG_TEMPLATE_LOOKUP) console.log('[root.ts] No template found for component');
   return null;
 }
 
@@ -492,14 +386,6 @@ function createRootTemplate(_owner: any) {
 
   // Add render method for runtime gxt rendering
   (factory as any).render = (context: any, parentElement: Element) => {
-    if (DEBUG_TEMPLATE_LOOKUP) {
-      console.log(
-        '[root.ts] render called, context keys:',
-        context ? Object.keys(context).slice(0, 8).join(',') : 'null'
-      );
-      console.log('[root.ts] hasLayoutName:', 'layoutName' in (context || {}));
-      console.log('[root.ts] hasDebugContainerKey:', !!context?._debugContainerKey);
-    }
     // CASE 1: ClassicComponent rendering (from RenderingTestCase.appendTo)
     // Detect by checking for layoutName property (ClassicComponent indicator)
     if (
@@ -661,13 +547,6 @@ function createRootTemplate(_owner: any) {
     const args = context.rootState ? { rootState: context.rootState } : context;
     const instance = new RootTemplate(args) as any;
 
-    if (DEBUG_TEMPLATE_LOOKUP) {
-      console.log('[root.ts] CASE 2: OutletView rendering');
-      console.log('[root.ts] outletRef:', instance.outletRef ? 'exists' : 'null');
-      console.log('[root.ts] mainOutlet:', instance.mainOutlet ? 'exists' : 'null');
-      console.log('[root.ts] routeTemplate:', instance.routeTemplate ? 'exists' : 'null');
-    }
-
     // Render the outlet state into the parent element.
     // This function is also called by setOutletState to re-render on route changes.
     function renderOutletState(outletRef: any, targetElement?: Element) {
@@ -686,9 +565,6 @@ function createRootTemplate(_owner: any) {
         routeTemplate?.moduleName === 'template:-outlet' &&
         mainOutlet?.outlets?.main?.render?.template
       ) {
-        if (DEBUG_TEMPLATE_LOOKUP) {
-          console.log('[root.ts] Route template is outlet, rendering nested template directly');
-        }
         const nestedOutlet = mainOutlet.outlets.main;
         routeTemplate = nestedOutlet.render.template;
         controller = nestedOutlet.render.controller;
@@ -1065,7 +941,7 @@ function createRootTemplate(_owner: any) {
       const main = node?.outlets?.main;
       const snapNested = snapshot?.nested;
       if (!main && !snapNested) return false;
-      if (!!main !== !!snapNested) return true;
+      if (Boolean(main) !== Boolean(snapNested)) return true;
       if ((snapNested?.template ?? null) !== (main?.render?.template ?? null)) return true;
       if ((snapNested?.name ?? null) !== (main?.render?.name ?? null)) return true;
       return nestedTreeDiffers(snapNested, main, depth + 1);

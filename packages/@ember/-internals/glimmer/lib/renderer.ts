@@ -258,6 +258,7 @@ function errorLoopTransaction(fn: () => void) {
           // Noop the function so that we won't keep calling it and causing
           // infinite looping failures;
           fn = () => {
+            // eslint-disable-next-line no-console
             console.warn(
               'Attempted to rerender, but the Ember application has had an unrecoverable error occur during render. You should reload the application after fixing the cause of the error.'
             );
@@ -451,6 +452,7 @@ class ClassicRootState {
       // Guard against infinite render depth (e.g., engine mounting loops).
       const depth = _gxtRenderDepth || 0;
       if (depth > 20) {
+        // eslint-disable-next-line no-console
         console.warn('[gxt] Max render depth exceeded, skipping render');
         return;
       }
@@ -506,21 +508,6 @@ class ClassicRootState {
             let renderContext;
 
             // Debug: log what root looks like
-            if (DEBUG && (globalThis as any).__DEBUG_GXT_RENDER) {
-              console.log('[ClassicRootState] root type:', root?.constructor?.name || typeof root);
-              console.log(
-                '[ClassicRootState] root instanceof OutletView:',
-                root instanceof OutletView
-              );
-              console.log('[ClassicRootState] has state:', 'state' in (root || {}));
-              console.log('[ClassicRootState] has ref:', 'ref' in (root || {}));
-              console.log('[ClassicRootState] has layoutName:', 'layoutName' in (root || {}));
-              console.log('[ClassicRootState] layoutName value:', (root as any)?.layoutName);
-              console.log(
-                '[ClassicRootState] root keys:',
-                root ? Object.keys(root).slice(0, 10).join(',') : 'null'
-              );
-            }
 
             if (root && 'state' in root && 'ref' in root) {
               // This is an OutletView - transform to expected format
@@ -587,7 +574,6 @@ class ClassicRootState {
                   'target',
                   '_debugContainerKey',
                 ]);
-                let cellCount = 0;
                 for (const key in component) {
                   if (typeof key !== 'string' || key.startsWith('_') || skipProps.has(key))
                     continue;
@@ -629,13 +615,9 @@ class ClassicRootState {
                     ) {
                       _registerArrayProxyOwner(value, component, key);
                     }
-                    cellCount++;
                   } catch {
                     /* ignore */
                   }
-                }
-                if (DEBUG && cellCount > 0 && (globalThis as any).__DEBUG_GXT_RENDER) {
-                  console.log('[RENDERER-CELL] Installed', cellCount, 'cells');
                 }
               }
             } else {
@@ -782,6 +764,7 @@ class ClassicRootState {
             // Build-time compiled gxt template with $nodes
             _gxtLib().renderComponent(template as any, parentElement, owner);
           } else {
+            // eslint-disable-next-line no-console
             console.warn('GXT template detected but cannot render:', template);
           }
 
@@ -1046,8 +1029,10 @@ function _gxtForceEmberRerender(): void {
   if (_gxtForceRerenderInProgress) return;
   _gxtForceRerenderInProgress = true;
   try {
-    const hadPendingSync = !!getGxtRenderer()?.compilePipeline.getHadPendingSync?.();
-    const hadNestedObjectChange = !!getGxtRenderer()?.compilePipeline.getHadNestedObjectChange?.();
+    const hadPendingSync = Boolean(getGxtRenderer()?.compilePipeline.getHadPendingSync?.());
+    const hadNestedObjectChange = Boolean(
+      getGxtRenderer()?.compilePipeline.getHadNestedObjectChange?.()
+    );
     // Collect roots whose own tag has moved. If `_gxtUpdateRootTagValues`
     // already ran earlier in this sync, it stashed the dirty list in
     // `_gxtDirtyRootsAtSync`; prefer that.
@@ -1869,6 +1854,7 @@ function _renderComponentGxt(
           }
         }
       } else {
+        // eslint-disable-next-line no-console
         console.warn('[renderComponent GXT] No GXT template found for component:', component);
       }
 
@@ -2552,9 +2538,6 @@ export class Renderer extends BaseRenderer {
 
   appendOutletView(view: OutletView, target: SimpleElement): void {
     // Debug: log that appendOutletView was called
-    if (DEBUG && (globalThis as any).__DEBUG_GXT_RENDER) {
-      console.log('[Renderer.appendOutletView] called');
-    }
 
     // TODO: This bypasses the {{outlet}} syntax so logically duplicates
     // some of the set up code. Since this is all internal (or is it?),
@@ -2602,18 +2585,6 @@ export class Renderer extends BaseRenderer {
 
   appendTo(view: ClassicComponent, target: SimpleElement): void {
     // Debug: log that appendTo was called
-    if (DEBUG && (globalThis as any).__DEBUG_GXT_RENDER) {
-      console.log(
-        '[Renderer.appendTo] called with view type:',
-        view?.constructor?.name || typeof view
-      );
-      console.log(
-        '[Renderer.appendTo] view has layoutName:',
-        'layoutName' in (view || {}),
-        'value:',
-        (view as any)?.layoutName
-      );
-    }
 
     // In GXT mode ClassicRootState renders the (GXT) root template itself;
     // see `templateIsGxt`.
