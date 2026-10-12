@@ -77,6 +77,92 @@ module('gxt-native | attributes', function (hooks) {
     assert.strictEqual(after.getAttribute('title'), 'changed', 'the winning local binding stays reactive');
   });
 
+  // Glimmer's class attribute: one value is a plain dynamic attribute
+  // (normalizeValue); several (own + forwarded by `...attributes`) merge like
+  // createClassListRef — non-empty strings joined by a space, no attribute when
+  // all are empty. Port of the classic `Dynamic content tests (integration) ::
+  // quoteless class attributes update correctly` (content-test.js), which the
+  // native suite does not load.
+  test('quoteless class={{if …}}: a falsy condition removes the attribute (no inverse is undefined)', function (assert) {
+    const args = trackedObject({ on: true });
+    const Root = <template><div id="t" class={{if @on "foo-bar"}}>hello</div></template>;
+    this.render(Root, args);
+    const el = () => this.element.querySelector('#t');
+    assert.strictEqual(el().getAttribute('class'), 'foo-bar');
+    run(() => (args.on = false));
+    assert.false(el().hasAttribute('class'), 'falsy: no class attribute (not class="")');
+    run(() => (args.on = true));
+    assert.strictEqual(el().getAttribute('class'), 'foo-bar');
+  });
+
+  test('class: false / undefined / null remove it, "" keeps class="", true is ""', function (assert) {
+    const args = trackedObject({ v: 'x' });
+    const Root = <template><div id="t" class={{@v}}></div></template>;
+    this.render(Root, args);
+    const el = () => this.element.querySelector('#t');
+    for (const [value, expected] of [
+      [false, null],
+      ['', ''],
+      [undefined, null],
+      ['y', 'y'],
+      [null, null],
+      [true, ''],
+    ]) {
+      run(() => (args.v = value));
+      assert.strictEqual(el().getAttribute('class'), expected, `class={{${String(value)}}}`);
+    }
+  });
+
+  test('class: a falsy `if` / truthy `unless` without an inverse writes nothing', function (assert) {
+    const args = trackedObject({ on: false });
+    const Root = <template>
+      <p id="s" class={{if false "x"}}></p>
+      <p id="u" class={{unless true "x"}}></p>
+      <p id="d" class={{unless @on "x"}} title={{if @on "t"}}></p>
+    </template>;
+    this.render(Root, args);
+    assert.false(this.element.querySelector('#s').hasAttribute('class'), 'constant `if`');
+    assert.false(this.element.querySelector('#u').hasAttribute('class'), 'constant `unless`');
+    const d = this.element.querySelector('#d');
+    assert.strictEqual(d.getAttribute('class'), 'x');
+    assert.false(d.hasAttribute('title'), 'any attribute: `if` without an inverse is undefined');
+    run(() => (args.on = true));
+    assert.false(d.hasAttribute('class'));
+    assert.strictEqual(d.getAttribute('title'), 't');
+  });
+
+  test('class in a whitespace-free {{#each}} row (the static-block row path)', function (assert) {
+    const args = trackedObject({ items: [{ c: 'a' }, { c: undefined }, { c: '' }] });
+    const Root = <template><ul>{{#each @items as |i|}}<li class={{i.c}}>x</li>{{/each}}</ul></template>;
+    this.render(Root, args);
+    const lis = Array.from(this.element.querySelectorAll('li'));
+    assert.deepEqual(
+      lis.map((li) => li.getAttribute('class')),
+      ['a', null, ''],
+      'undefined writes no class; "" keeps class=""'
+    );
+  });
+
+  test('class merged with ...attributes: empty values are skipped; all empty removes it', function (assert) {
+    const args = trackedObject({ own: 'own', fw: 'fw' });
+    const Inner = <template><div id="t" class={{@own}} ...attributes></div></template>;
+    const Root = <template><Inner class={{@fw}} @own={{@own}} /></template>;
+    this.render(Root, args);
+    const el = () => this.element.querySelector('#t');
+    assert.strictEqual(el().getAttribute('class'), 'own fw');
+    run(() => (args.fw = undefined));
+    assert.strictEqual(el().getAttribute('class'), 'own', 'no trailing space');
+    run(() => (args.own = ''));
+    assert.false(el().hasAttribute('class'), 'every value empty: no attribute');
+    run(() => (args.fw = false));
+    assert.strictEqual(el().getAttribute('class'), 'false', 'Glimmer stringifies false in a class list');
+    run(() => {
+      args.own = 'a';
+      args.fw = 'b';
+    });
+    assert.strictEqual(el().getAttribute('class'), 'a b');
+  });
+
   test('SafeString attribute values write their HTML string', function (assert) {
     const Root = <template><div id="t" title={{@title}}></div></template>;
     this.render(Root, { title: htmlSafe('<b>t</b>') });
