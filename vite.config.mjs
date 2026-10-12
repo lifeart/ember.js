@@ -133,11 +133,9 @@ export default defineConfig(({ mode }) => {
             },
           })
         : templateTag(),
-      // Redirect $_tag, $_maybeHelper, $_dc imports from @lifeart/gxt to
-      // the Ember wrapper module. GXT-compiled templates import these
-      // primitives directly from GXT which bypasses Ember's container-based
-      // helper/component resolution. This plugin rewrites those imports so
-      // they use the Ember-aware wrappers instead.
+      // Give GXT-compiled templates the Ember wrappers of $_tag,
+      // $_maybeHelper and $_dc: imported straight from GXT they would bypass
+      // Ember's container-based helper/component resolution.
       ...(useGxt ? [gxtEmberWrapperRedirect()] : []),
       babel({
         babelHelpers: 'bundled',
@@ -360,77 +358,31 @@ function gxtTestSetup(useGxt) {
  * invisible to the native primitives).
  */
 function gxtEmberWrapperRedirect() {
-  const REDIRECT_SYMBOLS = new Set(['$_tag', '$_maybeHelper', '$_dc']);
-  const WRAPPER_MODULE = '@ember/-internals/gxt-backend/ember-gxt-wrappers';
-  // Match import { ... } from "@lifeart/gxt" or from GXT dist paths
-  const importRe =
-    /import\s*\{([^}]+)\}\s*from\s*["'](@lifeart\/gxt|[^"']*gxt\.index\.es\.js[^"']*)["']/g;
-
+  const FACADE = '\0gxt-ember-runtime';
+  const isGxtEntry = (source) =>
+    source === '@lifeart/gxt' || /\/gxt\.index\.es\.js$/.test(source.split('?')[0]);
   return {
     name: 'gxt-ember-wrapper-redirect',
-    // No enforce — runs in normal phase, after GXT compiler (which is enforce: 'pre')
-    transform(code, id) {
-      // Only process files that import GXT primitives
-      if (!code.includes('$_tag') && !code.includes('$_maybeHelper') && !code.includes('$_dc'))
-        return null;
-      // Skip node_modules
-      if (id.includes('node_modules')) return null;
-
-      let result = code;
-      const redirected = [];
-      const matches = [];
-
-      importRe.lastIndex = 0;
-      let match;
-      while ((match = importRe.exec(code)) !== null) {
-        matches.push({
-          index: match.index,
-          length: match[0].length,
-          specifiers: match[1],
-          source: match[2],
-        });
-      }
-
-      if (matches.length === 0) return null;
-
-      // Process from last to first to preserve offsets
-      for (let i = matches.length - 1; i >= 0; i--) {
-        const m = matches[i];
-        const specifiers = m.specifiers
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        const toRedirect = [];
-        const toKeep = [];
-
-        for (const spec of specifiers) {
-          const parts = spec.split(/\s+as\s+/);
-          const importedName = parts[0].trim();
-          if (REDIRECT_SYMBOLS.has(importedName)) {
-            toRedirect.push(spec);
-          } else {
-            toKeep.push(spec);
-          }
-        }
-
-        if (toRedirect.length === 0) continue;
-
-        let replacement = '';
-        if (toKeep.length > 0) {
-          replacement = `import { ${toKeep.join(', ')} } from "${m.source}"`;
-        }
-
-        result = result.slice(0, m.index) + replacement + result.slice(m.index + m.length);
-        redirected.push(...toRedirect);
-      }
-
-      if (redirected.length > 0) {
-        const importLine = `import { ${redirected.join(', ')} } from "${WRAPPER_MODULE}";\n`;
-        result = importLine + result;
-        return { code: result, map: null };
-      }
-
-      return null;
+    enforce: 'pre',
+    // `@lifeart/gxt` imported by a compiled template, or by any other module
+    // outside gxt-backend's own sources, resolves to a facade that re-exports
+    // the runtime with the Ember wrappers of `$_tag` / `$_maybeHelper` /
+    // `$_dc` in place of gxt's (an explicit export shadows `export *`).
+    // gxt-backend's .ts modules (ember-gxt-wrappers wraps the originals) and
+    // the facade itself get the real runtime.
+    resolveId(source, importer) {
+      if (!importer || !isGxtEntry(source)) return null;
+      const file = importer.split('?')[0];
+      if (file === FACADE || file.includes('/node_modules/')) return null;
+      if (file.includes('/gxt-backend/') && !/\.(gts|gjs|hbs)$/.test(file)) return null;
+      return FACADE;
+    },
+    load(id) {
+      if (id !== FACADE) return null;
+      return (
+        "export * from '@lifeart/gxt';\n" +
+        "export { $_tag, $_maybeHelper, $_dc } from '@ember/-internals/gxt-backend/ember-gxt-wrappers';\n"
+      );
     },
   };
 }
