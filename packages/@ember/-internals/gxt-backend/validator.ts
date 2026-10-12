@@ -28,24 +28,6 @@ const createCell = (initialValue: any, name?: string) => {
 };
 const cell = createCell;
 
-// trackedObjectCell: a native GXT cell (not a storage-wrapped cell). Used by
-// trackedObject so property reads/writes register with GXT's effect tracker
-// the same way @lifeart/gxt's own cell() does. The storage-wrapped cell above
-// goes through an older compatibility shim that does not always plug into
-// GXT's effect tracking, which broke trackedObject reactivity through the
-// renderComponent args-proxy path.
-const createTrackedObjectCell = (initialValue: any, name?: string) => {
-  const c = _gxtNativeCell(initialValue, name || 'trackedObject');
-  return {
-    get value() {
-      return c.value;
-    },
-    set value(v: any) {
-      c.update(v);
-    },
-  };
-};
-
 // Create formula using cache
 const formula = <T>(fn: () => T, name?: string) => {
   const cache = caching.createCache(fn);
@@ -56,12 +38,12 @@ const formula = <T>(fn: () => T, name?: string) => {
   };
 };
 
-// Re-export most validator functions directly
-export const {
+export const { tagMetaFor } = validator;
+
+// The gxt validator primitives the shim builds on.
+const {
   tagFor: gxtTagFor,
   isTracking: gxtIsTracking,
-  tagMetaFor,
-  track: gxtTrack,
   // trackedData - a custom implementation is provided below to avoid infinite loops
   untrack: gxtUntrack,
   beginTrackFrame: gxtBeginTrackFrame,
@@ -132,8 +114,6 @@ export function track(cb: () => void): any {
   // version counter. Each time a tracked cell is dirtied (via dirtyTagFor),
   // bump a global revision. Compare the revision at snapshot time vs current
   // to detect changes.
-  const revisionBefore = globalRevisionCounter;
-
   const _runTrack = () => {
     gxtBeginTrackFrame();
     try {
@@ -495,10 +475,6 @@ export function endBacktrackingFrame() {
   _backtrackingFrame = null;
 }
 
-export function isInBacktrackingFrame() {
-  return _backtrackingFrame !== null;
-}
-
 // beginBacktrackingFrame / endBacktrackingFrame are installed on the typed
 // gxt-bridge by manager.ts (which already imports both from this file).
 // Readers in helper-manager.ts and ember-gxt-wrappers.ts go through
@@ -507,12 +483,9 @@ export function isInBacktrackingFrame() {
 
 // Expose classic tag primitives for gxt-backend/manager.ts so component-arg
 // own-property getters can participate in createCache/invokeHelper tag tracking.
-// The classic-reactivity hooks formerly published as
-// `globalThis.__classicConsumeTag` / `__classicTagFor` /
-// `__classicDirtyTagFor` are now reached via direct imports (intra-package)
-// and the typed `compilePipeline.classicConsumeTag/classicTagFor/
-// classicDirtyTagFor` bridge methods (cross-package) — see manager.ts's
-// setGxtRenderer install.
+// manager.ts imports them directly; cross-package callers use the typed
+// `compilePipeline.classicDirtyTagFor` bridge method (see manager.ts's
+// setGxtRenderer install).
 
 // ── Tracked backtracking bookkeeping (reusable across cell backings) ─────────
 // The DEV "You attempted to update `X` ... already used in the same
@@ -673,7 +646,6 @@ export const CURRENT_TAG = currentTagCell;
 // the cell's identity matches what GXT's effect/tracker system manipulates,
 // so reads during effect evaluation properly register a subscription.
 const _classicBridgeCell = _gxtNativeCell(0, 'classic-validator-bridge');
-export const CLASSIC_TAG_BRIDGE = _classicBridgeCell;
 let _classicBridgeCounter = 0;
 function _bumpClassicBridge() {
   _classicBridgeCounter++;
@@ -701,11 +673,9 @@ export function touchClassicBridge(): void {
 // invoked synchronously at the end of dirtyTagFor after the classic tag
 // has been updated but before the runloop flush. Registrants are expected
 // to be idempotent and cheap.
-// Leak diagnostics: each reactor is tagged with metadata at registration
+// Leak detection: each reactor is tagged with metadata at registration
 // time so cross-test leakage can be detected — a reactor registered during
-// test A that fires during test B is by definition a leak. Verbose logging
-// is enabled via the global flag `__GXT_LEAK_DEBUG__` (set in index.html or
-// via URL param).
+// test A that fires during test B is by definition a leak.
 interface ReactorMeta {
   id: number;
   source: string;
@@ -762,14 +732,6 @@ export function registerClassicReactor(cb: () => void, source?: string): () => v
     foreignTest: '',
     disabled: false,
   });
-  if ((globalThis as any).__GXT_LEAK_DEBUG__) {
-    if (id <= 50 || id % 100 === 0) {
-      // eslint-disable-next-line no-console
-      console.log(
-        `[leak-debug] registerClassicReactor #${id} source=${source || '?'} test="${_currentTestName()}" total=${_classicReactors.size}`
-      );
-    }
-  }
   return () => {
     _classicReactors.delete(cb);
     _reactorMeta.delete(cb);
@@ -799,7 +761,6 @@ function _fireClassicReactors() {
   if (_classicReactors.size === 0) return;
   // Copy to avoid mutation during iteration
   const snapshot = Array.from(_classicReactors);
-  const debug = (globalThis as any).__GXT_LEAK_DEBUG__;
   const currentTest = _currentTestName();
   for (const cb of snapshot) {
     const meta = _reactorMeta.get(cb);
@@ -810,12 +771,6 @@ function _fireClassicReactors() {
       }
       meta.fireCount++;
       if (meta.fireCount > REACTOR_FIRE_HARD_CAP) {
-        if (debug) {
-          // eslint-disable-next-line no-console
-          console.log(
-            `[leak-debug] CAP reactor #${meta.id} src=${meta.source} regAt="${meta.registeredAtTest}" fires=${meta.fireCount} — disabling`
-          );
-        }
         meta.disabled = true;
         continue;
       }
@@ -834,20 +789,8 @@ function _fireClassicReactors() {
           meta.foreignFires > REACTOR_FOREIGN_FIRE_CAP ||
           meta.totalForeignFires > REACTOR_TOTAL_FOREIGN_FIRE_CAP
         ) {
-          if (debug) {
-            // eslint-disable-next-line no-console
-            console.log(
-              `[leak-debug] CAP_FOREIGN reactor #${meta.id} src=${meta.source} regAt="${meta.registeredAtTest}" firedIn="${currentTest}" foreignFires=${meta.foreignFires} totalForeignFires=${meta.totalForeignFires} — disabling`
-            );
-          }
           meta.disabled = true;
           continue;
-        }
-        if (debug) {
-          // eslint-disable-next-line no-console
-          console.log(
-            `[leak-debug] LEAK reactor #${meta.id} src=${meta.source} regAt="${meta.registeredAtTest}" firedIn="${currentTest}" fires=${meta.fireCount} foreignFires=${meta.foreignFires} totalForeignFires=${meta.totalForeignFires}`
-          );
         }
       } else {
         meta.foreignTest = '';
@@ -861,13 +804,6 @@ function _fireClassicReactors() {
     }
   }
 }
-
-// The `_classicReactors` set and `_reactorMeta` map are live state used by
-// the surrounding leak-tracking instrumentation (the foreign-fire counters in
-// `_fireClassicReactors` above) and by `dirtyTagFor` below. The diagnostic
-// `__gxtLeakSnapshot` global writer that previously lived here was a no-op
-// unless `globalThis.__GXT_LEAK_DEBUG__` was set, and had no live consumers,
-// so it was removed.
 
 // Wrap dirtyTagFor to also bump the global revision AND mark the specific tag as dirty
 const gxtDirtyTagFor = validator.dirtyTagFor;
@@ -1075,10 +1011,8 @@ export function combine(tags: any[]) {
   return combinedTag;
 }
 
-// Track tag revisions for proper validation.
 // globalRevisionCounter is the single source of truth for all revisions, so
-// track tags, dirty tags, and snapshot revisions are all comparable.
-const tagLastSnapshotRevision = new WeakMap<object, number>();
+// dirty tags and snapshot revisions are comparable.
 
 // Track dirty revisions - when a tag was last dirtied (in globalRevisionCounter space)
 const tagDirtyRevision = new WeakMap<object, number>();
@@ -1088,7 +1022,6 @@ function markTagDirty(tag: any): void {
   // globalRevisionCounter was already bumped by dirtyTagFor before calling us
   const rev = globalRevisionCounter;
   tagDirtyRevision.set(tag, rev);
-  tagLastSnapshotRevision.set(tag, rev);
 }
 
 // Compute the current "revision" for a tag by taking the max of its own
@@ -1126,13 +1059,6 @@ function currentTagRevision(tag: any, visited = new Set<any>(), stack?: Set<any>
 
     // CURRENT_TAG reflects the live global revision counter.
     if (tag._isCurrent === true) {
-      return globalRevisionCounter;
-    }
-
-    // Track tags: their "revision" is the globalRevisionCounter at the time
-    // they were snapshot. After any mutation (which bumps globalRevisionCounter),
-    // the current revision becomes the new globalRevisionCounter.
-    if (tag._isTrackTag) {
       return globalRevisionCounter;
     }
 
@@ -1236,13 +1162,6 @@ export function validateTag(tag: any, revision?: number): boolean {
   return currentTagRevision(tag) <= revision;
 }
 
-// Update the revision snapshot for a tag (called after observer fires)
-export function updateTagRevision(tag: any): number {
-  // Use the current globalRevisionCounter - don't bump it since no actual mutation happened
-  tagLastSnapshotRevision.set(tag, globalRevisionCounter);
-  return globalRevisionCounter;
-}
-
 // Reset tracking state (used in testing)
 // Mirrors classic @glimmer/validator's resetTracking ("This function is only
 // for handling errors and resetting to a valid state"): a render that throws
@@ -1327,8 +1246,8 @@ export function createUpdatableTag() {
 // Native-cell-backed updatable tag. Identical shape to `createUpdatableTag`,
 // but its inner cell is a NATIVE GXT cell (`_gxtNativeCell`) rather than the
 // `glimmer-compatibility` storage-wrapped `cell` used above. The storage-
-// wrapped cell does NOT entangle reads with GXT's effect/formula tracker (same
-// gap documented for `createTrackedObjectCell`): reading its `.value` inside a
+// wrapped cell does NOT entangle reads with GXT's effect/formula tracker:
+// reading its `.value` inside a
 // `formula`/`effect` does not register a subscription, so a later `dirty()`
 // does not re-fire that formula. The native cell DOES entangle (`qt.add(cell)`
 // in its `value` getter). Used by the reactive collections (trackedArray /
@@ -1402,7 +1321,6 @@ export function updateTag(outer: any, inner: any) {
     const ownDirty = tagDirtyRevision.get(outer) || 0;
     outer._lastValue = Math.max(prevLast, ownDirty);
     outer._subBufferRevision = innerRev;
-    outer._subBufferedAt = globalRevisionCounter;
   }
 
   // NOTE: intentionally do NOT call `outer.update(inner)` here, even when

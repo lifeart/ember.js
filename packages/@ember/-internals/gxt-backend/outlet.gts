@@ -142,11 +142,6 @@ class EmberOutletElement extends HTMLElement {
     nestedContext[$ARGS_KEY] = argsObj;
     nestedContext[$SLOTS_KEY] = {};
     nestedContext.$fw = [[], [], []];
-    // Mark as engine context when owner differs from the ambient owner
-    // so $_tag_ember can swap the owner for component resolution.
-    if (owner && owner !== getAmbientOwner()) {
-      nestedContext.__gxtIsEngineCtx = true;
-    }
 
     // Update the global outlet state for nested outlets
     const previousOutletState = getCurrentOutletState();
@@ -411,7 +406,6 @@ class EmberMountElement extends HTMLElement {
 
       const renderContext: any = controller ? Object.create(controller) : {};
       renderContext.owner = engineInstance;
-      renderContext.__gxtIsEngineCtx = true;
       renderContext.args = {};
       renderContext[$ARGS_KEY] = {};
       renderContext[$SLOTS_KEY] = {};

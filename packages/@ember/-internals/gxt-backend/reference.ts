@@ -1,4 +1,4 @@
-import { cell, formula } from '@lifeart/gxt';
+import { cell } from '@lifeart/gxt';
 import { reference } from '@lifeart/gxt/glimmer-compatibility';
 import { getProp, setProp } from '@glimmer/global-context';
 import { consumeTag, createCache } from './validator';

@@ -78,7 +78,6 @@ interface DestroyableMeta<T extends Destroyable> {
   eagerDestructors: OneOrMany<Destructor<T>>;
   destructors: OneOrMany<Destructor<T>>;
   state: DestroyableState;
-  gxtBridged: boolean;
 }
 
 interface UndestroyedDestroyablesError extends Error {
@@ -88,12 +87,6 @@ interface UndestroyedDestroyablesError extends Error {
 let DESTROYABLE_META:
   | Map<Destroyable, DestroyableMeta<Destroyable>>
   | WeakMap<Destroyable, DestroyableMeta<Destroyable>> = new WeakMap();
-
-const _gxtRegisterDestructor: ((obj: object, ...fns: Array<() => void>) => void) | undefined = (
-  gxtDestroyable as unknown as {
-    registerDestructor?: (obj: object, ...fns: Array<() => void>) => void;
-  }
-)?.registerDestructor;
 
 function push<T extends object>(collection: OneOrMany<T>, newItem: T): OneOrMany<T> {
   if (collection === null) {
@@ -143,7 +136,6 @@ function getDestroyableMeta<T extends Destroyable>(destroyable: T): DestroyableM
       eagerDestructors: null,
       destructors: null,
       state: LIVE_STATE,
-      gxtBridged: false,
     };
 
     if (DEBUG) {
@@ -154,15 +146,6 @@ function getDestroyableMeta<T extends Destroyable>(destroyable: T): DestroyableM
   }
 
   return meta as unknown as DestroyableMeta<T>;
-}
-
-// Bridge: ensure that whenever GXT destroys `destroyable` as part of its own
-// graph traversal (e.g. when a parent template branch is torn down), the
-// Ember-style destroy() runs so registered destructors fire via the runloop.
-function ensureGxtBridge(_destroyable: Destroyable, _meta: DestroyableMeta<Destroyable>): void {
-  // Bridging disabled: the state machine here handles the Ember-visible
-  // semantics independently of GXT's internal graph.
-  return;
 }
 
 export function associateDestroyableChild<T extends Destroyable>(parent: Destroyable, child: T): T {
@@ -177,9 +160,6 @@ export function associateDestroyableChild<T extends Destroyable>(parent: Destroy
 
   parentMeta.children = push(parentMeta.children, child);
   childMeta.parents = push(childMeta.parents, parent);
-
-  ensureGxtBridge(parent, parentMeta);
-  ensureGxtBridge(child, childMeta);
 
   // Also mirror the association on GXT's side so its own destroy graph
   // traversal can reach the child (matching prior shim behavior).
@@ -214,8 +194,6 @@ export function registerDestructor<T extends Destroyable>(
     : 'destructors';
 
   meta[destructorsKey] = push(meta[destructorsKey], destructor);
-
-  ensureGxtBridge(destroyable, meta);
 
   return destructor;
 }

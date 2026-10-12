@@ -41,7 +41,6 @@ export const renderSync = vmStub('renderSync');
 
 // lib/vm/element-builder
 export const clientBuilder = vmStub('clientBuilder');
-export const NewElementBuilder = vmStub('NewElementBuilder');
 
 // lib/vm/rehydrate-builder — `isSerializationFirstNode` is a trivial,
 // side-effect-free predicate that the glimmer package re-exports publicly;
@@ -51,7 +50,6 @@ export function isSerializationFirstNode(node: { nodeValue: string | null }): bo
   return node.nodeValue === SERIALIZATION_FIRST_NODE_STRING;
 }
 export const rehydrationBuilder = vmStub('rehydrationBuilder');
-export const RehydrateBuilder = vmStub('RehydrateBuilder');
 
 // lib/dom/api (node/SSR tree construction)
 export const DOMTreeConstruction = vmStub('DOMTreeConstruction');

@@ -2,8 +2,7 @@
 //
 // Reimplements enough of the real module so that deprecations still route
 // through `@ember/debug`'s `deprecate` (test helpers stub that to detect
-// calls). Entries for deprecations GXT has already fully superseded are left
-// as `{ isRemoved: true }` shapes so callers skip the removed code paths.
+// calls).
 
 import type { DeprecationOptions } from '@ember/debug';
 import { deprecate } from '@ember/debug';
@@ -49,16 +48,6 @@ function dasherize(str: string): string {
 }
 
 export const DEPRECATIONS = {
-  DEPRECATE_TEMPLATE_ACTION: {
-    isEnabled: false,
-    isRemoved: true,
-    test: false,
-  },
-  DEPRECATE_IMPLICIT_ROUTE_MODEL: {
-    isEnabled: false,
-    isRemoved: true,
-    test: false,
-  },
   DEPRECATE_IMPORT_EMBER(importName: string): DeprecationObject {
     return deprecation({
       id: `deprecate-import-${dasherize(importName)}-from-ember`,
@@ -77,21 +66,6 @@ export const DEPRECATIONS = {
     },
     until: '7.0.0',
     url: 'https://deprecations.emberjs.com/id/importing-inject-from-ember-service',
-  }),
-  DEPRECATE_COMPONENT_TEMPLATE_RESOLVING: {
-    isEnabled: true,
-    isRemoved: false,
-    test: false,
-  },
-  DEPRECATE_AMD_BUNDLES: deprecation({
-    for: 'ember-source',
-    id: 'using-amd-bundles',
-    since: {
-      available: '6.10.0',
-      enabled: '6.10.0',
-    },
-    until: '7.0.0',
-    url: 'https://deprecations.emberjs.com/id/using-amd-bundles',
   }),
 };
 

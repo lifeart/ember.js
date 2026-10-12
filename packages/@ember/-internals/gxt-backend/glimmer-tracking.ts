@@ -106,15 +106,6 @@ export function cached(_target: object, key: string, desc: PropertyDescriptor): 
   };
 }
 
-/**
- * setPropertyDidChange — no-op in GXT mode.
- * Ember uses this to hook into property changes, but GXT handles
- * reactivity through cells directly.
- */
-export function setPropertyDidChange(_callback: () => void): void {
-  // no-op — GXT cells handle change propagation
-}
-
 // Re-export cache primitives for @glimmer/tracking/primitives/cache
 import { createCache, getValue } from '@glimmer/validator';
 export { createCache, getValue };

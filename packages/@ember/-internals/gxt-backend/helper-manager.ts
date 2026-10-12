@@ -125,7 +125,6 @@ function _callGetValueWithBacktracking(
   bucket: any,
   self: CustomHelperManager
 ): any {
-  const g = globalThis as any;
   const bt = getGxtRenderer()?.backtracking;
   let debugName = 'Helper';
   // Manager getDebugName is DEBUG-only API: upstream implementations (e.g.
@@ -421,7 +420,6 @@ export class CustomHelperManager {
         // Wrap getValue() in a backtracking-aware compute. The compute is
         // re-run whenever Glimmer's reference system reads `.value`, so
         // tracked-data reads inside getValue() entangle correctly.
-        const g = globalThis as any;
         ref = createComputeRef(
           () => {
             const bt = getGxtRenderer()?.backtracking;
