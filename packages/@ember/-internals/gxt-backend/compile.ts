@@ -2270,6 +2270,70 @@ function _curriedComponentChanged(info: any, curried: any): boolean {
   return false;
 }
 
+// Read a curried component's argument getters (named and positional) so the
+// running effect depends on them.
+function _touchCurriedArgGetters(curried: any): void {
+  if (curried.__curriedArgs) {
+    for (const val of Object.values(curried.__curriedArgs)) {
+      if (typeof val === 'function' && !val.prototype && !(val as any).__isCurriedComponent) {
+        try {
+          val();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+  if (curried.__curriedPositionals) {
+    for (const val of curried.__curriedPositionals) {
+      if (typeof val === 'function' && !val.prototype && !(val as any).__isCurriedComponent) {
+        try {
+          val();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+}
+
+// Remove the nodes strictly between two sibling markers; returns them in order.
+function _removeNodesBetween(parent: Node, start: Node, end: Node): Node[] {
+  const removed: Node[] = [];
+  let node = start.nextSibling;
+  while (node && node !== end) {
+    const next = node.nextSibling;
+    removed.push(node);
+    parent.removeChild(node);
+    node = next;
+  }
+  return removed;
+}
+
+// Render a curried component through the Ember component manager. A reactive
+// re-render runs outside the original render, so the owner captured at template
+// evaluation is restored when no owner is ambient. Non-node results go through
+// `toNode` (itemToNode at the next depth).
+function _renderCurriedNode(
+  managers: any,
+  curried: any,
+  capturedOwner: any,
+  toNode: (value: any, depth: number) => Node | null,
+  depth: number
+): Node | null {
+  if (capturedOwner && !getAmbientOwner()) {
+    setAmbientOwner(capturedOwner);
+  }
+  const handleResult = managers.component.handle(curried, {}, null, null);
+  if (typeof handleResult === 'function') {
+    const rendered = handleResult();
+    if (rendered instanceof Node) return rendered;
+    return toNode(rendered, depth);
+  }
+  if (handleResult instanceof Node) return handleResult;
+  return toNode(handleResult, depth);
+}
+
 // Override $__log with Ember-compatible version.
 // Resolves GXT getter args and calls console.log. The compile-time transform
 // (above) ensures $__log calls are eager (not inside reactive getters), so
@@ -7431,21 +7495,6 @@ function _gxtSyncDomNow(): void {
             const parent = sm.parentNode;
             if (!parent) continue;
             try {
-              // Curried-node path: re-invoke item() to get a fresh Node
-              if (info.__isCurriedNodePath) {
-                const newNode = render();
-                if (newNode) {
-                  let node = sm.nextSibling;
-                  while (node && node !== em) {
-                    const next = node.nextSibling;
-                    parent.removeChild(node);
-                    node = next;
-                  }
-                  parent.insertBefore(newNode, em);
-                }
-                continue;
-              }
-
               const newResult = getter();
               const newFinal =
                 typeof newResult === 'function' && !newResult?.__isCurriedComponent
@@ -7466,14 +7515,7 @@ function _gxtSyncDomNow(): void {
                 !newFinal ||
                 !newFinal.__isCurriedComponent ||
                 newFinal.__name !== info.lastRenderedName;
-              const _rem2: Node[] = [];
-              let node = sm.nextSibling;
-              while (node && node !== em) {
-                const next = node.nextSibling;
-                _rem2.push(node);
-                parent.removeChild(node);
-                node = next;
-              }
+              const _rem2 = _removeNodesBetween(parent, sm, em);
               if (_swapped2 && _rem2.length > 0) {
                 getGxtRenderer()?.destruction.destroyInstancesInNodes(_rem2);
               }
@@ -13396,20 +13438,16 @@ export function precompileTemplate(
           if (_curriedManagers?.component?.canHandle?.(_curriedItem)) {
             // Capture owner at template evaluation time for reactive updates
             const _curriedOwner = getAmbientOwner();
-            const _renderCurried = (curried: any): Node | null => {
-              if (!curried) return null;
-              if (_curriedOwner && !getAmbientOwner()) {
-                setAmbientOwner(_curriedOwner);
-              }
-              const handleResult = _curriedManagers.component.handle(curried, {}, null, null);
-              if (typeof handleResult === 'function') {
-                const rendered = handleResult();
-                if (rendered instanceof Node) return rendered;
-                return itemToNode(rendered, depth + 1);
-              }
-              if (handleResult instanceof Node) return handleResult;
-              return itemToNode(handleResult, depth + 1);
-            };
+            const _renderCurried = (curried: any): Node | null =>
+              curried
+                ? _renderCurriedNode(
+                    _curriedManagers,
+                    curried,
+                    _curriedOwner,
+                    itemToNode,
+                    depth + 1
+                  )
+                : null;
 
             const _csm = document.createComment('curried-start');
             const _cem = document.createComment('curried-end');
@@ -13426,49 +13464,13 @@ export function precompileTemplate(
               gxtEffect(() => {
                 // For eagerly-evaluated curried components, track arg getters
                 const cc = _curriedItem;
-                if (cc.__curriedArgs) {
-                  for (const val of Object.values(cc.__curriedArgs)) {
-                    if (
-                      typeof val === 'function' &&
-                      !val.prototype &&
-                      !(val as any).__isCurriedComponent
-                    ) {
-                      try {
-                        val();
-                      } catch {
-                        /* ignore */
-                      }
-                    }
-                  }
-                }
-                if (cc.__curriedPositionals) {
-                  for (const val of cc.__curriedPositionals) {
-                    if (
-                      typeof val === 'function' &&
-                      !val.prototype &&
-                      !(val as any).__isCurriedComponent
-                    ) {
-                      try {
-                        val();
-                      } catch {
-                        /* ignore */
-                      }
-                    }
-                  }
-                }
+                _touchCurriedArgGetters(cc);
                 const parent = _csm.parentNode;
                 if (!parent) return;
                 // Skip if args haven't changed
                 if (_csm.nextSibling !== _cem && !_curriedComponentChanged(_cinfo, cc)) return;
                 // Re-render: remove old, insert new
-                let _n = _csm.nextSibling;
-                const _removed: Node[] = [];
-                while (_n && _n !== _cem) {
-                  const nx = _n.nextSibling;
-                  _removed.push(_n);
-                  parent.removeChild(_n);
-                  _n = nx;
-                }
+                const _removed = _removeNodesBetween(parent, _csm, _cem);
                 if (_removed.length > 0) {
                   getGxtRenderer()?.destruction.destroyInstancesInNodes(_removed);
                 }
@@ -13611,18 +13613,7 @@ export function precompileTemplate(
               // Empty curried component marker — renders nothing but preserves
               // the reactive rendering infrastructure for future transitions.
               if (curried.__isEmpty) return null;
-              // Restore owner for component resolution during reactive re-evaluation
-              if (capturedOwner && !getAmbientOwner()) {
-                setAmbientOwner(capturedOwner);
-              }
-              const handleResult = managers.component.handle(curried, {}, null, null);
-              if (typeof handleResult === 'function') {
-                const rendered = handleResult();
-                if (rendered instanceof Node) return rendered;
-                return itemToNode(rendered, depth + 1);
-              }
-              if (handleResult instanceof Node) return handleResult;
-              return itemToNode(handleResult, depth + 1);
+              return _renderCurriedNode(managers, curried, capturedOwner, itemToNode, depth + 1);
             };
 
             const startMarker = document.createComment('curried-start');
@@ -13675,35 +13666,8 @@ export function precompileTemplate(
                 // Evaluate curried arg getters to establish tracking —
                 // when a curried arg changes (e.g., this.model.expectedText),
                 // this effect must re-fire so we can update the component.
-                if (newFinal && newFinal.__isCurriedComponent && newFinal.__curriedArgs) {
-                  for (const val of Object.values(newFinal.__curriedArgs)) {
-                    if (
-                      typeof val === 'function' &&
-                      !val.prototype &&
-                      !(val as any).__isCurriedComponent
-                    ) {
-                      try {
-                        val();
-                      } catch {
-                        /* ignore */
-                      }
-                    }
-                  }
-                }
-                if (newFinal && newFinal.__isCurriedComponent && newFinal.__curriedPositionals) {
-                  for (const val of newFinal.__curriedPositionals) {
-                    if (
-                      typeof val === 'function' &&
-                      !val.prototype &&
-                      !(val as any).__isCurriedComponent
-                    ) {
-                      try {
-                        val();
-                      } catch {
-                        /* ignore */
-                      }
-                    }
-                  }
+                if (newFinal && newFinal.__isCurriedComponent) {
+                  _touchCurriedArgGetters(newFinal);
                 }
 
                 const parent = startMarker.parentNode;
@@ -13725,14 +13689,7 @@ export function precompileTemplate(
                   !newFinal.__isCurriedComponent ||
                   newFinal.__name !== curriedRenderInfo.lastRenderedName;
                 // Collect and remove existing content between markers
-                const _removedNodes: Node[] = [];
-                let node = startMarker.nextSibling;
-                while (node && node !== endMarker) {
-                  const next = node.nextSibling;
-                  _removedNodes.push(node);
-                  parent.removeChild(node);
-                  node = next;
-                }
+                const _removedNodes = _removeNodesBetween(parent, startMarker, endMarker);
                 // Destroy old component instances when the component TYPE changed
                 if (_componentSwapped && _removedNodes.length > 0) {
                   getGxtRenderer()?.destruction.destroyInstancesInNodes(_removedNodes);
