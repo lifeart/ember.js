@@ -815,10 +815,9 @@ const JS_RESERVED_WORDS = new Set([
   'await',
 ]);
 
-// Built-in keyword helpers that may be passed as a named argument as-is: the
-// named-arg resolved-helper guard (see the `maybeHelperInNamedArgPosition`
-// rewrite in precompileTemplate) skips them.
-const _GXT_NAMED_ARG_SAFE_BUILTINS = new Set([
+// The Ember keyword helpers implemented by `_emberBuiltinHelpers` below. The
+// keyword-name sets that follow are views of this one list.
+const EMBER_KEYWORD_HELPER_NAMES: readonly string[] = [
   'array',
   'hash',
   'concat',
@@ -830,25 +829,20 @@ const _GXT_NAMED_ARG_SAFE_BUILTINS = new Set([
   'unbound',
   'helper',
   'modifier',
-  'component',
-  '__mutGet',
-]);
-
-// Built-in helpers that cannot be overridden by an owner-registered helper of
-// the same name. Hoisted module const; previously inlined identically at the
-// two override-assert sites ($_maybeHelper override check + owner.factoryFor).
-const BUILTIN_HELPER_NAMES: readonly string[] = [
-  'array',
-  'hash',
-  'concat',
-  'fn',
-  'get',
-  'mut',
-  'readonly',
-  'unique-id',
-  'unbound',
   '__mutGet',
 ];
+
+// Built-in keyword helpers that may be passed as a named argument as-is: the
+// named-arg resolved-helper guard (see the `maybeHelperInNamedArgPosition`
+// rewrite in precompileTemplate) skips them.
+const _GXT_NAMED_ARG_SAFE_BUILTINS = new Set([...EMBER_KEYWORD_HELPER_NAMES, 'component']);
+
+// Built-in helpers that cannot be overridden by an owner-registered helper of
+// the same name (the `helper` and `modifier` keywords are not in the list).
+// Checked in this order at the two override-assert sites.
+const BUILTIN_HELPER_NAMES: readonly string[] = EMBER_KEYWORD_HELPER_NAMES.filter(
+  (name) => name !== 'helper' && name !== 'modifier'
+);
 
 /**
  * Install `value` at `globalThis[name]` behind a getter that ignores writes, so
@@ -1074,20 +1068,9 @@ installEmberWrappers();
 // The names list is kept as a module-local Set so the JSON-stringified
 // allow-list payload below is generated once.
 const _GXT_STRICT_ALLOWED_NAMES = new Set<string>([
-  'array',
-  'hash',
-  'concat',
-  'fn',
-  'get',
-  'mut',
-  'readonly',
-  'unbound',
-  'unique-id',
+  ...EMBER_KEYWORD_HELPER_NAMES,
   'unique_id',
-  'helper',
-  'modifier',
   'on',
-  '__mutGet',
   // gxtEntriesOf is injected by our each-in transform; safe in any mode.
   'gxtEntriesOf',
   // gxtGetOutletState is injected by our -get-dynamic-var transform; safe in any mode.
@@ -12350,6 +12333,15 @@ function _gxtFindAddedToTreeSym(obj: object): symbol | null {
 //   with ember-spec implementations.
 // ('unique-id' left this set with gxt 0.0.76: $_uid is first-class native.)
 const _GXT_LEGACY_MAYBE_HELPER_NAMES = new Set(['unbound', '__mutGet']);
+// The JS-identifier keyword helpers plus the ember-injected locals, which the
+// legacy Function declares as `const <name> = __gxtBuiltinHelpers[<name>]`
+// when the compiled code references them (`unique-id` is not an identifier).
+const _GXT_LEGACY_HELPER_LOCALS: readonly string[] = [
+  ...EMBER_KEYWORD_HELPER_NAMES.filter((name) => name !== 'unique-id'),
+  'gxtEntriesOf',
+  'gxtGetOutletState',
+  '__gxtCommentLookup',
+];
 const _GXT_LEGACY_BINDING_NAMES = new Set([
   // gxt's raw-embedded {{unbound}} islands reference the legacy-provided
   // `globalThis.__gxtUnboundEval(...)` — since gxt 0.0.78 (#255) the report
@@ -12358,20 +12350,7 @@ const _GXT_LEGACY_BINDING_NAMES = new Set([
   // already blocks). Kept as a belt for island shapes where the bare name
   // isn't visible.
   '__gxtUnboundEval',
-  'gxtEntriesOf',
-  'gxtGetOutletState',
-  '__gxtCommentLookup',
-  '__mutGet',
-  'get',
-  'unbound',
-  'array',
-  'hash',
-  'concat',
-  'fn',
-  'mut',
-  'readonly',
-  'helper',
-  'modifier',
+  ..._GXT_LEGACY_HELPER_LOCALS,
 ]);
 function _gxtNativeTemplateEligible(
   cr: any,
@@ -13298,23 +13277,7 @@ export function precompileTemplate(
           ...compilationResult.emittedIdentifiers,
           ...compilationResult.referencedBindings,
         ]);
-        const helperNames = [
-          'get',
-          'unbound',
-          'array',
-          'hash',
-          'concat',
-          'fn',
-          'mut',
-          'readonly',
-          'helper',
-          'modifier',
-          'gxtEntriesOf',
-          'gxtGetOutletState',
-          '__mutGet',
-          '__gxtCommentLookup',
-        ];
-        for (const name of helperNames) {
+        for (const name of _GXT_LEGACY_HELPER_LOCALS) {
           // Skip if this name is provided in scope values (scope shadows built-in)
           if (scopeKeys.has(name)) continue;
           // NOTE: unique-id is a first-class stable emission since gxt 0.0.76
