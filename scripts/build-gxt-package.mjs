@@ -43,7 +43,7 @@ import {
   cpSync,
   readdirSync,
 } from 'node:fs';
-import { dirname, resolve, join, relative } from 'node:path';
+import { dirname, resolve, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { GXT_DROPPED_ENTRIES } from './gxt-alias-map.mjs';
@@ -465,20 +465,77 @@ function walkFiles(dir, predicate, acc = []) {
   return acc;
 }
 
+// Static `import … from` / `export … from` / side-effect `import` specifiers of
+// one dist module (block comments stripped; dynamic import() is not followed).
+// Rollup's output may put several statements on one line, so no line anchors.
+function staticSpecifiers(raw) {
+  const code = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+  const specs = [];
+  const patterns = [
+    /\b(?:import|export)\b[^'";]*?\bfrom\s*['"]([^'"]+)['"]/g,
+    /\bimport\s*['"]([^'"]+)['"]/g,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(code)) !== null) specs.push(m[1]);
+  }
+  return specs;
+}
+
+function importsSpecifier(code, specifier) {
+  return staticSpecifiers(code).includes(specifier);
+}
+
+// `entry` plus every dist module it reaches through relative static edges,
+// confined to `root` (an edge that leaves it or does not exist is a seam
+// failure in its own right, so it fails loud here).
+function staticImportClosure(entry, root) {
+  const seen = new Set([entry]);
+  const queue = [entry];
+  while (queue.length) {
+    const file = queue.shift();
+    for (const spec of staticSpecifiers(readFileSync(file, 'utf8'))) {
+      if (!spec.startsWith('./') && !spec.startsWith('../')) continue;
+      const target = resolve(dirname(file), spec);
+      if (!target.startsWith(root + sep) || !existsSync(target)) {
+        fail(
+          `self-verify: ${relative(outDir, file)} imports ${spec}, which is not a file of the assembled dist`
+        );
+      }
+      if (!seen.has(target)) {
+        seen.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  return [...seen];
+}
+
 function selfVerify() {
   const pkgDist = join(outDir, 'dist');
 
-  // (a) the GXT shim is present.
-  const validatorDev = join(pkgDist, 'dev', 'packages', '@glimmer', 'validator', 'index.js');
-  if (!existsSync(validatorDev)) {
-    fail('self-verify: @glimmer/validator/index.js missing from assembled dist');
-  }
-  if (!readFileSync(validatorDev, 'utf8').includes('@lifeart/gxt/glimmer-compatibility')) {
-    fail(
-      'self-verify: @glimmer/validator is not the GXT shim (no @lifeart/gxt/glimmer-compatibility import)'
+  // (a) the GXT shim is present. The @glimmer/validator entry is a re-export
+  // barrel over shared chunks (rollup hoists the shim into
+  // shared-chunks/validator-*.js), so the check follows the entry's relative
+  // static import/re-export edges and requires a module of that closure to
+  // import @lifeart/gxt/glimmer-compatibility. The classic VM validator never
+  // reaches gxt, so this tells the two apart however rollup splits the chunks.
+  for (const mode of ['dev', 'prod']) {
+    const validatorEntry = join(pkgDist, mode, 'packages', '@glimmer', 'validator', 'index.js');
+    if (!existsSync(validatorEntry)) {
+      fail(`self-verify: @glimmer/validator/index.js missing from assembled dist/${mode}`);
+    }
+    const shimModule = staticImportClosure(validatorEntry, pkgDist).find((f) =>
+      importsSpecifier(readFileSync(f, 'utf8'), '@lifeart/gxt/glimmer-compatibility')
     );
+    if (!shimModule) {
+      fail(
+        `self-verify: @glimmer/validator (dist/${mode}) is not the GXT shim (no module it ` +
+          'statically imports or re-exports imports @lifeart/gxt/glimmer-compatibility)'
+      );
+    }
+    log(`  ok: @glimmer/validator is the GXT shim (${relative(outDir, shimModule)})`);
   }
-  log('  ok: @glimmer/validator is the GXT shim');
 
   // (b) NO stale VM packages leaked (the §1.3 critical guard).
   for (const mode of ['dev', 'prod']) {
