@@ -519,7 +519,7 @@ export function assertTrackedCellBacktrack(cell: any, key: string | symbol, obj:
     const renderTree = _backtrackingDebugName
       ? `(result of a \`${_backtrackingDebugName}\` helper)`
       : '(unknown)';
-    const msg = `You attempted to update \`${String(info.key)}\` on \`${objName}\`, but it had already been used previously in the same computation. Attempting to update a value after using it in a computation can cause logical errors, infinite revalidation bugs, and performance issues, and is not supported.\n\n\`${String(info.key)}\` was first used:\n\n- While rendering:\n  - top-level\n    ${renderTree}\n\nStack trace for the update:`;
+    const msg = `You attempted to update \`${String(info.key)}\` on \`${objName}\`, but it had already been used previously in the same computation. Attempting to update a value after using it in a computation can cause logical errors, infinite revalidation bugs, and performance issues, and is not supported.\n\n\`${String(info.key)}\` was first used:\n\n- While rendering:\n  -top-level\n    ${renderTree}\n\nStack trace for the update:`;
     const assertDirect = getEmberAssertDirect();
     if (typeof assertDirect === 'function') {
       assertDirect(msg, false);
