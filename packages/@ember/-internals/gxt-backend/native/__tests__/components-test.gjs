@@ -257,4 +257,41 @@ module('gxt-native | components', function (hooks) {
     run(() => (this.owner.lookup('service:store').value = 'v2'));
     assert.strictEqual(textOf(this.element), 'v2');
   });
+
+  // Ported from the classic `AngleBracket Invocation :: has-block` (native-
+  // skipped there: its component is a classic @ember/component). Glimmer gives
+  // `<X></X>` an empty default block and `<X />` none.
+  test('has-block: <X></X> has an empty default block, <X /> has none', function (assert) {
+    const CheckBlock = <template>{{#if (has-block)}}Yes{{else}}No{{/if}}</template>;
+    const Root = <template>
+      <p><CheckBlock /></p><p><CheckBlock></CheckBlock></p><p><CheckBlock>x</CheckBlock></p>
+    </template>;
+    this.render(Root);
+    const read = () => [...this.element.querySelectorAll('p')].map(textOf);
+    assert.deepEqual(read(), ['No', 'Yes', 'Yes']);
+  });
+
+  test('an empty <X></X> passes only the named arguments it is given', function (assert) {
+    const keys = [];
+    class Probe extends Component {
+      constructor(owner, args) {
+        super(owner, args);
+        keys.push(Object.keys(this.args).join(','));
+      }
+      <template><i>{{@a}}</i></template>
+    }
+    const Root = <template>
+      <Probe @a="1"></Probe><Probe></Probe><Probe @a="2" as |x|></Probe><Probe @a="3" />
+    </template>;
+    this.render(Root);
+    assert.deepEqual(keys, ['a', '', 'a', 'a']);
+  });
+
+  test('an empty custom element <foo-bar></foo-bar> renders no extra attribute', function (assert) {
+    const Root = <template><foo-bar></foo-bar><foo-bar data-x="1"></foo-bar></template>;
+    this.render(Root);
+    const names = [...this.element.querySelectorAll('foo-bar')].map((el) => el.getAttributeNames());
+    assert.deepEqual(names, [[], ['data-x']]);
+    assert.strictEqual(htmlOf(this.element), '<foo-bar></foo-bar><foo-bar data-x="1"></foo-bar>');
+  });
 });

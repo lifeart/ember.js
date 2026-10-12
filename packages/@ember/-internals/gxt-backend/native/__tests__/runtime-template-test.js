@@ -75,4 +75,24 @@ module('gxt-native | runtime template()', function (hooks) {
   test('a compile error throws with the template location', function (assert) {
     assert.throws(() => template('{{#if}}x'), /Template compilation failed/);
   });
+
+  test('runtime template(): an empty <X></X> passes only its named arguments, has-block is true', function (assert) {
+    const keys = [];
+    class Probe extends Component {
+      constructor(owner, args) {
+        super(owner, args);
+        keys.push(Object.keys(this.args).join(','));
+      }
+    }
+    template('{{#if (has-block)}}B{{else}}-{{/if}}', { component: Probe });
+    const Root = template(
+      '<Probe @a="1"></Probe><Probe /><foo-bar></foo-bar><foo-bar data-x="1"></foo-bar>',
+      { scope: () => ({ Probe }) }
+    );
+    this.render(Root);
+    assert.deepEqual(keys, ['a', '']);
+    assert.strictEqual(textOf(this.element), 'B-');
+    const names = [...this.element.querySelectorAll('foo-bar')].map((el) => el.getAttributeNames());
+    assert.deepEqual(names, [[], ['data-x']]);
+  });
 });
