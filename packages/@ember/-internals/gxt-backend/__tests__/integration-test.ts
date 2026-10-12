@@ -21,9 +21,6 @@ if (typeof QUnit !== 'undefined') {
 
 import { setCurrentOutletState } from '@ember/-internals/gxt-backend/gxt-bridge';
 
-// Import outlet to register custom element
-import '../outlet.gts';
-
 import Component from '@ember/component';
 import { setComponentTemplate } from '@ember/component';
 import { _backburner, run, _getCurrentRunLoop, schedule } from '@ember/runloop';

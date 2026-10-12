@@ -91,6 +91,10 @@ gxtBootAppScenarios
             'Hello from Ember on GXT',
             'the application route template rendered'
           );
+          assert.true(
+            await page.evaluate(() => customElements.get('ember-mount') !== undefined),
+            'the runtime defines <ember-mount>, which {{mount}} compiles to'
+          );
           assert.equal(
             await page.textContent('[data-test-count]'),
             'Count: 0',

@@ -677,7 +677,7 @@ function _gxtRootIsStale(root: any): boolean {
 
 // Canonical state for the ambient GXT root context, owned by this file.
 // Cross-file lazy-init writers/readers (glimmer/lib/renderer.ts,
-// glimmer/lib/templates/root.ts, gxt-backend/outlet.gts) route through
+// glimmer/lib/templates/root.ts, gxt-backend/mount-element.ts) route through
 // `compilePipeline.getRootContext?.()` / `compilePipeline.setRootContext?.(v)`.
 let _gxtRootContext: any = null;
 function _getGxtRootContext(): any {
@@ -739,6 +739,7 @@ import { dirtyTagFor as _gxtDirtyTagFor } from '@glimmer/validator';
 
 // Install shared Ember wrappers for $_maybeHelper and $_tag on globalThis
 import { installEmberWrappers } from './ember-gxt-wrappers';
+import { defineEmberMountElement } from './mount-element';
 
 // Typed capabilities bridge for destruction hooks. Populated by manager.ts at
 // its module init time.
@@ -3579,13 +3580,13 @@ function _gxtSetDestroyReattachInProgress(on: boolean): void {
 // invocation — reused across re-renders of the parent template so that
 // `<ember-mount>` elements recreated by a force-rerender don't double-
 // instantiate the engine. Engines are inserted on first `<ember-mount>`
-// connection (outlet.gts `renderEngine`) and destroyed in the between-test
+// connection (mount-element.ts `renderEngine`) and destroyed in the between-test
 // teardown (`_gxtClearOnSetup`), which destroys both the inner
 // `__gxtOriginalEngine` (which `init`-ed itself into the `Namespace.NAMESPACES`
 // table) and the cached instance so the "Should not have any NAMESPACES"
 // assertion passes.
 //
-// The cross-package writer (`outlet.gts`) routes through
+// The cross-file writer (`mount-element.ts`) routes through
 // `compilePipeline.getEngineInstances()`; the intra-file readers in
 // `_gxtClearOnSetup` use `_gxtEngineInstances` directly. Only a getter is
 // exposed because the Map identity never changes — consumers mutate its
@@ -15299,7 +15300,7 @@ installCompilePipelinePart({
   getDestroyReattachInProgress: _gxtGetDestroyReattachInProgress,
   setDestroyReattachInProgress: _gxtSetDestroyReattachInProgress,
   // Get-only accessor for the engine-instance Map cache. Written via this method
-  // by `outlet.gts`'s `<ember-mount>.renderEngine`; read directly by the
+  // by `mount-element.ts`'s `<ember-mount>.renderEngine`; read directly by the
   // intra-file between-test teardown.
   getEngineInstances: _gxtGetEngineInstances,
   // Read predicate + TRUE-for-body save-restore wrapper for the
@@ -15369,7 +15370,7 @@ installCompilePipelinePart({
   pushHelperInstance: _gxtPushHelperInstance,
   setHelperInstancePushHook: _gxtSetHelperInstancePushHook,
   // Paired accessors for the module-local `_gxtRootContext` binding. Cross-file
-  // lazy-init writers/readers (renderer.ts, root.ts, outlet.gts) route through
+  // lazy-init writers/readers (renderer.ts, root.ts, mount-element.ts) route through
   // these; intra-file consumers read the module-local directly.
   getRootContext: _getGxtRootContext,
   setRootContext: _setGxtRootContext,
@@ -15415,6 +15416,10 @@ assertCompilePipelineInstalled([
 installRenderPassPart({
   beforeBeginRenderPass: _resetTemplateOnlyState,
 });
+
+// `{{mount}}` compiles to `<ember-mount>`; define it with the rest of the
+// runtime so every compat build (not only the test page) has it.
+defineEmberMountElement();
 
 // Host hook that runs inside manager.ts's `checkBacktracking` body,
 // transforming the assembled assertion message before it reaches `_assertFn`.
