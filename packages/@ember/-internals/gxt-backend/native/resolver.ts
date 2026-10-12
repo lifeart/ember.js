@@ -28,7 +28,7 @@ import { OWNER } from './managers';
 import { array, concat, fn, get, hash, KEYWORD_HELPERS, on } from './runtime-helpers';
 
 /** The Ember owner of the render tree `ctx` belongs to (nearest provider). */
-export function ownerOfContext(ctx: unknown): InternalOwner | undefined {
+function ownerOfContext(ctx: unknown): InternalOwner | undefined {
   if (ctx === null || typeof ctx !== 'object') return undefined;
   const owner = getContext<InternalOwner>(ctx as never, OWNER, false);
   return owner === null ? undefined : owner;
