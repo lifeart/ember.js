@@ -807,6 +807,24 @@ export function installCompilePipelinePart(part: Partial<GxtCompilePipelineCapab
   Object.assign(_renderer.compilePipeline, part);
 }
 
+/**
+ * Install-time check for compile-pipeline members that callers use without a
+ * fallback: throws unless each one is installed, or buffered for
+ * `setGxtRenderer`.
+ */
+export function assertCompilePipelineInstalled(
+  names: readonly (keyof GxtCompilePipelineCapabilities)[]
+): void {
+  for (const name of names) {
+    const installed =
+      (_renderer !== null && typeof _renderer.compilePipeline[name] === 'function') ||
+      _pendingCompilePipelineParts.some((part) => typeof part[name] === 'function');
+    if (!installed) {
+      throw new Error(`[gxt] compile pipeline member \`${name}\` is not installed`);
+    }
+  }
+}
+
 /** Add members to the `renderPass` namespace, buffering until `setGxtRenderer`. */
 export function installRenderPassPart(part: Partial<GxtRenderPassCapabilities>): void {
   if (_renderer === null) {

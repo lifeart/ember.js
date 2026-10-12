@@ -3289,11 +3289,8 @@ function _gxtSetHadNestedObjectChange(on: boolean): void {
 //
 // Exposed as a paired bridge surface `withInOutletRender<T>(fn): T` (writer) +
 // `isInOutletRender(): boolean` (reader). The writer lives in
-// `glimmer/lib/templates/root.ts`, the reader in `gxt-backend/manager.ts`; the
-// reader's optional-chain fallback treats `undefined` as `false` (the safe
-// value — outside an outlet render frame we must NOT rebuild the
-// renderTreeParts). Pure balanced save-restore wrap; in practice no nested
-// outlet-render occurs.
+// `glimmer/lib/templates/root.ts`, the reader in `gxt-backend/manager.ts`.
+// Pure balanced save-restore wrap; in practice no nested outlet-render occurs.
 let _gxtInOutletRenderFlag = false;
 function _gxtIsInOutletRender(): boolean {
   return _gxtInOutletRenderFlag;
@@ -15177,6 +15174,7 @@ export const __emberTemplateCompiler = {
 // for the renderer to work at all).
 import {
   installCompilePipelinePart,
+  assertCompilePipelineInstalled,
   installRenderPassPart,
   installBacktrackingPart,
   installViewUtilsPart,
@@ -15434,6 +15432,14 @@ installCompilePipelinePart({
   // harness probes and dev-debug scripts that read/wrap it.
   syncDomNow: _gxtSyncDomNow,
 });
+// manager.ts calls these members without a fallback.
+assertCompilePipelineInstalled([
+  'withSyncing',
+  'withSuppressDirtyInRcSet',
+  'isSyncIsPropertyDriven',
+  'isInOutletRender',
+  'syncDomNow',
+]);
 
 // Host hook that runs at the start of every `beginRenderPass` call, BEFORE
 // manager.ts clears its template-rendered set.

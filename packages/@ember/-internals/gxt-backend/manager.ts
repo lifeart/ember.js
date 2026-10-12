@@ -2708,7 +2708,7 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
           // dirtyTagFor doesn't schedule another sync for this internal write-back.
           // The `__gxtDispatchingArgs` save/restore is nested inside the suppress
           // frame so dispatching-arg consumers also see the suppression.
-          const withSuppress = getGxtRenderer()?.compilePipeline.withSuppressDirtyInRcSet;
+          const withSuppress = getGxtRenderer()!.compilePipeline.withSuppressDirtyInRcSet!;
           const body = () => {
             try {
               instance.__gxtDispatchingArgs = true;
@@ -2737,13 +2737,7 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
               instance.__gxtDispatchingArgs = false;
             }
           };
-          if (withSuppress) {
-            withSuppress(body);
-          } else {
-            // Bridge not installed yet: run the body directly. The scheduler may
-            // queue an extra re-render, which is harmless.
-            body();
-          }
+          withSuppress(body);
         }
         lastArgValues[key] = newValue;
         // Notify Ember's computed property system that this property changed.
@@ -2769,7 +2763,7 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
         // `withSuppressDirtyInRcSet(fn)` handles the suppress-flag
         // save/restore pair; the inner try/finally retains the
         // `__gxtDispatchingArgs` save/restore pair.
-        const withSuppress = getGxtRenderer()?.compilePipeline.withSuppressDirtyInRcSet;
+        const withSuppress = getGxtRenderer()!.compilePipeline.withSuppressDirtyInRcSet!;
         const body = () => {
           try {
             instance.__gxtDispatchingArgs = true;
@@ -2791,11 +2785,7 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
             instance.__gxtDispatchingArgs = false;
           }
         };
-        if (withSuppress) {
-          withSuppress(body);
-        } else {
-          body();
-        }
+        withSuppress(body);
         // If the property has a cell-backed getter from createRenderContext,
         // the setter may have set _useLocal=false but the getter still calls
         // the old arg getter (which returns the stale value). Install a new
@@ -3202,8 +3192,7 @@ export function checkBacktracking(targetObj: any, key: string): void {
   // If rendering inside an outlet context, build the outlet hierarchy.
   // This matches Glimmer VM's render tree which includes outlet entries.
   const outletState = getCurrentOutletState();
-  // The `?? false` fallback covers the bridge-not-yet-installed edge.
-  const inOutletRender = getGxtRenderer()?.compilePipeline.isInOutletRender?.() ?? false;
+  const inOutletRender = getGxtRenderer()!.compilePipeline.isInOutletRender!();
   if (outletState && inOutletRender) {
     // Clear parentView-derived entries (e.g., "controller:routeWithError")
     // and rebuild with the proper outlet hierarchy that Glimmer VM produces.
@@ -4030,7 +4019,7 @@ function _gxtSyncAllWrappersBody(): void {
               // `__gxtDispatchingArgs` save/restore pair AND the
               // catch-and-ignore semantics for the assignment (some setters
               // can throw).
-              const withSuppress = getGxtRenderer()?.compilePipeline.withSuppressDirtyInRcSet;
+              const withSuppress = getGxtRenderer()!.compilePipeline.withSuppressDirtyInRcSet!;
               const body = () => {
                 try {
                   entry.instance.__gxtDispatchingArgs = true;
@@ -4091,11 +4080,7 @@ function _gxtSyncAllWrappersBody(): void {
                   entry.instance.__gxtDispatchingArgs = false;
                 }
               };
-              if (withSuppress) {
-                withSuppress(body);
-              } else {
-                body();
-              }
+              withSuppress(body);
             }
             hasChanges = true;
           }
@@ -4144,7 +4129,7 @@ function _gxtSyncAllWrappersBody(): void {
               // doesn't schedule another sync for this write-back. The inner
               // try/catch/finally keeps the `__gxtDispatchingArgs` save/restore and
               // ignores assignment errors (some setters can throw).
-              const withSuppress = getGxtRenderer()?.compilePipeline.withSuppressDirtyInRcSet;
+              const withSuppress = getGxtRenderer()!.compilePipeline.withSuppressDirtyInRcSet!;
               const body = () => {
                 try {
                   entry.instance.__gxtDispatchingArgs = true;
@@ -4188,11 +4173,7 @@ function _gxtSyncAllWrappersBody(): void {
                   entry.instance.__gxtDispatchingArgs = false;
                 }
               };
-              if (withSuppress) {
-                withSuppress(body);
-              } else {
-                body();
-              }
+              withSuppress(body);
               // When there are active $_dc dynamic component listeners,
               // call notifyPropertyChange to dirty Ember tags for @computed
               // properties that depend on this arg. Without this, computed
@@ -4528,31 +4509,16 @@ function _gxtPostRenderHooks(): void {
     try {
       // Temporarily clear the re-entrancy guard so the sync runs. The
       // `withSyncing(false, fn)` bridge helper clears compile.ts's syncing flag
-      // for the duration of `fn` and restores it afterward. The helper is
-      // optional (classic builds never publish it); if it's not installed we
-      // skip the sync attempt entirely (without the GXT pipeline loaded there's
-      // no sync to flush).
-      const _cpSync = getGxtRenderer()?.compilePipeline;
-      const _withSyncing = _cpSync?.withSyncing;
-      const syncNow = _cpSync?.syncDomNow;
-      if (typeof _withSyncing === 'function' && typeof syncNow === 'function') {
-        _withSyncing(false, () => {
-          try {
-            syncNow();
-          } catch {
-            /* ignore */
-          }
-        });
-      } else if (typeof syncNow === 'function') {
-        // Bridge-unavailable edge: no save-restore wrap (the GXT pipeline
-        // isn't loaded, so there's no `_gxtSyncingFlag` to clear). Call
-        // syncNow directly; it self-guards via its own re-entrancy check.
+      // for the duration of `fn` and restores it afterward.
+      const _cpSync = getGxtRenderer()!.compilePipeline;
+      const syncNow = _cpSync.syncDomNow!;
+      _cpSync.withSyncing!(false, () => {
         try {
           syncNow();
         } catch {
           /* ignore */
         }
-      }
+      });
     } finally {
       _postRenderHookReentryDepth--;
     }
@@ -4835,10 +4801,9 @@ function _gxtDestroyUnclaimedPoolEntries(): void {
   // wrappedDestroy/wrappedTrigger capture path. We read isSyncIsPropertyDriven
   // (set in compile.ts at the start of `_gxtSyncDomNow`) instead of
   // hadPendingSync because the latter is cleared by forceEmberRerender's
-  // finally block before this Phase runs. The bridge predicate defaults to
-  // falsy when not yet installed, so `_outerSuppressCapture` defaults to true
-  // before the first `_gxtSyncDomNow` call.
-  const _outerSuppressCapture = !getGxtRenderer()?.compilePipeline.isSyncIsPropertyDriven?.();
+  // finally block before this Phase runs. The predicate is false before the
+  // first `_gxtSyncDomNow` call, so `_outerSuppressCapture` starts out true.
+  const _outerSuppressCapture = !getGxtRenderer()!.compilePipeline.isSyncIsPropertyDriven!();
   // Snapshot the prior value so the matching `finally`-disarm only restores it
   // if WE set it (preserves outer re-entrant arms).
   const _hadPriorSuppress = _suppressDestroyCapture;
