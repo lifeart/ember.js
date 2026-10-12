@@ -1,25 +1,22 @@
 /**
- * Glimmer-VM stub surface for the GXT ROLLUP DIST ONLY.
+ * Glimmer-VM stub surface for the GXT rollup dist only.
  *
- * The GXT build replaces the Glimmer VM with the @lifeart/gxt backend, but a
- * handful of classic-only modules under `@glimmer/runtime/lib/*` were still
- * being bundled (~140KB of dead opcode/append machinery) because the
- * ember-side classic fallback branches import them at module top level —
+ * A handful of classic-only modules under `@glimmer/runtime/lib/*` are
+ * imported at module top level by ember-side classic fallback branches —
  * `renderMain`/`renderComponent` (lib/render), `clientBuilder`
  * (lib/vm/element-builder), `rehydrationBuilder` (lib/vm/rehydrate-builder)
  * and the SSR DOM builders (lib/dom/api, lib/dom/helper). Under the inlined
  * `__GXT_MODE__ = true` those branches are unreachable, so the GXT rollup
- * build resolves those module ids HERE instead (see GXT_DIST_VM_STUBS in
- * scripts/gxt-alias-map.mjs and the resolvePackages wiring) — one stub module
- * whose unused exports tree-shake per importer.
+ * build resolves those module ids here instead (see GXT_DIST_VM_STUBS in
+ * scripts/gxt-alias-map.mjs) — one stub module whose unused exports
+ * tree-shake per importer.
  *
- * NOT aliased (kept as the real vendored leaf modules, all light and live
- * under GXT): lib/modifiers/on, lib/component/template-only, lib/helpers/*,
+ * Not aliased (kept as the real vendored modules, all light and live under
+ * GXT): lib/modifiers/on, lib/component/template-only, lib/helpers/*,
  * lib/environment (inTransaction wraps the GXT destroy path), lib/vm/arguments
- * and lib/curried-value (small, and reachable from the kept helpers),
- * lib/dom/props.
+ * and lib/curried-value (reachable from the kept helpers), lib/dom/props.
  *
- * The vite TEST pipeline never sees this file — the in-repo suite runs the
+ * The vite test pipeline never sees this file — the in-repo suite runs the
  * real VM for the [integration] jit tests.
  */
 
@@ -57,8 +54,8 @@ export const DOMTreeConstruction = vmStub('DOMTreeConstruction');
 // lib/dom/helper
 export const DOMChanges = vmStub('DOMChanges');
 
-// @glimmer/node (SSR) — FastBoot/SSR is out of scope for the GXT preview
-// (RFC §7); these are re-exported by glimmer/lib/dom.ts.
+// @glimmer/node (SSR) — FastBoot/SSR is not supported by the GXT backend;
+// these are re-exported by glimmer/lib/dom.ts.
 export const serializeBuilder = vmStub('serializeBuilder');
 const NodeDOMTreeConstruction = vmStub('NodeDOMTreeConstruction');
 export default NodeDOMTreeConstruction;

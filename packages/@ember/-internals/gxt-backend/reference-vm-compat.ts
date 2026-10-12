@@ -1,18 +1,13 @@
-// @glimmer/reference — VM-COMPAT (test-only) surface: the IterableReference
+// @glimmer/reference — VM-compat (test-only) surface: the IterableReference
 // port (createIteratorRef / createIteratorItemRef / IterableReference /
 // uniqueKeyFor).
 //
-// A dist closure-trace from @ember/application + @ember/component +
-// @ember/routing + @ember/-internals/glimmer shows NONE of these are reached by
-// a live GXT-mode runtime path: the only value-importers are the
-// `@glimmer/runtime` opcode core (purged from the GXT dist) and the
-// `@glimmer/reference: IterableReference` test suite. Keeping the port in this
+// No live GXT-mode runtime path reaches these: the only value-importers are
+// the `@glimmer/runtime` opcode core (not in the GXT dist) and the
+// `@glimmer/reference: IterableReference` test suite. Keeping the port in a
 // separate module — rooted only by the `@glimmer/reference` package-entry
-// facade (`./reference-entry`) and the vite test tree, neither in the app
-// closure — tree-shakes its bytes out of what a precompiled app ships.
-//
-// This module only CALLS runtime ref/tag primitives (imported from `./reference`
-// and `./validator`), so the physical split is behavior-preserving.
+// facade (`./reference-entry`) and the vite test tree — keeps it out of what a
+// precompiled app ships.
 
 import { cell, formula } from '@lifeart/gxt';
 import { valueForRef, brandRef } from './reference';
@@ -235,18 +230,14 @@ export function createIteratorRef(listRef: any, key: string = '@identity') {
 // consumers observing it re-run on change.
 export function createIteratorItemRef(_value: unknown) {
   const backing = cell(_value, 'iteratorItemRef');
-  // Classic-validator tag so downstream consumers using `createCache` /
-  // `consumeTag` (e.g. `childRefFor` → `createCache(childCompute)` for
-  // `{{p.name}}`) record a dependency on this item's identity. Without
-  // this, the child cache reads `valueForRef(iterRef)` which only
-  // establishes a GXT-internal subscription on the backing cell — that
-  // subscription does NOT propagate to `_cacheTagTracker`, so the cache
-  // marks itself as constant (`_consumedTags.length === 0`) on first
-  // evaluation and never re-runs when the iterated item is swapped via
-  // `updateRef(iterRef, newItem)` (stock @glimmer/runtime's each
-  // `retainItem` path). Result: `{{p.name}}` continues to read the
-  // closure-captured original item and the rendered text stays stale.
-  // See ember.js initial-render `Loops` test for the exact repro.
+  // Classic-validator tag so consumers using `createCache` / `consumeTag`
+  // (e.g. `childRefFor` → `createCache(childCompute)` for `{{p.name}}`) record a
+  // dependency on this item's identity. Reading `valueForRef(iterRef)` only
+  // subscribes to the backing GXT cell, which does not reach
+  // `_cacheTagTracker`, so without this tag the child cache would be treated as
+  // constant and keep rendering the original item after
+  // `updateRef(iterRef, newItem)` (stock @glimmer/runtime's each `retainItem`
+  // path).
   const tag = createTag();
   const ref = formula(() => {
     consumeTag(tag);

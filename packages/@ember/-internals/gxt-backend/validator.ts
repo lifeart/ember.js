@@ -93,17 +93,10 @@ export function track(cb: () => void): any {
     _debugTransactionLabelForTag = new WeakMap<any, string>();
   }
 
-  // Suppress __gxtTriggerReRender during track() to prevent infinite
-  // recursion when a getter calls notifyPropertyChange (which triggers
-  // __gxtTriggerReRender → re-reads getter → notifyPropertyChange → …).
-  //
-  // Routed through the typed `compilePipeline.withTriggerSuppressed(fn)`
-  // helper that encapsulates the save-restore pattern. Fallback to the
-  // inline save-restore is preserved for the (rare) case where the bridge
-  // hasn't been populated yet — should only happen before compile.ts's
-  // module-init `installCompilePipelinePart` call has fired, and `track()`
-  // is not reachable during that window in any known entry point. See
-  // `withTriggerSuppressed` doc in gxt-bridge.ts.
+  // Suppress re-render triggering (compile.ts `_gxtTriggerReRender`) during
+  // track() to prevent infinite recursion when a getter calls
+  // notifyPropertyChange (trigger → re-read getter → notifyPropertyChange → …).
+  // See `withTriggerSuppressed` in gxt-bridge.ts.
 
   // Run the callback. The tracked getters read GXT cells, establishing
   // dependencies. Those cells can't be captured directly, but changes can be
@@ -130,10 +123,9 @@ export function track(cb: () => void): any {
     }
   };
 
-  // The bridge `withTriggerSuppressed(fn)` helper is the single suppression
-  // surface. Avoid `?? _runTrack()` because `_runTrack` returns `undefined`
-  // and would cause a second invocation; instead branch on whether the bridge
-  // method is installed.
+  // Avoid `?? _runTrack()` because `_runTrack` returns `undefined` and would
+  // cause a second invocation; instead branch on whether the bridge method is
+  // installed (it is not, before compile.ts has loaded).
   const _withSuppressed = getGxtRenderer()?.compilePipeline.withTriggerSuppressed;
   if (_withSuppressed) {
     _withSuppressed(_runTrack);
@@ -144,12 +136,10 @@ export function track(cb: () => void): any {
   // If no specific tags were consumed, the frame's `cb()` did not depend
   // on any tracked state — by definition a constant. Return CONSTANT_TAG so
   // CheckTag / validateTag treat it as never-invalidating. This matches
-  // classic @glimmer/validator semantics (track() with no consumed tags
-  // returns CONSTANT_TAG) and is essential for e.g. `updateTag(modifierTag,
-  // track(install))` in environment.ts: when a modifier's install hook
-  // reads only constant args (`{{foo "foo" bar="baz"}}`), the outer modifier
-  // tag must not invalidate on every unrelated mutation (fixes the
-  // `didUpdate is not called when params are constants` test).
+  // classic @glimmer/validator semantics and is essential for e.g.
+  // `updateTag(modifierTag, track(install))` in environment.ts: when a
+  // modifier's install hook reads only constant args (`{{foo "foo" bar="baz"}}`),
+  // the outer modifier tag must not invalidate on every unrelated mutation.
   const consumedArr = Array.from(consumed);
   if (consumed.size === 0) {
     return CONSTANT_TAG;
@@ -254,12 +244,10 @@ export function createCache<T>(fn: () => T): { value: T; destroy?: () => void; t
   // re-throw the same error rather than serving the previous successful
   // _lastValue (which would be a stale, pre-throw value). This mirrors
   // stock @glimmer/reference semantics where a Reference whose compute
-  // throws does NOT cache lastValue/lastRevision, so the next valueForRef
+  // throws does not cache lastValue/lastRevision, so the next valueForRef
   // recomputes (and re-throws). Cleared on the next successful _evaluate.
-  // Required by the debug-render-tree test "emberish curly components"
-  // where {{this.obj.getterWithError}} starts returning, then throws
-  // after `obj.doFail = true` — reifyArgsDebug must observe the throw to
-  // wrap arg2 with ArgumentErrorImpl.
+  // The debug render tree relies on this: reifyArgsDebug must observe a getter
+  // that starts throwing in order to wrap the arg with ArgumentErrorImpl.
   let _lastError: unknown = null;
   let _hasLastError = false;
 
@@ -315,14 +303,13 @@ export function createCache<T>(fn: () => T): { value: T; destroy?: () => void; t
       if (_initialized && _consumedTags.length > 0) {
         const gxtTracking = gxtIsTracking();
         const cacheTrackingActive = _cacheTagTracker.length > 0;
-        // Also forward into the shim's OWN classic frames (track() /
-        // beginTrackFrame). gxtIsTracking() is NOT a proxy for those: in the
+        // Also forward into the shim's own classic frames (track() /
+        // beginTrackFrame). gxtIsTracking() is not a proxy for those: in the
         // production gxt dist the tracking introspection is stubbed out and
         // gxtIsTracking() reports false even while a classic track() frame is
-        // open (the dev dist reports true, which masked this gap). Without
-        // this, a cache read inside e.g. the env-commit's modifier-install
-        // track() forwards nothing, the frame degrades to CONSTANT_TAG, and
-        // rerender updates never reach the modifier/component.
+        // open. Without this, a cache read inside e.g. the env-commit's
+        // modifier-install track() forwards nothing, the frame degrades to
+        // CONSTANT_TAG, and rerender updates never reach the modifier/component.
         const classicTrackingActive = _trackingTagStack !== null && _trackingTagStack.length > 0;
         if (gxtTracking || cacheTrackingActive || classicTrackingActive) {
           for (let i = 0; i < _consumedTags.length; i++) {
@@ -476,10 +463,9 @@ export function endBacktrackingFrame() {
 }
 
 // beginBacktrackingFrame / endBacktrackingFrame are installed on the typed
-// gxt-bridge by manager.ts (which already imports both from this file).
-// Readers in helper-manager.ts and ember-gxt-wrappers.ts go through
-// `getGxtRenderer()?.backtracking.{begin,end}Frame` — no globalThis write
-// needed here.
+// gxt-bridge by manager.ts. Readers in helper-manager.ts and
+// ember-gxt-wrappers.ts go through
+// `getGxtRenderer()?.backtracking.{begin,end}Frame`.
 
 // Expose classic tag primitives for gxt-backend/manager.ts so component-arg
 // own-property getters can participate in createCache/invokeHelper tag tracking.
@@ -491,15 +477,14 @@ export function endBacktrackingFrame() {
 // The DEV "You attempted to update `X` ... already used in the same
 // computation" assertion is driven by two frames: `_backtrackingFrame`
 // (render/helper computation, set by begin/endBacktrackingFrame) and
-// `_debugTransactionConsumed` (an explicit `track()` frame). The READ side
-// records the consuming cell into both; the WRITE side checks them and asserts.
+// `_debugTransactionConsumed` (an explicit `track()` frame). The read side
+// records the consuming cell into both; the write side checks them and asserts.
 //
-// These were inlined in `trackedData`'s getter/setter (the classic storage-cell
-// backing). They are extracted here so the Ember `@tracked` single-cell path
-// (which backs a tracked property with the SAME `cellFor`/`tagFor` cell instead
-// of a separate trackedData storage cell) can record/assert on its own cell and
-// keep the backtracking contract intact. The cell argument is opaque identity —
-// any stable per-property object works.
+// Shared by `trackedData`'s getter/setter (the classic storage-cell backing)
+// and the Ember `@tracked` single-cell path, which backs a tracked property
+// with the same `cellFor`/`tagFor` cell instead of a separate trackedData
+// storage cell. The cell argument is opaque identity — any stable
+// per-property object works.
 export function recordTrackedCellRead(cell: any, key: string | symbol, obj: object): void {
   // Record this read in the backtracking frame
   if (_backtrackingFrame !== null) {
@@ -582,8 +567,7 @@ export function trackedData<T, K extends string | symbol>(
       // Register this cell's tag with the active track() / createCache frame
       // so `track(() => getter(obj))` captures the dependency. Without this,
       // an empty frame would return CONSTANT_TAG and `validateTag(tag, snap)`
-      // would never invalidate after a setter call — regressing
-      // `@glimmer/validator: tracking :: it tracks changes to the storage cell`.
+      // would never invalidate after a setter call.
       consumeTag(_trackedDataTagFor(obj, key));
 
       return cellForKey.value as T;
@@ -601,8 +585,7 @@ export function trackedData<T, K extends string | symbol>(
         objStorage.set(key, cellForKey);
       } else {
         // Backtracking detection (render/helper frame + track() debug
-        // transaction). See `assertTrackedCellBacktrack` above. Uses
-        // __emberAssertDirect so expectAssertion() can catch it.
+        // transaction). See `assertTrackedCellBacktrack` above.
         assertTrackedCellBacktrack(cellForKey, key, obj);
         cellForKey.value = value;
       }
@@ -746,14 +729,13 @@ const REACTOR_FIRE_HARD_CAP = 50_000;
 
 // Cap on fires WITHIN A SINGLE foreign test (catches fast leaks).
 const REACTOR_FOREIGN_FIRE_CAP = 100;
-// Cap on CUMULATIVE fires across all foreign tests (never resets).
+// Cap on cumulative fires across all foreign tests (never resets).
 // Hard-unsubscribing a capped reactor (removing it from _classicReactors)
-// regresses many unrelated tests, because that breaks the side-channel
-// classic-tag bridge mechanics those tests rely on. Instead, SOFT-DISABLE:
-// keep the reactor in _classicReactors so iteration cost is paid (preserving
-// the bridge bookkeeping) but skip invoking cb (the expensive work that
-// produces the runaway). The cap can stay low since the soft disable doesn't
-// disturb the bridge.
+// would break the side-channel classic-tag bridge mechanics other rendering
+// relies on. Instead, soft-disable: keep the reactor in _classicReactors so
+// iteration cost is paid (preserving the bridge bookkeeping) but skip
+// invoking cb (the expensive work that produces the runaway). The cap can
+// stay low since the soft disable doesn't disturb the bridge.
 const REACTOR_TOTAL_FOREIGN_FIRE_CAP = 200;
 const NO_TEST_SENTINEL = '<no-test>';
 
@@ -825,26 +807,16 @@ export function dirtyTagFor(obj: any, key: any) {
     markTagDirty(tag);
   }
 
-  // Mark GXT sync as pending so __gxtSyncDomNow processes the force-rerender.
-  // Without this, set() on components dirtied Glimmer tags but __gxtPendingSync
-  // stayed false, causing __gxtSyncDomNow to be a no-op.
+  // Mark GXT sync as pending so the next `_gxtSyncDomNow` processes this
+  // change; otherwise set() on a component would dirty tags without any sync.
   //
   // Skip scheduling (but preserve dirty-tag semantics above) during rcSet
   // internal arg write-backs. Those writes fire rcSet → dirtyTagFor;
-  // rescheduling another sync triggers a backburner re-entry loop on curly
-  // tests. The tag still needs to be marked dirty and the global revision
-  // bumped so within-sync template re-reads see the new value.
-  //
-  // The suppression flag is read through the typed-bridge predicate
-  // `compilePipeline.isDirtyInRcSetSuppressed?.()`. It returns `undefined`
-  // when the bridge isn't installed yet (the optional chain short-circuits),
-  // which the `!` coerces to FALSE so the schedule call runs — the same
-  // behavior as when the flag is unset.
+  // rescheduling another sync triggers a backburner re-entry loop. The tag
+  // still needs to be marked dirty and the global revision bumped so
+  // within-sync template re-reads see the new value. Before the bridge is
+  // installed the predicate is `undefined`, so the schedule call runs.
   if (!getGxtRenderer()?.compilePipeline.isDirtyInRcSetSuppressed?.()) {
-    // Mark GXT sync pending. Formerly called the `__gxtExternalSchedule`
-    // global slot — hook-capable dists no longer publish it (§2d host hooks);
-    // the `setPendingSync` pipeline member is the seam in both modes and its
-    // body is exactly what the slot did.
     getGxtRenderer()?.compilePipeline.setPendingSync?.(true);
 
     // Notify the scheduler (typically _backburner.ensureInstance()) so that the
@@ -911,14 +883,13 @@ export function dirtyTagFor(obj: any, key: any) {
     if (helperCache && helperCache.size > 0) {
       // forEach, NOT for…of: the gxt runtime patches Map.prototype's
       // Symbol.iterator/entries/keys/values for Map reactivity, so a for…of
-      // here — which can run INSIDE a render formula frame (any set() during
+      // here — which can run inside a render formula frame (any set() during
       // render lands in dirtyTagFor) — lazily creates a reactivity cell for
       // this bookkeeping Map. Every later cache.set() inside a helper effect
       // then subscribes that effect to the cache, and any subsequent cache
-      // mutation re-fires ALL such effects — including stale ones from
-      // already-collapsed {{#if}} branches ("evaluation should be lazy",
-      // "class-based helper lifecycle" prod failures). Native forEach is not
-      // patched and keeps this infrastructure Map invisible to tracking.
+      // mutation re-fires all such effects — including stale ones from
+      // already-collapsed {{#if}} branches. Native forEach is not patched and
+      // keeps this infrastructure Map invisible to tracking.
       helperCache.forEach((cached) => {
         if (!cached || cached.__managerBucket !== true) return;
         cached.lastArgsSer = '__classic_tag_dirty__' + globalRevisionCounter;
@@ -1162,14 +1133,13 @@ export function validateTag(tag: any, revision?: number): boolean {
   return currentTagRevision(tag) <= revision;
 }
 
-// Reset tracking state (used in testing)
+// Reset tracking state (used in testing).
 // Mirrors classic @glimmer/validator's resetTracking ("This function is only
 // for handling errors and resetting to a valid state"): a render that throws
 // mid-frame (e.g. the classic VM's beginCacheGroup with no matching
 // commitCacheGroup on the unwind path) strands open frames. The test harness
-// calls this at every testStart; without a real implementation the stranded
-// frames keep isTracking() true for the rest of the realm and poison every
-// later frame-semantics check in cumulative runs.
+// calls this at every testStart; otherwise the stranded frames would keep
+// isTracking() true for every later test.
 export function resetTracking() {
   _manualTrackFrameStack.length = 0;
   _trackingTagStack = null;
@@ -1523,10 +1493,8 @@ export function dirtyTag(tag: any) {
       _scheduleCollectionFlush();
       return;
     }
-    // Flush GXT DOM sync so the updated value is visible immediately.
-    // The canonical `_gxtSyncDomNow` lives in `compile.ts`; this cross-file
-    // reader routes through the bridge method. See `syncDomNow` doc in
-    // gxt-bridge.ts.
+    // Flush GXT DOM sync so the updated value is visible immediately (bridge
+    // `syncDomNow`, i.e. compile.ts `_gxtSyncDomNow`).
     getGxtRenderer()?.compilePipeline.syncDomNow?.();
   }
 }
@@ -1573,20 +1541,18 @@ debug.runInTrackingTransaction = runInTrackingTransaction;
 
 // Coalesced DOM-sync flush for reactive-collection structural mutations.
 // A single `push(...thousand)` / `splice` fires the collection's `set` trap
-// many times; it must NOT re-render per element. Each `dirtyCollection`
-// schedules ONE GXT `syncDom()` via a microtask (deduped by
-// `_collectionFlushScheduled`). The microtask runs after the (synchronous)
-// mutation method returns but BEFORE the benchmark's `requestIdleCallback`, so
-// the DOM is up to date when correctness is checked. GXT's own auto-scheduler
-// is suppressed in this build by the gxt-backend's `__gxtExternalSchedule`
-// no-op hook (it only sets a pending flag — `compile.ts`), so a GXT cell write
-// (`collection.dirty()`) enqueues the dependent opcode but nothing flushes it;
-// this microtask is the flush point. `syncDom()` (NOT `flushCellOpcodes` —
-// that only registers opcode/destructor pools) processes the dirty-opcode
-// queue, re-running the each-source-formula-subscribed list opcode →
-// `syncList(newArray)` → keyed LIS diff (move/insert/remove by key, reusing
-// row instances). Fine-grained: only the dirtied list opcode re-runs; NO whole-
-// root re-render, so the host template's `this` context is untouched.
+// many times; it must not re-render per element. Each `dirtyCollection`
+// schedules one GXT `syncDom()` via a microtask (deduped by
+// `_collectionFlushScheduled`), which runs after the synchronous mutation
+// method returns. GXT's own auto-scheduler is suppressed by the gxt-backend's
+// `__gxtExternalSchedule` hook (it only sets a pending flag — `compile.ts`),
+// so a GXT cell write (`collection.dirty()`) enqueues the dependent opcode but
+// nothing flushes it; this microtask is the flush point. `syncDom()` (not
+// `flushCellOpcodes`, which only registers opcode/destructor pools) processes
+// the dirty-opcode queue, re-running the subscribed list opcode →
+// `syncList(newArray)` → keyed diff (move/insert/remove by key, reusing row
+// instances). Only the dirtied list opcode re-runs; there is no whole-root
+// re-render, so the host template's `this` context is untouched.
 let _collectionFlushScheduled = false;
 export function _scheduleCollectionFlush(): void {
   if (_collectionFlushScheduled) return;

@@ -26,13 +26,11 @@ const READONLY_MARKER = Symbol('gxt:readonly');
 const COMPUTED_MARKER = Symbol('gxt:computed');
 const INVOKABLE_MARKER = Symbol('gxt:invokable');
 
-// Helper: brand an object with the canonical REFERENCE symbol so Glimmer
-// VM's CheckReference.validate() (`REFERENCE in value`) accepts it. The
-// REFERENCE value is a "reference type" tag (0=CONSTANT, 1=COMPUTE,
-// 2=UNBOUND, 3=INVOKABLE) — matching @glimmer/reference's encoding.
-// Exported so the test-only iterable port (`./reference-vm-compat`) can brand
-// its iterator refs with the same canonical REFERENCE symbol without
-// duplicating the helper.
+// Brand an object with the canonical REFERENCE symbol so Glimmer VM's
+// CheckReference.validate() (`REFERENCE in value`) accepts it. The REFERENCE
+// value is a "reference type" tag (0=CONSTANT, 1=COMPUTE, 2=UNBOUND,
+// 3=INVOKABLE), matching @glimmer/reference's encoding. Exported for the
+// test-only iterable port (`./reference-vm-compat`).
 export function brandRef<T>(ref: T, type: number = 1): T {
   if (ref != null && (typeof ref === 'object' || typeof ref === 'function')) {
     try {
@@ -151,15 +149,12 @@ export function childRefFor(parentRef: any, path: string): any {
   if (parentRef == null) return _childRefFor(parentRef, path);
   // Honor the stock `@glimmer/reference` lazy-child contract for the hash
   // helper: `@glimmer/runtime/lib/helpers/hash.ts` seeds `parentRef.children`
-  // with a Map of per-key original refs so childRefFor returns the per-key
-  // original ref (lazy) instead of building an eager child compute. Without
-  // this, the hash test "individual hash values are accessed lazily" fails
-  // because the generic childCompute calls `getProp(parentRef.value, path)`
-  // which forces evaluation of every keyed getter.
+  // with a Map of per-key original refs so childRefFor returns the per-key ref
+  // (lazy) instead of building an eager child compute that would call
+  // `getProp(parentRef.value, path)` and evaluate every keyed getter.
   //
-  // Gate: require the parent ref's debugLabel to be 'hash' so a stale
-  // `.children` Map set elsewhere isn't accidentally honored. This is the
-  // exact label stock `hash` uses (see hash.ts).
+  // Only honored when the parent's debugLabel is 'hash' (the label stock `hash`
+  // uses), so a stale `.children` Map set elsewhere isn't picked up.
   if (parentRef.debugLabel === 'hash') {
     const stockChildren = parentRef.children;
     if (stockChildren instanceof Map) {
@@ -251,17 +246,13 @@ export function childRefFor(parentRef: any, path: string): any {
     children.set(path, child);
     return child;
   }
-  // Unmarked parent: GXT's `_childRefFor(parentRef, path)` internally
-  // evaluates `parentRef.value` eagerly and passes the result to `I(value, path)`
-  // which reads `value.constructor.name`. If the current value is null/undefined
-  // (common for stock Glimmer JIT VM iteration refs where the item resolves
-  // to a nested hash that hasn't been materialized yet, or bare ${{get}} calls
-  // through intermediate undefined), the eager access crashes.
-  //
-  // Build a classic-style compute ref instead so evaluation is deferred and
-  // null/undefined intermediate values simply produce an `undefined` child.
-  // This matches stock `@glimmer/reference` childRefFor semantics (see
-  // `packages/@glimmer/reference/lib/references.ts::childRefFor`).
+  // Unmarked parent: GXT's `_childRefFor(parentRef, path)` evaluates
+  // `parentRef.value` eagerly and reads `value.constructor.name`, which crashes
+  // when the value is null/undefined (e.g. stock Glimmer JIT VM iteration refs
+  // whose item is not materialized yet, or `{{get}}` through an undefined
+  // intermediate). Build a classic-style compute ref instead so evaluation is
+  // deferred and null/undefined intermediates produce an `undefined` child,
+  // matching stock `@glimmer/reference` childRefFor.
   const childCompute = () => {
     const p = valueForRef(parentRef);
     if (p != null && (typeof p === 'object' || typeof p === 'function')) {

@@ -1,27 +1,25 @@
-// @glimmer/validator — VM-COMPAT (test-only) surface.
+// @glimmer/validator — VM-compat (test-only) surface.
 //
-// This module holds the classic `@glimmer/validator` exports that are NOT
-// reached by any live GXT-mode RUNTIME path (verified by a dist closure-trace
-// from @ember/application + @ember/component + @ember/routing +
-// @ember/-internals/glimmer — none import these). They are present only to
-// satisfy the ported `@glimmer/validator` test suite, the
+// This module holds the classic `@glimmer/validator` exports that no live
+// GXT-mode runtime path reaches (@ember/application, @ember/component,
+// @ember/routing and @ember/-internals/glimmer import none of them). They exist
+// for the ported `@glimmer/validator` test suite, the
 // `@glimmer-workspace/integration-tests` collection suites, and the standalone
 // `@ember/reactive/collections` public-API entry.
 //
-// Keeping them in a SEPARATE module is what shrinks the prod app closure: the
+// Keeping them in a separate module keeps them out of the prod app closure: the
 // runtime shim (`./validator`) is what the app's bare/deep-path
 // `@glimmer/validator` imports resolve to in the rollup GXT build, so it lands
-// in the shared chunk every app entry pulls. This module is rooted ONLY by the
+// in the shared chunk every app entry pulls. This module is rooted only by the
 // `@glimmer/validator` package-entry facade (`./validator-entry`, a separate
 // entry chunk), the `@ember/reactive/collections` entry, and the vite test
-// tree — none of which are in the app closure — so its bytes tree-shake out of
-// what a precompiled app ships. See docs in `scripts/gxt-alias-map.mjs`
-// (GXT_SUBPATH_REDIRECTS) for how the `/lib/collections/*` deep paths route
-// here while the bare specifier routes to the runtime shim.
+// tree. See `scripts/gxt-alias-map.mjs` (GXT_SUBPATH_REDIRECTS) for how the
+// `/lib/collections/*` deep paths route here while the bare specifier routes
+// to the runtime shim.
 //
-// Everything here only CALLS the runtime tag primitives (imported from
+// Everything here only calls the runtime tag primitives (imported from
 // `./validator`); none of it reassigns the runtime module's shared tracking
-// state, which is why the physical split is safe.
+// state, which is why the split is safe.
 
 import {
   createUpdatableTag,
@@ -133,10 +131,10 @@ export function trackedArray<T = unknown>(
   const resolved = resolveReactiveOptions<T>(options);
   const arr: T[] = Array.isArray(data) ? data.slice() : [];
   // Native-cell-backed (entangles with the GXT formula tracker) so the
-  // gxt-backend each-source formula can SUBSCRIBE to structural mutation via
+  // gxt-backend each-source formula can subscribe to structural mutation via
   // the `GXT_COLLECTION_TAG` accessor. The storage-wrapped `createUpdatableTag`
-  // does not entangle (see `createUpdatableTagNative` doc) — which is why a
-  // `{{#each trackedArray}}` did not re-render on in-place push/splice/swap.
+  // does not entangle (see `createUpdatableTagNative` doc), so with it a
+  // `{{#each trackedArray}}` would not re-render on in-place push/splice/swap.
   const collection = createUpdatableTagNative();
   const storages = new Map<number, ReturnType<typeof createUpdatableTag>>();
   const boundFns = new Map<string | symbol, (...args: any[]) => any>();

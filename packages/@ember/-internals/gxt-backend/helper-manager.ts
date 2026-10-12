@@ -142,8 +142,8 @@ function _callGetValueWithBacktracking(
   if (bt) {
     bt.beginFrame(debugName);
   }
-  // Intercept __emberAssertDirect to fix render tree format
-  // (validator.ts uses "  - top-level" but Ember tests expect "  -top-level")
+  // Intercept the direct assert hook to fix the render-tree format
+  // (validator.ts uses "  - top-level" but Ember tests expect "  -top-level").
   const origAssert = getEmberAssertDirect();
   if (typeof origAssert === 'function') {
     setEmberAssertDirect(function (msg: string, test: any) {
@@ -253,15 +253,14 @@ export class CustomHelperManager {
     // make args reactive for createCache tracking (template path only).
     //
     // Skip reactive wrapping for invokeHelper's SimpleArgsProxy: its
-    // positional/named are LAZY PROTOTYPE ACCESSORS over an internal args
+    // positional/named are lazy prototype accessors over an internal args
     // cache (the lazy read is the API contract — class-field initializers
     // call invokeHelper before the owner's constructor body runs). The
     // snapshot-and-redefine below would eagerly evaluate computeArgs and
     // freeze the stale result in place. `Object.isFrozen` only catches the
-    // DEBUG shape (upstream freezes the proxy in debug builds only) — in
-    // production the proxy is unfrozen, so ALSO require positional/named to
-    // be OWN DATA properties, which is the VM captured-args shape this wrap
-    // is meant for (prod-variant invokeHelper cluster, 9 tests).
+    // DEBUG shape (upstream freezes the proxy in debug builds only), so also
+    // require positional/named to be own data properties, which is the VM
+    // captured-args shape this wrap is meant for.
     if (typeof origCreateHelper === 'function') {
       wrapped.createHelper = function (definition: any, args: any) {
         const _posDesc =
@@ -282,9 +281,8 @@ export class CustomHelperManager {
           _namedDesc !== undefined &&
           'value' in _namedDesc
         ) {
-          // Direct imports for the pure hooks; the rebuild-guarded dirty
-          // variant comes from the typed bridge (see classicDirtyTagFor in
-          // gxt-bridge.ts).
+          // The rebuild-guarded dirty variant comes from the typed bridge (see
+          // classicDirtyTagFor in gxt-bridge.ts).
           const _consumeTag = consumeTag;
           const _tagFor = tagFor;
           const _dirtyTagFor = getGxtRenderer()?.compilePipeline.classicDirtyTagFor;
@@ -530,8 +528,7 @@ export class CustomHelperManager {
   }
 
   get capabilities() {
-    // Return the capabilities of the delegate
-    // Try to get a delegate to check capabilities
+    // Try to get a delegate to check capabilities.
     const owner = getAmbientOwner();
     try {
       const manager = this.getDelegateFor(owner);

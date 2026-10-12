@@ -11,9 +11,9 @@
 import * as gxtModule from '@lifeart/gxt';
 import { DEBUG } from '@glimmer/env';
 
-// Typed bridge for destruction hooks. Populated by manager.ts at its module
-// init. Allows the $_dc_ember wrapper to destroy a component instance without
-// going through `(globalThis as any).__gxtDestroyEmberComponentInstance`.
+// Typed bridge populated by manager.ts at its module init (e.g. the
+// destruction hooks the $_dc_ember wrapper uses to destroy a component
+// instance).
 import {
   getGxtRenderer,
   installCompilePipelinePart,
@@ -28,20 +28,14 @@ import { createComputeRef, valueForRef } from '@glimmer/reference';
 
 const g = globalThis as any;
 
-// `_gxtMutContext` is the component render context (the `this` value of the
-// template that invoked `(mut ...)` or `(__mutGet ...)`) at the moment the
+// `_gxtMutContext` is the component render context (the `this` of the
+// template that invoked `(mut ...)` or `(__mutGet ...)`) while the
 // `$_maybeHelper` wrapper dispatches to the corresponding
-// `__EMBER_BUILTIN_HELPERS__` entry. It is captured at helper-creation time
-// inside the helpers' arrow-function bodies (in `compile.ts`'s
-// `__EMBER_BUILTIN_HELPERS__.mut` / `__mutGet`) so the closure produced by
-// those helpers can later resolve the source getter for two-way binding
-// without re-threading the context through every `mut` argument. The 6 writers
-// here (two save/set/finally-restore triplets around the `mut` / `__mutGet`
-// helper invocations) keep the state intra-file; the 2 readers in compile.ts
-// reach it through the `getMutContext` bridge method.
-// The save/set/finally-restore pattern preserves the previous value across the
-// restore step (save = read previous, set = write new, restore = write
-// previous), so a read-only predicate or mark+consume surface won't do.
+// `__EMBER_BUILTIN_HELPERS__` entry. The helpers in compile.ts read it (via
+// the `getMutContext` bridge method) when they are created, so the closure
+// they return can later resolve the source getter for two-way binding without
+// re-threading the context through every `mut` argument. Writers save the
+// previous value, set the new one and restore it in a `finally`.
 let _gxtMutContext: unknown = undefined;
 function _gxtGetMutContext(): unknown {
   return _gxtMutContext;
@@ -50,25 +44,14 @@ function _gxtSetMutContext(value: unknown): void {
   _gxtMutContext = value;
 }
 
-// Register the read accessor on the `compilePipeline` namespace so that
-// `compile.ts` (cross-package reader) can route through the bridge to read the
-// writer-side state. Runs at module-init time; by the time the
-// `$_maybeHelper` wrapper dispatches a `mut` / `__mutGet` helper invocation
-// (well past module init), both the wrapper-side writer helpers and the
-// cross-package bridge readers are wired and the bridge slot is installed.
+// Register the read accessor so compile.ts can read the mut context through
+// the bridge.
 installCompilePipelinePart({
   getMutContext: _gxtGetMutContext,
 });
 
 // $_maybeHelper wrapper
 
-/**
- * Wraps GXT's $_maybeHelper to support:
- * - Function arguments (e.g. values yielded as block params)
- * - Ember's built-in keyword helpers (readonly, mut, unbound)
- * - Helper lookup from Ember's container via owner
- * - Component invocation for kebab-case names ({{foo-bar}})
- */
 /**
  * Unwrap GXT args: GXT may pass getters (functions) for reactive values.
  * Helpers expect resolved values in positional/named args.
@@ -108,9 +91,9 @@ function unwrapArgs(args: any[]): any[] {
 // GXT internal hash keys that should not be passed to Ember helpers
 const GXT_INTERNAL_KEYS = new Set(['$_hasBlock', '$_hasBlockParams', '$_scope', '$_eval', 'hash']);
 
-// Shared frozen empty-hash constant. krausest's hottest helpers (`if`, `fn`,
-// `isSelected`) all pass `{}` per row per eval; returning one shared frozen
-// object avoids allocating `{}` + `Object.keys` + `Object.freeze` each time.
+// Shared frozen empty-hash constant. Hot helpers called per row per eval
+// (`if`, `fn`, ...) mostly pass `{}`; returning one shared frozen object
+// avoids allocating `{}` + `Object.keys` + `Object.freeze` each time.
 // Safe to share: every downstream consumer of an `unwrapHash` result only
 // spreads (`{ ...named }`), iterates (`Object.keys(named)`), or passes it as a
 // read-only Ember helper args object — none mutate it or identity-compare it.
@@ -118,7 +101,7 @@ const EMPTY_FROZEN_HASH = Object.freeze({}) as Record<string, any>;
 
 function unwrapHash(hash: Record<string, any>): Record<string, any> {
   if (!hash || typeof hash !== 'object') return EMPTY_FROZEN_HASH;
-  // Short-circuit empty hashes (the common krausest case) without allocating.
+  // Short-circuit empty hashes (the common case) without allocating.
   if (Object.keys(hash).length === 0) return EMPTY_FROZEN_HASH;
   const result: Record<string, any> = {};
   for (const key of Object.keys(hash)) {
@@ -139,15 +122,14 @@ function unwrapHash(hash: Record<string, any>): Record<string, any> {
 }
 
 /**
- * Per-object cache for findHelperManager results — INCLUDING the negative
+ * Per-object cache for findHelperManager results — including the negative
  * (null) result. findHelperManager is called per row per eval for plain
- * arrow-fn helpers (`isSelected`/`select`/`remove` in krausest); it allocates
- * a `Set` + walks the prototype chain and almost always returns `null`.
- * Helper-manager registration is monotonic per object (managers are set at
- * class-definition time, before render), so a cached null cannot go stale
- * within a run. INTERNAL_HELPER_MANAGERS is itself a WeakMap (owner-
- * independent), so this cache is owner-independent too. Cleared in
- * _gxtClearHelperCache for test-teardown hygiene.
+ * arrow-fn helpers; it allocates a `Set` + walks the prototype chain and
+ * almost always returns `null`. Helper-manager registration is monotonic per
+ * object (managers are set at class-definition time, before render), so a
+ * cached null cannot go stale within a run. INTERNAL_HELPER_MANAGERS is itself
+ * a WeakMap (owner-independent), so this cache is owner-independent too.
+ * Cleared in _gxtClearHelperCache for test-teardown hygiene.
  */
 let helperManagerLookupCache = new WeakMap<object, any>();
 
@@ -184,12 +166,8 @@ function findHelperManager(obj: any): any {
 // Keyed by helper name for simple per-invocation caching.
 // Cleared during test teardown via compilePipeline.clearHelperCache.
 const classHelperInstanceCache = new Map<string, any>();
-// Exposed to cross-file readers through the get-only bridge method
-// `compilePipeline.getClassHelperInstanceCache` (registered in the
-// `installCompilePipelinePart` block below). All five cross-file readers (1 in
-// `validator.ts`, 4 in `compile.ts`) route through `getGxtRenderer()?.
-// compilePipeline.getClassHelperInstanceCache?.()`. See its doc in
-// gxt-bridge.ts.
+// Exposed to validator.ts and compile.ts through the get-only bridge method
+// `compilePipeline.getClassHelperInstanceCache` (registered below).
 // Cache for simple (function-based) helper results to deduplicate calls within
 // the same sync cycle. Keyed by helper name, stores last args serialization + result.
 const simpleHelperResultCache = new Map<string, { argsSer: string; result: any }>();
@@ -199,12 +177,9 @@ let managedHelperBucketCache = new WeakMap<
   any,
   { bucket: any; delegate: any; reactiveArgs: { positional: any[]; named: Record<string, any> } }
 >();
-// `_gxtClearHelperCache` is exposed through the `compilePipeline.clearHelperCache`
-// typed-bridge method. Readers at `internal-test-helpers/lib/run.ts:134`
-// (cross-package, in `runDestroy`) and `compile.ts` (intra-package, in
-// `_gxtClearOnSetup`) route through
-// `getGxtRenderer()?.compilePipeline.clearHelperCache?.()` — the optional-chain
-// guards classic-Ember builds where the bridge was never installed.
+// `_gxtClearHelperCache` is exposed as the `compilePipeline.clearHelperCache`
+// bridge method, called from `runDestroy` in internal-test-helpers and from
+// compile.ts's `_gxtClearOnSetup`.
 function _gxtClearHelperCache(): void {
   // Preserve the tag-dirty sentinel — it has no per-test state and re-installing
   // it after every test teardown is unnecessary (and would race with subsequent
@@ -219,42 +194,32 @@ function _gxtClearHelperCache(): void {
   // is sound because helper-manager registration is monotonic per object.
   helperManagerLookupCache = new WeakMap();
 }
-// Register the typed-bridge methods on the `compilePipeline` namespace so the
-// cross-file readers in `internal-test-helpers/lib/run.ts` and `compile.ts`
-// can route through the bridge. The call queues into
-// `_pendingCompilePipelineParts` if `setGxtRenderer` has not yet fired and
-// merges immediately otherwise.
+// Register the bridge methods for internal-test-helpers and compile.ts.
 installCompilePipelinePart({
   clearHelperCache: _gxtClearHelperCache,
-  // Get-only accessor for the `classHelperInstanceCache` Map above (per-helper-
-  // name class-based helper instances + their manager-bucket wrappers, created
-  // in `$_maybeHelper`). The five cross-file readers — 1 in `validator.ts`
-  // (the `dirtyTagFor` loop that stamps `lastArgsSer` on every bucket to force
-  // a cache-miss on the next `$_maybeHelper` invocation) and 4 in `compile.ts`
-  // (the `$_if` branch-swap helper-destroy hook's evict / snapshot /
-  // destroyNew / destroyHelpersIn walks) — route through this method.
+  // Get-only accessor for the `classHelperInstanceCache` Map above. Read by
+  // validator.ts's `dirtyTagFor` loop (which stamps `lastArgsSer` on every
+  // bucket to force a cache miss on the next `$_maybeHelper` invocation) and
+  // by compile.ts's `$_if` branch-swap helper-destroy hooks.
   getClassHelperInstanceCache: () => classHelperInstanceCache,
 });
 
 // Tag-dirty bridge sentinel.
 //
-// Class-based helpers invoked WITHOUT args (e.g. `{{hello-world}}` with no
-// positional/named arguments) are routed by GXT's tag-rewrite path through
-// compile.ts's `_tagHelperInstanceCache` instead of through this file's
+// Class-based helpers invoked without args (e.g. `{{hello-world}}`) are
+// routed by GXT's tag-rewrite path through compile.ts's
+// `_tagHelperInstanceCache` instead of through this file's
 // classHelperInstanceCache. compile.ts uses a JSON-stringified args+recompute
 // dedup key on the helper instance to avoid double-computing within a single
-// render — but it has no listener for tracked-property dirties on EXTERNAL
+// render — but it has no listener for tracked-property dirties on external
 // objects (a closure-captured @tracked instance, for example).
 //
-// validator.ts already iterates `__gxtClassHelperInstanceCache` on every
-// `dirtyTagFor` call to bump entries' `lastArgsSer` to a fresh sentinel
-// string, forcing the next render to bypass the dedup. We piggy-back on that
-// loop by inserting a synthetic entry whose `lastArgsSer` setter forwards the
-// dirty signal to every cached tag-helper instance, clearing its
-// `__gxtLastArgsSerialized` so compile.ts re-invokes compute() with fresh
-// state.
-//
-// This is the only seam available without editing compile.ts or validator.ts.
+// validator.ts's `dirtyTagFor` already walks classHelperInstanceCache and
+// bumps each entry's `lastArgsSer` to force the next render to bypass the
+// dedup. This synthetic entry piggy-backs on that loop: its `lastArgsSer`
+// setter forwards the dirty signal to every cached tag-helper instance,
+// clearing its `__gxtLastArgsSerialized` so compile.ts re-invokes compute()
+// with fresh state.
 {
   const _tagDirtySentinel = {
     __managerBucket: true as const,
@@ -265,12 +230,8 @@ installCompilePipelinePart({
     set lastArgsSer(v: string | null) {
       this._val = v;
       try {
-        // Route through the get-only bridge accessor
-        // `compilePipeline.getTagHelperInstanceCache?.()` (registered by
-        // `compile.ts`'s `installCompilePipelinePart` at EOF). The optional-chain
-        // returns undefined when compile.ts has not yet executed its bridge
-        // install (extremely-early classic-tag-dirty firing), so the loop body
-        // is skipped.
+        // The bridge accessor is undefined before compile.ts has installed its
+        // pipeline part, in which case there is nothing to clear.
         const tagCache = getGxtRenderer()?.compilePipeline.getTagHelperInstanceCache?.() as
           | Map<string, { instance: any }>
           | undefined;
@@ -296,17 +257,10 @@ installCompilePipelinePart({
 
 // Resolver cache counters — mirrors the Glimmer ConstantsImpl counters so the
 // `ember-glimmer runtime resolver cache` test can observe helper/component
-// definition reuse from the GXT path. The renderer's `_context` getter copies
-// these onto the live EvaluationContext.constants object in GXT mode so the
-// test's `renderer._context.constants` read sees the latest values.
-//
-// The intra-file writers inside `_trackHelperDefinition` /
-// `_trackComponentDefinition` mutate the module-local `_resolverCacheCounters`
-// directly. The sole cross-file reader (`glimmer/lib/renderer.ts:2972` — the
-// `_context` getter copies these onto the live `EvaluationContext.constants`
-// object when `__GXT_MODE__` is set) routes through
-// `getGxtRenderer()?.compilePipeline.getResolverCacheCounters?.()`, which
-// returns the same live module-local reference.
+// definition reuse from the GXT path. The renderer's `_context` getter (in
+// glimmer/lib/renderer.ts) copies these onto the live
+// EvaluationContext.constants object in GXT mode, reading them through
+// `compilePipeline.getResolverCacheCounters`.
 const _resolverCacheCounters: {
   componentDefinitionCount: number;
   helperDefinitionCount: number;
@@ -316,12 +270,8 @@ const _resolverCacheCounters: {
   helperDefinitionCount: 0,
   modifierDefinitionCount: 0,
 };
-// Register the typed-bridge getter on the `compilePipeline` namespace so the
-// cross-file reader in `glimmer/lib/renderer.ts` can route through the bridge
-// to access the live counters object. The call queues into
-// `_pendingCompilePipelineParts` if `setGxtRenderer` has not yet fired
-// (manager.ts loads after this file in some entry paths) and merges
-// immediately otherwise.
+// Register the bridge getter for glimmer/lib/renderer.ts. Queued until
+// `setGxtRenderer` runs if manager.ts has not loaded yet.
 installCompilePipelinePart({
   getResolverCacheCounters: () => _resolverCacheCounters,
 });
@@ -359,10 +309,8 @@ function _trackComponentDefinition(nameOrFactory: string | object | null | undef
 // Register the resolver-cache counting wrapper for the curried-component
 // factory: named component curries — produced by `(component "x")` /
 // `{{component "x"}}` / CurriedComponent invocations — count once per unique
-// name in the resolver-cache counters. Replaces the defineProperty set-guard
-// trap on the retired `globalThis.__createCurriedComponent` slot: the bridge
-// composes this wrapper over whatever factory manager.ts registers,
-// regardless of module-init order.
+// name in the resolver-cache counters. The bridge composes this wrapper over
+// whatever factory manager.ts registers, regardless of module-init order.
 setCreateCurriedComponentWrapper((inner) => {
   return function trackingWrapper(nameOrComp: any, args: any, positionals: any[]) {
     if (typeof nameOrComp === 'string') {
@@ -375,16 +323,11 @@ setCreateCurriedComponentWrapper((inner) => {
 });
 
 // When a property changes on a component, invalidate managed helper caches
-// so the next render pass picks up the changes. We DON'T re-compute values
+// so the next render pass picks up the changes. We don't re-compute values
 // here to avoid double-counting (GXT's native reactivity may also trigger).
 //
-// `_gxtNotifyHelperPropertyChange` is exposed through the
-// `compilePipeline.notifyHelperPropertyChange` typed-bridge method. The sole
-// reader at `manager.ts:565` (helper-recompute path inside the
-// `__gxtTriggerReRender` after-body) routes through
-// `getGxtRenderer()?.compilePipeline.notifyHelperPropertyChange?.(this,
-// '__gxtRecomputeTagRef')` — the optional-chain guards classic-Ember builds
-// where the bridge was never installed.
+// Exposed as the `compilePipeline.notifyHelperPropertyChange` bridge method,
+// called from manager.ts's helper-recompute path.
 function _gxtNotifyHelperPropertyChange(_obj: unknown, _key: string): void {
   // forEach, NOT for…of — gxt's reactive Map.prototype patch would otherwise
   // register this bookkeeping Map with the ambient tracking frame (see the
@@ -392,19 +335,22 @@ function _gxtNotifyHelperPropertyChange(_obj: unknown, _key: string): void {
   (classHelperInstanceCache as Map<string, any>).forEach((cached) => {
     if (cached && cached.__managerBucket) {
       // Invalidate the args serialization so the next $_maybeHelper call
-      // doesn't short-circuit with the cached result
+      // doesn't short-circuit with the cached result.
       cached.lastArgsSer = null;
     }
   });
 }
-// Register the typed-bridge method on the `compilePipeline` namespace so the
-// cross-file reader in `manager.ts` can route through the bridge. The call
-// queues into `_pendingCompilePipelineParts` if `setGxtRenderer` has not yet
-// fired and merges immediately otherwise.
 installCompilePipelinePart({
   notifyHelperPropertyChange: _gxtNotifyHelperPropertyChange,
 });
 
+/**
+ * Wraps GXT's $_maybeHelper to support:
+ * - Function arguments (e.g. values yielded as block params)
+ * - Ember's built-in keyword helpers (readonly, mut, unbound)
+ * - Helper lookup from Ember's container via owner
+ * - Component invocation for kebab-case names ({{foo-bar}})
+ */
 function createEmberMaybeHelper(original: Function) {
   // Cache the last known owner so that re-evaluations during reactive updates
   // (when the ambient owner may be null) can still resolve helpers.
@@ -437,12 +383,9 @@ function createEmberMaybeHelper(original: Function) {
     // Detect a destroyed render context. When a prior test's component was torn
     // down but its formula closures linger (e.g. a dirtyTagFor cascade pulls the
     // dead component's $_maybeHelper invocation into a re-evaluation pass), the
-    // ctx passed in here is the destroyed component instance. Re-invoking a
-    // helper for a destroyed context inflates compute() call counts in helper
-    // autotrack tests (3 baseline failures in "Helper Tracked Properties" —
-    // computeCount asserts 2, observed 5-6). Short-circuit by returning the
-    // last cached result (no compute), preserving DOM stability for the
-    // already-detached node while preventing the dead-formula recompute.
+    // ctx passed in here is the destroyed component instance. Re-invoking the
+    // helper would inflate compute() call counts, so return the last cached
+    // result instead, keeping the already-detached node stable.
     {
       const probeCtx = maybeCtx || (isCtx ? hashOrCtx : null);
       if (
@@ -551,13 +494,8 @@ function createEmberMaybeHelper(original: Function) {
               ) {
                 const destroyable = delegate.getDestroyable(bucket);
                 if (destroyable) {
-                  // Route through the typed bridge
-                  // `compilePipeline.pushHelperInstance?.()`. The bridge
-                  // method fires manager.ts's registered push-hook
-                  // (`_installHelperRecomputeBridge`) BEFORE pushing onto
-                  // the canonical module-local `_gxtHelperInstances` array
-                  // in compile.ts. See `pushHelperInstance` doc in
-                  // gxt-bridge.ts.
+                  // Fires manager.ts's registered push hook, then records the instance
+                  // for destruction (see `pushHelperInstance` in gxt-bridge.ts).
                   getGxtRenderer()?.compilePipeline.pushHelperInstance?.(destroyable);
                 }
               }
@@ -596,19 +534,11 @@ function createEmberMaybeHelper(original: Function) {
       const named = unwrapHash(hash);
       const hasNamed = named && Object.keys(named).length > 0;
 
-      // If any positional arg is a non-primitive object, skip the result
-      // cache entirely — JSON.stringify-based comparison is unreliable:
-      //   - Map/Set serialize to `{}` (reference replacement missed)
-      //   - In-place mutation (setProp on a POJO passed by reference) is missed
-      //   - Objects with cycles throw
-      // For these cases we always re-invoke. The helper is called inside a
-      // reactive formula that already dedupes by tag-tracking; re-invoking
-      // per formula evaluation is safe and correct.
       // Mark user helper results that are functions so downstream
       // unwrapArgs / unwrapHash do not treat them as GXT reactive getters
       // and invoke them. For example, when a user function like `boundFn`
       // is invoked via `(fn ...)` (shadowed), the returned closure must reach
-      // the outer helper (e.g. `invoke`) AS-IS rather than be eagerly called.
+      // the outer helper (e.g. `invoke`) as-is rather than be eagerly called.
       const markHelperResult = (v: any) => {
         if (
           typeof v === 'function' &&
@@ -629,10 +559,13 @@ function createEmberMaybeHelper(original: Function) {
         }
         return v;
       };
-      // Skip the JSON.stringify-based result cache when any positional arg
-      // is a non-primitive object OR a plain function value. Functions
-      // serialize to null, producing false cache hits across distinct
-      // callbacks (e.g. two (fn ...) subexpressions shadowed by a user fn).
+      // Skip the JSON.stringify-based result cache when any positional arg is a
+      // non-primitive object or a plain function value, because the comparison is
+      // unreliable for them: Map/Set serialize to `{}`, in-place mutation of a POJO
+      // is missed, cycles throw, and functions serialize to null (false hits across
+      // distinct callbacks, e.g. two (fn ...) subexpressions shadowed by a user fn).
+      // The helper runs inside a reactive formula that already dedupes by tag
+      // tracking, so re-invoking per formula evaluation is safe.
       const hasObjectArg = positional.some(
         (a: any) =>
           (a !== null && typeof a === 'object') ||
@@ -707,14 +640,10 @@ function createEmberMaybeHelper(original: Function) {
     ) {
       const helperFnOrManager = getGxtRenderer()?.registries.internalHelperManagers.get(nameOrFn);
       if (typeof helperFnOrManager === 'function') {
-        // Build CapturedArguments — positional refs + named refs.
-        // Each ref must expose at least `value`/getter semantics. We use
-        // plain getter wrappers since the internal element helper only
-        // calls `valueForRef(positional[0])` and reads `positional.length`.
-        // Build CapturedArguments shape: arrays of compute-refs whose
-        // `compute()` returns the wrapped value. Using the real
-        // `createComputeRef` from `@glimmer/reference` keeps `valueForRef`
-        // happy (the internal tag/lastRevision plumbing matches).
+        // Build a CapturedArguments shape: arrays of compute-refs over the
+        // (possibly getter-valued) args. Using the real `createComputeRef` keeps
+        // `valueForRef` working; the internal element helper only calls
+        // `valueForRef(positional[0])` and reads `positional.length`.
         const makeRef = (argVal: any) => {
           const isGetter = typeof argVal === 'function' && !(argVal as any).prototype;
           const getter = isGetter ? () => argVal() : () => argVal;
@@ -732,9 +661,8 @@ function createEmberMaybeHelper(original: Function) {
         try {
           ref = helperFnOrManager(captured, getAmbientOwner());
         } catch (e) {
-          // Surface the error rather than swallow — matches the no-silent-
-          // swallow rule. Lets assert.throws() in DEBUG capture invalid-
-          // arity / non-string-tag asserts produced by the element helper.
+          // Rethrow so assert.throws() in DEBUG can capture invalid-arity /
+          // non-string-tag asserts produced by the element helper.
           throw e;
         }
         // The Helper return is itself a `Reference`. Read its current
@@ -761,10 +689,7 @@ function createEmberMaybeHelper(original: Function) {
       // For '__mutGet' helper, pass obj and key with context set
       if (name === '__mutGet' && Array.isArray(args) && args.length > 0) {
         const ctx = maybeCtx || hashOrCtx;
-        // Writer-side save/set/finally-restore triplet around the
-        // `helper(...)` invocation. Uses the module-local helpers directly
-        // (intra-file writer-home pattern) — see `_gxtGetMutContext` /
-        // `_gxtSetMutContext` near the top of this file.
+        // Save/set/restore the mut context around the `helper(...)` invocation.
         const prevCtx = _gxtGetMutContext();
         _gxtSetMutContext(ctx);
         try {
@@ -777,11 +702,9 @@ function createEmberMaybeHelper(original: Function) {
       // For 'mut' helper, pass the raw getter + path, and set context
       if (name === 'mut' && Array.isArray(args) && args.length > 0) {
         // args[0] = getter for the value, args[1] = the full dotted write-path
-        // string. gxt >=0.0.70 emits the path literal from the AST for BOTH the
-        // subexpression `(mut this.a.b)` and mustache `@v={{mut this.a.b}}`
-        // forms (glimmer-next #238), so no runtime getter-stringification
-        // recovery is needed — a missing path means a non-`this.`/`@`-headed
-        // target, which the mut helper correctly rejects.
+        // string, which the compiler emits from the AST for both the subexpression
+        // `(mut this.a.b)` and mustache `@v={{mut this.a.b}}` forms. A missing path
+        // means a non-`this.`/`@`-headed target, which the mut helper rejects.
         const rawGetter = args[0];
         const pathArg: any =
           args.length > 1 ? (typeof args[1] === 'function' ? args[1]() : args[1]) : undefined;
@@ -790,10 +713,7 @@ function createEmberMaybeHelper(original: Function) {
         // For mut, the 3rd arg is always the component's render context (this)
         // since GXT compiles (mut this.val) as $_maybeHelper("mut", [...], this).
         const ctx = maybeCtx || hashOrCtx;
-        // Writer-side save/set/finally-restore triplet around the
-        // `helper(...)` invocation. Uses the module-local helpers directly
-        // (intra-file writer-home pattern) — see `_gxtGetMutContext` /
-        // `_gxtSetMutContext` near the top of this file.
+        // Save/set/restore the mut context around the `helper(...)` invocation.
         const prevCtx = _gxtGetMutContext();
         _gxtSetMutContext(ctx);
         try {
@@ -903,16 +823,12 @@ function createEmberMaybeHelper(original: Function) {
                 ) {
                   const destroyable = delegate.getDestroyable(bucket);
                   if (destroyable) {
-                    // Route through the typed bridge
-                    // `compilePipeline.pushHelperInstance?.()`. See
-                    // `pushHelperInstance` doc in gxt-bridge.ts.
+                    // Record the instance for destruction (see `pushHelperInstance` in
+                    // gxt-bridge.ts).
                     getGxtRenderer()?.compilePipeline.pushHelperInstance?.(destroyable);
-                    // Associate with the enclosing `{{#if}}` branch (if any)
-                    // so that destroy + willDestroy fire on branch teardown,
-                    // matching Ember's classic Helper lifecycle semantics.
-                    // Route through the typed bridge
-                    // `compilePipeline.getCurrentHelperScope?.()`. See
-                    // `getCurrentHelperScope` doc in gxt-bridge.ts.
+                    // Associate with the enclosing `{{#if}}` branch (if any) so that
+                    // destroy + willDestroy fire on branch teardown, matching Ember's
+                    // classic Helper lifecycle semantics.
                     const ifScope2 = getGxtRenderer()?.compilePipeline.getCurrentHelperScope?.();
                     if (ifScope2 && typeof ifScope2.add === 'function') {
                       try {
@@ -1026,10 +942,7 @@ function createEmberMaybeHelper(original: Function) {
                           if (_cached.helperCell && _cached.helperCell.update) {
                             _cached.helperCell.update(newResult);
                           }
-                          // Trigger DOM sync.
-                          // The canonical `_gxtSyncDomNow` lives in `compile.ts`;
-                          // this cross-file reader routes through the bridge
-                          // method. See `syncDomNow` doc in gxt-bridge.ts.
+                          // Trigger DOM sync (bridge `syncDomNow`).
                           const syncDomNow = getGxtRenderer()?.compilePipeline.syncDomNow;
                           if (typeof syncDomNow === 'function') {
                             queueMicrotask(() => syncDomNow());
@@ -1053,8 +966,8 @@ function createEmberMaybeHelper(original: Function) {
                 // function (e.g., fn helper result) because functions serialize as
                 // null, making stale results appear unchanged.
                 const hasFnArg = positional.some((a: any) => typeof a === 'function');
-                // Slice D: subscribe to (and fold in) the RECOMPUTE_TAG cell so
-                // recompute() invalidates this dedup and forces a fresh getValue.
+                // Subscribe to (and fold in) the RECOMPUTE_TAG cell so recompute()
+                // invalidates this dedup and forces a fresh getValue.
                 const _cachedRT = (cached as any).recomputeTag;
                 if (_cachedRT && typeof _cachedRT === 'object' && 'value' in _cachedRT) {
                   // eslint-disable-next-line @typescript-eslint/no-unused-expressions
@@ -1142,16 +1055,12 @@ function createEmberMaybeHelper(original: Function) {
             try {
               instance = factory.create();
               classHelperInstanceCache.set(name, instance);
-              // Also register for destruction. Route through the typed bridge
-              // `compilePipeline.pushHelperInstance?.()`. See
-              // `pushHelperInstance` doc in gxt-bridge.ts.
+              // Also record the instance for destruction (see
+              // `pushHelperInstance` in gxt-bridge.ts).
               getGxtRenderer()?.compilePipeline.pushHelperInstance?.(instance);
               // If this helper was created during an `{{#if}}` branch render,
               // associate it with that branch's teardown scope so destroy +
               // willDestroy fire on branch swap (not only on component teardown).
-              // Route through the typed bridge
-              // `compilePipeline.getCurrentHelperScope?.()`. See
-              // `getCurrentHelperScope` doc in gxt-bridge.ts.
               const ifScope = getGxtRenderer()?.compilePipeline.getCurrentHelperScope?.();
               if (ifScope && typeof ifScope.add === 'function') {
                 try {
@@ -1367,51 +1276,15 @@ function createEmberMaybeHelper(original: Function) {
 
 // $_tag wrapper
 
-/**
- * Wraps GXT's $_tag to support:
- * - PascalCase/kebab-case component resolution via Ember's registry
- * - Dynamic components (<@foo />, <this.foo />)
- * - Named blocks (<:header>, <:default>)
- * - EmberHtmlRaw (triple mustaches {{{expr}}})
- *
- * PARTIAL DELETION CANDIDATE — investigated, scoped (do NOT delete wholesale).
- * `$_tag_ember` is double-wrapped: this (inner) layer is also wrapped by
- * compile.ts's `$_tag_ember` (the `__compileWrapped` pass). The inner layer is
- * reached DIRECTLY (bypassing the outer) as the `$_tag` symbol that BUILD-TIME
- * .gts/.gjs templates import (re-exported via gxt-with-runtime-hbs). Empirical
- * compilation of strict-mode shapes through the @lifeart/gxt 0.0.67 compiler
- * (content-tag → Babel scope bindings → GXT serializer) established exactly
- * which branches are dead vs live for valid .gts/.gjs:
- *
- * DEAD here for .gts/.gjs (and shadowed by the OUTER wrapper for runtime .hbs)
- * — removable (~900-1300 lines):
- *   - `mightBeComponent` by-name registry lookup (`owner.factoryFor('component:'+name)`):
- *     strict mode never resolves a component by string name. `<FooBar/>` (import)
- *     → `$_c(FooBar)`; `<foo-bar/>` (unimported) → `$_tag('foo-bar')` but
- *     `canHandle` is false → no-op.
- *   - `<this.foo/>` branch: compiles to `$_dc(() => this.foo)`, never `$_tag`.
- *   - `:named-block` branch: named blocks compile to `$_c` slots, never `$_tag(':x')`.
- *   - helper-fallback: imported helpers compile to `() => helper`.
- *
- * LOAD-BEARING — MUST STAY (do not delete): the `<@foo/>` arg-component branch
- * (resolvedTag.startsWith('@'), ~lines 1492-1545). An arg is NOT a lexical
- * binding, so build-time .gts/.gjs emits a STRING `$_tag('@foo', [...,@named,
- * block])` for `<@foo/>` (a documented Ember strict-mode pattern, tested at
- * glimmer/tests/.../angle-bracket-invocation-test.js:644). This inner wrapper
- * is its ONLY handler — native GXT `$_tag` (glimmer-next dom.ts) has no
- * `@`-handling and would build a broken `<@foo>` DOM element. Keep the
- * `@`-branch + the file-element value-coercion bits when removing the rest.
- */
 // Fast-path eligibility for the ember-gxt-wrappers $_tag wrapper. Mirrors
 // compile.ts's predicate. A plain lowercase-HTML element with no Ember-special
 // features makes every scan this wrapper performs (the dynamic-component /
 // named-block / component / helper lookups, the modifier/text reorder, the
 // reactive-splat strip) a no-op, so we forward straight to `original` (GXT's
 // native $_tag — or, when both wrappers are active, the compile.ts wrapper,
-// which re-checks namespace/scan eligibility itself). NO hyphen in the tag (a
-// kebab tag could be a component/helper). Namespace is intentionally NOT
-// checked here: this wrapper never did namespace work — it always delegated
-// that to `original`.
+// which re-checks namespace/scan eligibility itself). No hyphen in the tag (a
+// kebab tag could be a component/helper). Namespace is intentionally not
+// checked here: this wrapper delegates namespace handling to `original`.
 const _EMBER_PLAIN_HTML_TAG_RE = /^[a-z][a-z0-9]*$/;
 function _emberTagFastPathEligible(tag: unknown, tagProps: any): boolean {
   if (typeof tag !== 'string' || !_EMBER_PLAIN_HTML_TAG_RE.test(tag)) return false;
@@ -1450,6 +1323,27 @@ function _emberTagFastPathEligible(tag: unknown, tagProps: any): boolean {
   return true;
 }
 
+/**
+ * Wraps GXT's $_tag to support:
+ * - PascalCase/kebab-case component resolution via Ember's registry
+ * - Dynamic components (<@foo />, <this.foo />)
+ * - Named blocks (<:header>, <:default>)
+ * - EmberHtmlRaw (triple mustaches {{{expr}}})
+ *
+ * This inner layer is wrapped again by compile.ts's `$_tag_ember` for
+ * runtime-compiled templates, but build-time .gts/.gjs templates import it
+ * directly as `$_tag` (re-exported via gxt-with-runtime-hbs). For valid
+ * .gts/.gjs, the by-name component lookup, `<this.foo/>`, `:named-block` and
+ * helper-fallback branches are believed unreachable (strict mode compiles
+ * those shapes to `$_c` / `$_dc` / slots / `() => helper` instead of
+ * `$_tag`).
+ *
+ * The `<@foo/>` arg-component branch (resolvedTag.startsWith('@')) is
+ * load-bearing: an arg is not a lexical binding, so build-time templates emit
+ * a string `$_tag('@foo', ...)` for `<@foo/>`, and this wrapper is its only
+ * handler — native GXT `$_tag` has no `@`-handling and would build a broken
+ * `<@foo>` element.
+ */
 function createEmberTag(original: Function) {
   const $ARGS_SYMBOL = Symbol.for('gxt-args');
 
@@ -1464,8 +1358,8 @@ function createEmberTag(original: Function) {
     // GXT passes (tag, tagProps, ctx, children) — use GXT's order
     const children = gxtChildren;
     const ctx = gxtCtx;
-    // FIX 1 fast-path (see _emberTagFastPathEligible). Skip the dead scans for
-    // plain-HTML elements; forward straight to `original`.
+    // Fast path (see _emberTagFastPathEligible): skip the scans for plain-HTML
+    // elements and forward straight to `original`.
     if (_emberTagFastPathEligible(tag, tagProps)) {
       return original(tag, tagProps, ctx, children);
     }
@@ -1748,10 +1642,8 @@ function createEmberTag(original: Function) {
                 return param;
               });
 
-              // Block-params structures live module-locally in compile.ts;
-              // reached by reference through the compilePipeline bridge (the
-              // retired `__contextBlockParams` / `__currentSlotParams` /
-              // `__blockParamsStack` globals).
+              // Block-params structures live module-locally in compile.ts and are
+              // reached through the compilePipeline bridge.
               const _slotPipeline = getGxtRenderer()?.compilePipeline;
               const contextParams = _slotPipeline?.getContextBlockParams?.();
               if (contextParams && slotCtx && typeof slotCtx === 'object') {
@@ -1764,8 +1656,8 @@ function createEmberTag(original: Function) {
               try {
                 // Return raw children as-is. GXT's rendering pipeline
                 // (renderElement → resolveRenderable) handles functions
-                // by wrapping them in formulas that track cell dependencies.
-                // Previously we called child() eagerly which destroyed reactivity.
+                // by wrapping them in formulas that track cell dependencies;
+                // calling child() eagerly here would lose that reactivity.
                 return [...slotChildren];
               } finally {
                 stack.pop();
@@ -2075,11 +1967,10 @@ function createEmberDc(original: Function) {
     }
 
     const { mergedArgs } = extractArgsAndSlots(gxtArgs, allowPositionalParams);
-    // #245 consumption: derive fw (forwarded splat attrs) from the invocation's
-    // own props tuple `gxtArgs[$PROPS]` and re-home @-args onto mergedArgs, so a
-    // dynamic-tag invocation (`<x.foo class="…" @a=… {{on …}} />`) forwards
-    // class/attrs to the resolved component's `...attributes` the way a static
-    // invocation does. Replaces the ~160-line $_dc_splatfix wrapper.
+    // Derive fw (forwarded splat attrs) from the invocation's own props tuple
+    // `gxtArgs[$PROPS]` and re-home @-args onto mergedArgs, so a dynamic-tag
+    // invocation (`<x.foo class="…" @a=… {{on …}} />`) forwards class/attrs to
+    // the resolved component's `...attributes` the way a static invocation does.
     let __fw: any = null;
     const __tuple = gxtArgs && typeof gxtArgs === 'object' ? (gxtArgs as any)[$PROPS] : null;
     if (
@@ -2160,10 +2051,8 @@ function createEmberDc(original: Function) {
     }
 
     // Handle null/undefined — the value may become a CurriedComponent later.
-    // Use a placeholder comment node that stays in the DOM. Set up a listener
-    // to detect when the value transitions to a CurriedComponent and perform
-    // a manual DOM swap (the morph can't handle this because tags get marked
-    // current by gxtSyncDom before the morph check).
+    // Use a placeholder comment node that stays in the DOM, and listen for the
+    // value transitioning to a CurriedComponent to perform a manual DOM swap.
     if (componentValue == null) {
       const nullPlaceholder = document.createComment('dc-null');
       let _nullDestroyed = false;
@@ -2242,11 +2131,9 @@ function createEmberDc(original: Function) {
         return true;
       };
 
-      // The canonical `_gxtSyncAllWrappers` in manager.ts dispatches the
-      // dynamic-component change-listener Set in its after-body. The Set lives
-      // as manager.ts module-local state behind the bridge's
-      // `addDynamicComponentListener` method, which returns an off-fn for
-      // symmetric cleanup (called from `_nullCleanup` below).
+      // `_gxtSyncAllWrappers` in manager.ts dispatches the dynamic-component
+      // change listeners after each sync; `addDynamicComponentListener` returns
+      // an off-fn (called from `_nullCleanup` below).
       const _offNullListener =
         getGxtRenderer()?.compilePipeline.addDynamicComponentListener?.(_nullListener);
 
@@ -2265,11 +2152,11 @@ function createEmberDc(original: Function) {
       return nullPlaceholder;
     }
 
-    // Handle CurriedComponent — render one-shot initially (preserving existing behavior),
-    // but also set up a __gxtSyncAllWrappers listener that performs manual DOM swaps when
-    // the underlying component identity changes (e.g., compName switches between 'my-comp'
-    // and 'your-comp'). We avoid GXT's $_dc for CurriedComponents because its factory
-    // mechanism causes regressions with Ember's component manager.
+    // Handle CurriedComponent — render once initially, and register a listener
+    // (dispatched by `_gxtSyncAllWrappers`) that performs a manual DOM swap when
+    // the underlying component identity changes (e.g., compName switches between
+    // 'my-comp' and 'your-comp'). GXT's $_dc is avoided for CurriedComponents
+    // because its factory mechanism does not work with Ember's component manager.
     if (componentValue && componentValue.__isCurriedComponent) {
       const RNODES = gxtModule.RENDERED_NODES_PROPERTY;
 
@@ -2329,13 +2216,11 @@ function createEmberDc(original: Function) {
         const lastNode = currentNodes.length > 0 ? currentNodes[currentNodes.length - 1] : null;
         const parent = lastNode?.parentNode;
         if (!parent) return;
-        // If the managed node has been detached from the live DOM (e.g., by a
-        // force-rerender that morphed the parent), mark this listener as
-        // orphaned and skip. A previous render-pass created this listener,
-        // but its DOM was replaced by a fresh listener during force-rerender.
-        // Without this, the old stale listener still fires performSwap and
-        // creates duplicate component instances (double init on compName
-        // changes — GH#13982).
+        // If the managed node has been detached from the live DOM, its DOM was
+        // replaced by a newer render that registered its own listener. Mark this
+        // listener as orphaned and skip; otherwise the stale listener would still
+        // call performSwap and create duplicate component instances (double init on
+        // compName changes — GH#13982).
         if (lastNode && !(lastNode as Node).isConnected) {
           _dcDestroyed = true;
           return;
@@ -2392,18 +2277,15 @@ function createEmberDc(original: Function) {
         // If newVal is null/undefined, currentNodes stays empty (component removed)
       };
 
-      // Register change listener on __gxtSyncAllWrappers
+      // Change listener dispatched by `_gxtSyncAllWrappers`.
       const _dcChangeListener = (): boolean => {
         if (_dcDestroyed) return false;
         performSwap();
         return true;
       };
 
-      // Add listener to the DC-change-listener registry (shared with
-      // null/string paths). `_gxtSyncAllWrappers` in manager.ts dispatches the
-      // listener Set in its after-body; the Set is manager.ts module-local
-      // state behind the bridge's `addDynamicComponentListener` method, which
-      // returns an off-fn for symmetric cleanup.
+      // Add the listener to the registry shared with the null/string paths; the
+      // returned off-fn is used for cleanup.
       const _offDcListener =
         getGxtRenderer()?.compilePipeline.addDynamicComponentListener?.(_dcChangeListener);
 
@@ -2420,8 +2302,8 @@ function createEmberDc(original: Function) {
         }
       }
 
-      // Return the initial result exactly as the baseline did (preserving return type).
-      // The performSwap function uses currentNodes to find the insertion point.
+      // Return the initial result; performSwap uses currentNodes to find the
+      // insertion point for later swaps.
       return initialResult;
     }
 
@@ -2473,7 +2355,6 @@ function createEmberDc(original: Function) {
         const inst = _dcEmberInstance;
         _dcEmberInstance = null;
         try {
-          // Typed bridge call (replaces __gxtDestroyEmberComponentInstance).
           getGxtRenderer()?.destruction.destroyEmberComponentInstance(inst);
         } catch {
           /* ignore */
@@ -2663,22 +2544,17 @@ function createEmberDc(original: Function) {
         }
       };
 
-      // Register change listener on __gxtSyncAllWrappers
+      // Change listener dispatched by `_gxtSyncAllWrappers`.
       const _dcChangeListener = (): boolean => {
         if (_dcDestroyed) return false;
         performSwap();
         return true;
       };
 
-      // Add listener to the DC-change-listener registry (shared with
-      // null/curried paths). `_gxtSyncAllWrappers` in manager.ts dispatches the
-      // listener Set in its after-body; the Set + string-path counter are
-      // manager.ts module-local state behind the bridge's
-      // `addDynamicComponentListener` method. The `stringPath: true` option
-      // bumps the counter consulted by the morph-skip logic in
-      // `__gxtSyncDomNow` / the arg-cell notifyPropertyChange dispatch in
-      // `_gxtSyncAllWrappersBody`; the returned off-fn handles both the Set
-      // delete and the counter decrement in lockstep.
+      // Add the listener to the registry shared with the null/curried paths. The
+      // `stringPath: true` option also bumps a counter that `_gxtSyncDomNow` reads
+      // via `hasStringDynamicComponentListeners`; the returned off-fn removes the
+      // listener and decrements the counter together.
       const _offDcListener = getGxtRenderer()?.compilePipeline.addDynamicComponentListener?.(
         _dcChangeListener,
         { stringPath: true }
@@ -2703,8 +2579,8 @@ function createEmberDc(original: Function) {
         }
       }
 
-      // Return the initial result exactly as the curried path does. The
-      // performSwap function uses currentNodes to find the insertion point.
+      // Return the initial result, as the curried path does. performSwap uses
+      // currentNodes to find the insertion point.
       return initialResult;
     }
 
@@ -2889,7 +2765,6 @@ function createEmberModifierHelper(original: Function) {
         if (!factory) return undefined;
         const ModifierClass = factory.class;
 
-        // Find the modifier manager
         let managerFactory: any = null;
         let pointer = ModifierClass;
         const visited = new Set();
@@ -2916,7 +2791,6 @@ function createEmberModifierHelper(original: Function) {
         const instance = manager.createModifier(ModifierClass, args);
         manager.installModifier(instance, node, args);
 
-        // Return destructor
         return () => {
           if (manager.destroyModifier) manager.destroyModifier(instance);
         };
@@ -2941,7 +2815,6 @@ function createEmberModifierHelper(original: Function) {
 
     // Modifier reference (from defineSimpleModifier/setModifierManager)
     if (resolved != null && typeof resolved !== 'string') {
-      // Check if it has a modifier manager
       let hasModifierManager = false;
       if (getGxtRenderer()?.registries.internalModifierManagers) {
         let ptr = resolved;
@@ -3026,11 +2899,8 @@ export function installEmberWrappers() {
   _patchGxtEntriesOf();
 }
 
-// `_entriesOfPatchScheduled` is a boolean dedup latch that guards the
-// microtask-deferred re-entry path in `_patchGxtEntriesOf` so that multiple
-// callers (the helper-object-not-yet-registered branch) collapse to a single
-// pending microtask. All 3 sites (1 reader at the if-guard, 1 set-true writer
-// at scheduling, 1 reset-false writer inside the microtask) are intra-file.
+// Dedup latch so repeated retries of `_patchGxtEntriesOf` collapse into a
+// single pending microtask.
 let _entriesOfPatchScheduled = false;
 function _patchGxtEntriesOf(): void {
   const BUILTIN = getGxtRenderer()?.compilePipeline.getBuiltinHelpers?.();
@@ -3099,15 +2969,14 @@ function _patchGxtEntriesOf(): void {
     }
     // Plain objects/arrays: iterate own enumerable string keys.
     const keys = Object.keys(resolved);
-    // Subscribe the each-in source formula to the object's key-SET revision
-    // (via compile.ts's recorder) so `set(obj,'NewKey')` re-iterates. Applies
-    // to arrays too — `{{#each-in arr}}` enumerates a custom non-index prop
-    // added via `set(arr,'zomg',...)`, which is a key-set addition (the `[]`
-    // index path stays orthogonal: a bump there just re-iterates, producing the
-    // same output). Regular `{{#each}}` over arrays does NOT route through
-    // gxtEntriesOf, so it is unaffected.
-    // gxt >=0.0.79 owns the key-set revision cell (glimmer-next #257): record
-    // the observed keys + subscribe the active source formula.
+    // Subscribe the each-in source formula to the object's key-set revision
+    // so `set(obj,'NewKey')` re-iterates. Applies to arrays too —
+    // `{{#each-in arr}}` enumerates a custom non-index prop added via
+    // `set(arr,'zomg',...)`, which is a key-set addition (the `[]` index path
+    // stays orthogonal: a bump there just re-iterates, producing the same
+    // output). Regular `{{#each}}` over arrays does not route through
+    // gxtEntriesOf, so it is unaffected. gxt owns the key-set revision cell:
+    // this records the observed keys and subscribes the active source formula.
     (gxtModule as any).entangleObjectKeys?.(resolved, keys);
     return keys.map((key) => ({ k: key, v: (resolved as any)[key] }));
   };
@@ -3135,12 +3004,12 @@ export { _wrappedMH as $_maybeHelper, _wrappedTag as $_tag, _wrappedDc as $_dc }
 // Ember's normalizeStringValue semantics expect undefined/null to clear the
 // DOM property (empty string).
 //
-// Vite dev loads 18 different `dom-*.js` chunks that each define their own
-// `HTMLBrowserDOMApi` class; patching the one we imported wouldn't intercept
-// the runtime that actually rendered the element. Instead we patch the
-// intrinsic `HTMLInputElement.prototype.value` (etc.) setter — a single
-// chokepoint shared by every chunk. The override only rewrites undefined and
-// null values; everything else passes through untouched.
+// Several bundled chunks may each define their own `HTMLBrowserDOMApi`
+// class, so patching the one imported here wouldn't intercept the runtime
+// that actually rendered the element. Instead we patch the intrinsic
+// `HTMLInputElement.prototype.value` (etc.) setter — a single chokepoint
+// shared by every chunk. The override only rewrites undefined and null
+// values; everything else passes through untouched.
 let _emberFormValueUndefinedPatched = false;
 (function patchFormElementValueUndefined() {
   if (typeof HTMLInputElement === 'undefined') return;
@@ -3170,33 +3039,26 @@ let _emberFormValueUndefinedPatched = false;
   _emberFormValueUndefinedPatched = true;
 })();
 
-// Selective UpdatingVM.alwaysRevalidate — Dynamic Component tracked-state fix
+// Selective UpdatingVM.alwaysRevalidate for tracked state on dynamic components.
 //
-// Fixes the "GlimmerishComponents :: invoking dynamic component ... supports
-// args, attributes, and blocks" tests where `@tracked localProperty` set on a
-// captured instance → `this.rerender()` → template still shows old value.
+// In jit-mode tests, Glimmer VM's `UpdatingVM.execute` runs with
+// `alwaysRevalidate=false` by default. When a tracked setter fires outside the
+// normal VM update cycle (e.g. `instance.captured.x = 'LOCAL';
+// this.rerender()`), the combined track-tag validation via our
+// `validateTag`/`currentTagRevision` can report "valid" for some nested
+// childRef paths, so `valueForRef` returns a cached stale value even though the
+// outer JumpIfNotModifiedOpcode signals invalidation. Forcing
+// `alwaysRevalidate=true` makes valueForRef recompute every childRef.
 //
-// Root cause: In jit-mode tests, Glimmer VM's `UpdatingVM.execute` runs with
-// `alwaysRevalidate=false` by default. When a tracked setter fires OUTSIDE the
-// normal VM update cycle (via `instance.captured.x = 'LOCAL'; this.rerender()`),
-// the combined track-tag validation via our `validateTag`/`currentTagRevision`
-// in the gxt-backend validator appears to pass (returns "valid") for some
-// nested childRef paths, causing `valueForRef` to return a cached stale value
-// despite the outer JumpIfNotModifiedOpcode correctly signalling invalidation.
-// Forcing `alwaysRevalidate=true` causes valueForRef to recompute every
-// childRef, which produces the correct fresh value.
-//
-// Narrow fix: we only flip `alwaysRevalidate` ONCE per VM.execute call, when
-// a tracked setter has fired since the last execute. A module-scoped flag
-// (`compile.ts`'s `_gxtTrackedSetSinceRerenderFlag`, exposed via the
+// To keep this narrow, `alwaysRevalidate` is flipped only for a VM.execute
+// call that follows a tracked set. The flag lives in compile.ts
+// (`_gxtTrackedSetSinceRerenderFlag`, via the
 // `compilePipeline.markTrackedSetSinceRerender()` /
-// `consumeTrackedSetSinceRerender()` bridge pair) is set by hooking
-// `__gxtTriggerReRender` (which is called by the tracked setter path in
-// glimmer-tracking.ts), and is consumed (cleared) on the next
-// `UpdatingVM.execute`. The `{{#each}}` list iterator and other stable-
-// rerender paths are unaffected on rerenders where no tracked set occurred,
-// preserving DOM node identity for tests like "trackedMap() (rendering) ::
-// each: set".
+// `consumeTrackedSetSinceRerender()` bridge pair); it is set by a hook on the
+// trigger-re-render path (called by the tracked setter in
+// glimmer-tracking.ts) and consumed on the next `UpdatingVM.execute`. The
+// `{{#each}}` list iterator and other stable-rerender paths are unaffected on
+// rerenders where no tracked set occurred, preserving DOM node identity.
 Promise.resolve().then(async () => {
   try {
     const rt: any = await import('@glimmer/runtime');
@@ -3206,13 +3068,8 @@ Promise.resolve().then(async () => {
       UVM.prototype.execute = function (this: any, ...args: any[]) {
         // Only force revalidate if a tracked setter has fired since the last
         // execute. This limits the perf cost and preserves DOM node identity
-        // for untouched subtrees.
-        //
-        // Route the check+clear through the bridge's atomic
-        // `consumeTrackedSetSinceRerender()` method. Bridge-not-yet-installed
-        // edge: `?? false` preserves the "no flag set ⇒ never force
-        // revalidate" behavior for executes that race ahead of the
-        // deferred-Promise install.
+        // for untouched subtrees. Before the bridge is installed, `?? false`
+        // means "never force revalidate".
         const sawTrackedSet =
           getGxtRenderer()?.compilePipeline.consumeTrackedSetSinceRerender?.() ?? false;
         if (sawTrackedSet) {
@@ -3233,25 +3090,11 @@ Promise.resolve().then(async () => {
   }
 });
 
-// The tracked-set detector is a registered BEFORE-chain host hook on
-// `compilePipeline.addBeforeTriggerReRender`. The hook's only effect is
-// marking the tracked-set detector flag — consumed by the UpdatingVM
-// `alwaysRevalidate` flip above. Registering through the bridge keeps the
-// chain ordering observable.
-//
-// The writer routes through `compilePipeline.markTrackedSetSinceRerender()`
-// (paired with `consumeTrackedSetSinceRerender()` in the UpdatingVM patch
-// above); the canonical state is the module-local
-// `_gxtTrackedSetSinceRerenderFlag` in `compile.ts`. The writer is reachable
-// only after the bridge install completes (this installer runs through the
-// `compilePipeline.addBeforeTriggerReRender` API, which already requires the
-// bridge), so the bridge call is guaranteed defined when the hook fires.
-// Defensive `?.` access matches the optional-method protocol typing.
-//
-// Load-order: a deferred-retry pattern. If
-// `compilePipeline.addBeforeTriggerReRender` is not yet on the bridge
-// (compile.ts hasn't finished module init), the microtask reschedules the
-// registration.
+// The tracked-set detector: a BEFORE-chain host hook on
+// `compilePipeline.addBeforeTriggerReRender` that marks the flag consumed by
+// the UpdatingVM `alwaysRevalidate` flip above. If the bridge method is not
+// installed yet (compile.ts hasn't finished module init), registration is
+// retried in a microtask.
 (function _gxtInstallTrackedSetDetectorHostHook() {
   // Classic builds: the bridge reader is hard-gated to null, so the retry
   // below would re-queue itself forever and starve the event loop. Bail out.

@@ -13,7 +13,6 @@ import { getGxtRenderer } from './gxt-bridge';
  * Uses trackedData from our @glimmer/validator compat (which uses GXT cells).
  */
 export function tracked(target: object, key: string, desc?: PropertyDescriptor): any {
-  // Get the trackedData getter/setter for this key
   // decorator-transforms passes { initializer: () => value } instead of { value }
   const descAny = desc as any;
   const initializer = descAny?.initializer
@@ -37,38 +36,20 @@ export function tracked(target: object, key: string, desc?: PropertyDescriptor):
   trackedGet.__isTrackedGetter = true;
 
   const trackedSet: any = function (this: object, value: any) {
-    // GXT backtracking detection for @tracked properties.
-    // Slice-10 (Cluster B): migrated from `globalThis.__gxtCheckBacktracking`
-    // to the typed bridge. Method is optional in the interface (load-order
-    // independence — classic builds never publish it), so the call is guarded.
+    // The bridge method is optional because classic builds never install it.
     getGxtRenderer()?.backtracking.checkBacktracking?.(this, key);
     setter(this, value);
-    // Dirty the property tag so createCache invalidates
+    // Dirty the property tag so createCache invalidates.
     dirtyTagFor(this, key);
-    // Mark GXT sync as pending so run() flushes DOM updates (formerly the
-    // `__gxtExternalSchedule` global slot — see §2d host hooks; the pipeline
-    // member is the seam in both modes).
+    // Mark a sync as pending so run() flushes DOM updates.
     getGxtRenderer()?.compilePipeline.setPendingSync?.(true);
-    // Notify GXT for cross-object reactivity
-    //
-    // Slice-22 (Cluster B): migrated `!g.__gxtCurrentlyRendering` raw-globalThis
-    // read to `compilePipeline.isCurrentlyRendering()` bridge predicate. The
-    // bridge method is optional (load-order independence — classic builds never
-    // publish it); when not installed we treat the flag as `false`
-    // ("not rendering"), matching the pre-slice-22 truthiness check. See
-    // `isCurrentlyRendering` doc in `./gxt-bridge`.
+    // Notify GXT for cross-object reactivity, unless a render is in progress.
+    // Both bridge methods are optional (classic builds never install them).
     const _cp = getGxtRenderer()?.compilePipeline;
     const _isCR = _cp?.isCurrentlyRendering;
     if (!(typeof _isCR === 'function' ? _isCR() : false)) {
-      // Slice-25 (Cluster B): migrated `(globalThis as any).__gxtTriggerReRender`
-      // raw-globalThis read to `compilePipeline.triggerReRender(this, key)`
-      // bridge method. The bridge method is optional (load-order independence
-      // — classic builds never publish it); when not installed the call is
-      // skipped, matching the pre-slice-25 `typeof === 'function'` guard.
-      // Suppression semantics (the `withTriggerSuppressed(fn)` frame) are
-      // preserved by the module-local `_gxtTriggerSuppressedFlag` short-
-      // circuit at the entry of `_gxtTriggerReRender` in compile.ts. See
-      // `triggerReRender` doc in `./gxt-bridge`.
+      // Suppression (the `withTriggerSuppressed(fn)` frame) is handled inside
+      // `_gxtTriggerReRender` in compile.ts.
       _cp?.triggerReRender?.(this, key);
     }
   };

@@ -148,27 +148,6 @@ function emberAssertFn(msg: string): void {
 }
 
 /**
- * Rewrite block-param declarations whose names are not valid JavaScript
- * identifiers — specifically names beginning with `-` like
- * `-with-dynamic-vars` and `-in-element`. The GXT compiler emits the
- * block param names verbatim into a JavaScript `let` binding (e.g.
- * `let -with-dynamic-vars = () => this.var`), which is a syntax error
- * that prevents the template module from loading.
- *
- * Rename the param to a valid identifier (`__gxtBlockParam_<n>`) and
- * rewrite all bare references inside the `{{#let ... as |NAME|}}` /
- * `<Foo as |NAME|>` block body to the renamed identifier. Leave angle-
- * bracket element tags and curly `{{# / /}}` structural markers alone
- * since those are separate parser paths in GXT.
- *
- * This is a lightweight textual rewrite — it does not parse the whole
- * template, it just targets the specific GXT-incompatible identifier
- * form. Bare `{{-with-dynamic-vars}}` inside the block becomes
- * `{{__gxtBlockParam_withDynamicVars}}`, while the keyword invocation
- * `{{#-with-dynamic-vars outletState=...}}...{{/-with-dynamic-vars}}`
- * is handled elsewhere (compile.ts) and untouched here.
- */
-/**
  * Names that the GXT compiler unconditionally refines away — `{{input}}`
  * becomes `$_tag('Input')`, `{{component}}` / `{{mount}}` collapse to
  * their built-in component helpers, `{{outlet}}` lowers to the outlet
@@ -191,6 +170,25 @@ function _validBlockParamAlias(name: string): string {
   return `__gxtBP_${clean}`;
 }
 
+/**
+ * Rewrite block-param declarations whose names are not valid JavaScript
+ * identifiers — names beginning with `-` like `-with-dynamic-vars` and
+ * `-in-element` — or that clash with a GXT-refined keyword (see
+ * GXT_REFINED_KEYWORDS_NEEDING_SHADOW). The GXT compiler emits block param
+ * names verbatim into a JavaScript `let` binding (e.g.
+ * `let -with-dynamic-vars = () => this.var`), which is a syntax error that
+ * prevents the template module from loading.
+ *
+ * Each such param is renamed to a valid identifier (`__gxtBP_<name>`, see
+ * `_validBlockParamAlias`) and bare `{{NAME}}` / `{{{NAME}}}` references are
+ * rewritten to it. Block openers/closers (`{{#NAME` / `{{/NAME}}`) are left
+ * alone since those are structural GXT keywords; the keyword invocation
+ * `{{#-with-dynamic-vars outletState=...}}...{{/-with-dynamic-vars}}` is
+ * handled elsewhere (compile.ts).
+ *
+ * This is a lightweight textual rewrite — it does not parse the whole
+ * template, it just targets the specific GXT-incompatible identifier forms.
+ */
 function _normalizeHyphenBlockParams(template: string): { source: string; changed: boolean } {
   if (template.indexOf('as |') === -1) return { source: template, changed: false };
   const asRe = /\sas\s*\|([^|]+)\|/g;
@@ -300,26 +298,17 @@ export function compile(templateString: string, options?: any) {
 // shared `templateCacheCounters` accounting used by `ember-glimmer runtime
 // resolver cache`. The first call for each unique owner is a miss; any
 // further call for the same owner is a hit, matching the Glimmer
-// opcode-compiler `templateFactory` accounting (which uses a per-owner
-// WeakMap and counts exactly once per `factory(owner)` invocation).
+// opcode-compiler `templateFactory` accounting (a per-owner WeakMap that
+// counts exactly once per `factory(owner)` invocation).
 //
 // The inner factory's return value is also cached per owner so the wrapped
-// factory behaves identically on repeated invocations — the test observes the
-// counter deltas between `{{component ...}}` toggles, and the Glimmer
-// templateFactory advances its hit counter only once per actual resolution
-// (downstream callers hold onto the `Template` instance and reuse it instead
-// of calling the factory again).
+// factory behaves identically on repeated invocations.
 //
-// The instrumentation wrapper is contributed to the bridge (via
-// `installCompilePipelinePart`, called at module bottom) so the GXT-aware
-// `template` shim in `@ember/-internals/glimmer` can wrap factories it obtains
-// via the `precompile`+`template` pathway with the same cache-counter
-// accounting used by the `compile(...)` pathway, keeping the two pathways
-// accounting-consistent for tests that probe templateCacheCounters. The
-// function stays here (rather than in manager.ts) because its closure captures
-// the `templateCacheCounters` import above; relocating would either pull the
-// import edge across files or fragment the function's only call site
-// (glimmer/index.ts's template shim, which reads via the bridge).
+// The wrapper is published on the bridge (`installCompilePipelinePart`, at
+// module bottom) so the GXT-aware `template` shim in `@ember/-internals/glimmer`
+// can apply the same accounting to factories from the `precompile`+`template`
+// pathway. It lives here because it closes over the `templateCacheCounters`
+// import.
 
 function _instrumentFactory(factory: any, compileOptions?: any): any {
   if (!factory || (factory as any).__gxtCountedFactory) return factory;
@@ -342,13 +331,10 @@ function _instrumentFactory(factory: any, compileOptions?: any): any {
   // Per-(owner,renderPass) marker so repeated calls within the same render
   // transaction count as cache hits (matching classic Glimmer templateFactory
   // semantics) but calls across render transactions (e.g. runTask toggle
-  // flushes) count as a single hit. This lets the Template factory test
-  // see its full debug-render-tree hit tally while keeping the resolver
-  // cache test's toggle deltas at {}.
+  // flushes) count as a single hit.
   const ownerSeenInPass: WeakMap<object, number> = new WeakMap<object, number>();
   let ownerlessSeenInPass: number | null = null;
   const wrapped: any = function (owner?: any) {
-    // Render-pass id read, routed through the bridge.
     const currentPass = getGxtRenderer()?.viewUtils.getRenderPassId?.() ?? 0;
     if (owner && typeof owner === 'object') {
       const cached = ownerTemplates.get(owner);
