@@ -24,6 +24,39 @@
 export const GXT_ARGS_SYMBOL: symbol = Symbol.for('gxt-args');
 
 /**
+ * Keys that glimmer's GXT render paths never back with a cell when they make a
+ * render context's (or a component's) properties reactive. Each install loop
+ * also skips `_`-prefixed keys, and the context loops `$`-prefixed ones.
+ * `GXT_CONTEXT_SKIP_KEYS`: render-context bookkeeping and object lifecycle.
+ * `GXT_VIEW_SKIP_KEYS`: classic view and component internals.
+ */
+export const GXT_CONTEXT_SKIP_KEYS: readonly string[] = [
+  'args',
+  'owner',
+  'outletState',
+  'constructor',
+  'init',
+  'willDestroy',
+  'toString',
+  'isDestroying',
+  'isDestroyed',
+];
+export const GXT_VIEW_SKIP_KEYS: readonly string[] = [
+  'element',
+  'tagName',
+  'layoutName',
+  'layout',
+  'elementId',
+  'renderer',
+  'parentView',
+  'attributeBindings',
+  'classNameBindings',
+  'classNames',
+  'concatenatedProperties',
+  'mergedProperties',
+];
+
+/**
  * Teardown of component instances and destroyables. Implemented by manager.ts.
  */
 export interface GxtDestructionCapabilities {

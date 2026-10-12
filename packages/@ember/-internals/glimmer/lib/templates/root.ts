@@ -12,6 +12,8 @@ import {
   setAmbientOwner,
   setControllerOutletRerender,
   GXT_ARGS_SYMBOL,
+  GXT_CONTEXT_SKIP_KEYS,
+  GXT_VIEW_SKIP_KEYS,
 } from '@ember/-internals/gxt-backend/gxt-bridge';
 // Lazy accessor for @lifeart/gxt symbols through the bridge. Avoiding a static
 // `import * as _gxt from '@lifeart/gxt'` keeps the GXT runtime out of the
@@ -433,35 +435,7 @@ function createRootTemplate(_owner: any) {
         // install that CASE 2 (OutletView rendering) performs for controllers.
         const _cellFor = getGxtRenderer()?.compilePipeline.cellFor;
         if (_cellFor) {
-          const skipKeys = new Set([
-            'args',
-            'owner',
-            'outletState',
-            '$fw',
-            '$slots',
-            'constructor',
-            'init',
-            'willDestroy',
-            'toString',
-            'isDestroying',
-            'isDestroyed',
-            'tagName',
-            'layoutName',
-            'layout',
-            'renderer',
-            'element',
-            '_debugContainerKey',
-            '_target',
-            '_viewRegistry',
-            'ownerView',
-            'parentView',
-            'attributeBindings',
-            'classNameBindings',
-            'classNames',
-            'concatenatedProperties',
-            'mergedProperties',
-            'elementId',
-          ]);
+          const skipKeys = new Set([...GXT_CONTEXT_SKIP_KEYS, ...GXT_VIEW_SKIP_KEYS, 'ownerView']);
           try {
             const ctor: any = (component as any).constructor;
             if (ctor && ctor.PrototypeMixin) {
@@ -713,19 +687,7 @@ function createRootTemplate(_owner: any) {
       const _registerOwner = getGxtRenderer()?.compilePipeline.registerObjectValueOwner;
       if (_cellFor) {
         try {
-          const skipKeys = new Set([
-            'args',
-            'owner',
-            'outletState',
-            '$fw',
-            '$slots',
-            'constructor',
-            'init',
-            'willDestroy',
-            'toString',
-            'isDestroying',
-            'isDestroyed',
-          ]);
+          const skipKeys = new Set(GXT_CONTEXT_SKIP_KEYS);
           for (const key of Object.getOwnPropertyNames(renderContext)) {
             if (key.startsWith('_') || key.startsWith('$') || skipKeys.has(key)) continue;
             const desc = Object.getOwnPropertyDescriptor(renderContext, key);

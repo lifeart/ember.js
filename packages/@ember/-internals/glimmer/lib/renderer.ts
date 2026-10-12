@@ -16,6 +16,7 @@ import {
   getAmbientOwner,
   setAmbientOwner,
   GXT_ARGS_SYMBOL,
+  GXT_VIEW_SKIP_KEYS,
 } from '@ember/-internals/gxt-backend/gxt-bridge';
 
 // Lazy accessor for @lifeart/gxt symbols through the bridge. Every call site
@@ -542,29 +543,13 @@ class ClassicRootState {
                 _ensureTriggerReRenderPatched();
                 if (_cellFor) {
                   const skipProps = new Set([
+                    ...GXT_VIEW_SKIP_KEYS,
                     'args',
                     'constructor',
-                    'element',
-                    'tagName',
-                    'layoutName',
-                    'layout',
-                    'elementId',
                     'isView',
                     'isComponent',
-                    'concatenatedProperties',
-                    'mergedProperties',
-                    'classNames',
-                    'classNameBindings',
-                    'attributeBindings',
                     'positionalParams',
-                    '_states',
-                    'renderer',
-                    '__dispatcher',
-                    'parentView',
-                    '_state',
-                    '_currentState',
                     'target',
-                    '_debugContainerKey',
                   ]);
                   for (const key in component) {
                     if (typeof key !== 'string' || key.startsWith('_') || skipProps.has(key))

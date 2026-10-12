@@ -14,6 +14,7 @@ import {
   getActiveOutletElements,
   getAmbientOwner,
   setAmbientOwner,
+  GXT_CONTEXT_SKIP_KEYS,
 } from '@ember/-internals/gxt-backend/gxt-bridge';
 // Classic-build template compiler (build-time macro in classic pipelines; the
 // GXT-aliased shim in GXT mode, where the call site below is dead-branched).
@@ -160,18 +161,7 @@ if (__GXT_MODE__) {
               const _cellFor = getGxtRenderer()?.compilePipeline.cellFor;
               if (_cellFor) {
                 try {
-                  const skipKeys = new Set([
-                    'args',
-                    'owner',
-                    'outletState',
-                    'model',
-                    'constructor',
-                    'init',
-                    'willDestroy',
-                    'toString',
-                    'isDestroying',
-                    'isDestroyed',
-                  ]);
+                  const skipKeys = new Set([...GXT_CONTEXT_SKIP_KEYS, 'model']);
                   const visited = new Set<string>();
                   let proto = Object.getPrototypeOf(controller);
                   while (proto && proto !== Object.prototype) {
