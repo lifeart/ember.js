@@ -28,7 +28,9 @@
 // Non-interactive render trees (`renderComponent(…, { env: { isInteractive:
 // false } })`, a non-interactive app environment) create no modifiers at all.
 import { DEBUG } from '@glimmer/env';
+import { ENV } from '@ember/-internals/environment';
 import {
+  type CapturedRenderNode,
   effect,
   getContext,
   getCurried,
@@ -37,7 +39,7 @@ import {
   resolveCurried,
   setTracker,
 } from '@lifeart/gxt';
-import { argsProxyFor, type ArgsSource } from './args';
+import { argsProxyFor, unwrapArg, type ArgsSource } from './args';
 import { destroy, registerDestructor } from './destroyable';
 import {
   CustomModifierManager,
@@ -62,6 +64,11 @@ interface ModifierInstance {
   scheduled: boolean;
   removed: boolean;
   stopTracking: (() => void) | null;
+  /** The manager's debug instance (Glimmer `getDebugInstance`): a custom
+   * manager's modifier, `null` for the internal `on`. */
+  readonly debugInstance: unknown;
+  /** Its debug render tree entry, while the debug render tree records. */
+  debug: DebugModifier | null;
 }
 
 const NO_NAMED: Readonly<Record<string, unknown>> = Object.freeze({});
@@ -155,7 +162,100 @@ function remove(instance: ModifierInstance): void {
   instance.removed = true;
   instance.stopTracking?.();
   instance.stopTracking = null;
+  if (instance.debug !== null) forgetDebugModifier(instance.debug);
   destroy(instance.state);
+}
+
+// ---------------------------------------------------------------- debug render tree
+// Glimmer lists every element modifier in the debug render tree, as a
+// `modifier` node under the component rendering the element
+// (`ComponentElementOperations#addModifier`): its name, its arguments, the
+// manager's debug instance and the element as its bounds. Glimmer records them
+// only while the environment has a debug render tree (`ENV._DEBUG_RENDER_TREE`:
+// DEBUG builds, or the Inspector's opt-in); so does this layer. Entries are
+// keyed by the gxt render context the element was created in
+// (native/renderer.ts attaches them to that context's render node) and dropped
+// when the modifier is removed.
+export interface DebugModifier {
+  readonly id: string;
+  readonly ctx: object;
+  readonly name: string;
+  readonly element: Element;
+  readonly source: ArgsSource;
+  readonly instance: unknown;
+}
+
+const DEBUG_MODIFIERS = new WeakMap<object, Set<DebugModifier>>();
+let debugModifierId = 0;
+
+function recordDebugModifier(
+  ctx: object,
+  instance: ModifierInstance,
+  definition: object,
+  resolvedName: string | null,
+  source: ArgsSource
+): void {
+  const manager = getInternalModifierManager(definition) as
+    | CustomModifierManager
+    | InternalModifierManager;
+  // Glimmer: `definition.resolvedName ?? manager.getDebugName(definition.state)`.
+  const name =
+    resolvedName ??
+    (manager instanceof CustomModifierManager
+      ? typeof definition === 'function'
+        ? (definition as { name?: string }).name || definition.toString()
+        : '<unknown>'
+      : manager.getDebugName());
+  const entry: DebugModifier = {
+    id: `modifier:${++debugModifierId}`,
+    ctx,
+    name,
+    element: instance.element,
+    source,
+    instance: instance.debugInstance,
+  };
+  let entries = DEBUG_MODIFIERS.get(ctx);
+  if (entries === undefined) {
+    entries = new Set();
+    DEBUG_MODIFIERS.set(ctx, entries);
+  }
+  entries.add(entry);
+  instance.debug = entry;
+}
+
+function forgetDebugModifier(entry: DebugModifier): void {
+  DEBUG_MODIFIERS.get(entry.ctx)?.delete(entry);
+}
+
+/**
+ * The debug render tree's `modifier` nodes for the elements rendered in the
+ * gxt render context `ctx` (Glimmer's `CapturedRenderNode` shape; arguments
+ * read now, untracked — Glimmer reifies them at capture).
+ */
+export function debugModifierNodes(ctx: object): CapturedRenderNode[] {
+  const entries = DEBUG_MODIFIERS.get(ctx);
+  if (entries === undefined || entries.size === 0) return [];
+  const nodes: CapturedRenderNode[] = [];
+  for (const entry of entries) {
+    const { element, source } = entry;
+    const parentElement = element.parentNode;
+    nodes.push({
+      id: entry.id,
+      type: 'modifier',
+      name: entry.name,
+      args: untrack(() => {
+        const named: Record<string, unknown> = {};
+        for (const key of Object.keys(source.named)) named[key] = unwrapArg(source.named[key]);
+        return { positional: source.positional.map(unwrapArg), named };
+      }),
+      instance: entry.instance,
+      template: null,
+      bounds:
+        parentElement === null ? null : { parentElement, firstNode: element, lastNode: element },
+      children: [],
+    });
+  }
+  return nodes;
 }
 
 // ---------------------------------------------------------------- create
@@ -201,6 +301,8 @@ function createInstance(
       scheduled: false,
       removed: false,
       stopTracking: null,
+      debugInstance: modifier,
+      debug: null,
     };
   }
 
@@ -216,6 +318,8 @@ function createInstance(
     scheduled: false,
     removed: false,
     stopTracking: null,
+    debugInstance: null,
+    debug: null,
   };
 }
 
@@ -261,19 +365,20 @@ function handle(
 
   // A modifier NAME (`{{on}}`, a loose-mode `<div {{foo-bar}}>` — G11):
   // classic `lookupModifier` for the render tree's owner.
+  let resolvedName: string | null = null;
   if (typeof definition === 'string') {
     const resolved = lookupModifier(ownerFor() as Parameters<typeof lookupModifier>[0], definition);
     if (resolved === null) throw modifierNotFound(definition);
+    resolvedName = definition;
     definition = resolved;
   }
   if (definition === null || definition === undefined) return undefined;
 
-  const instance = createInstance(
-    definition as object,
-    element,
-    { positional, named: namedArgs },
-    ownerFor
-  );
+  const source: ArgsSource = { positional, named: namedArgs };
+  const instance = createInstance(definition as object, element, source, ownerFor);
+  if (ENV._DEBUG_RENDER_TREE && renderCtx !== undefined) {
+    recordDebugModifier(renderCtx, instance, definition as object, resolvedName, source);
+  }
   schedule(instance);
   return () => remove(instance);
 }

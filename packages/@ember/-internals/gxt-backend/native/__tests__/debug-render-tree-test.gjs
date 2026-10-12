@@ -3,8 +3,11 @@
 // the native `resolveComponentName` host hook (not gxt's internal `NativeComponent`
 // factory / template wrapper names).
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import { setComponentTemplate } from '@ember/component';
 import templateOnly from '@ember/component/template-only';
+import { capabilities, on, setModifierManager } from '@ember/modifier';
+import { run } from '@ember/runloop';
 import { setupNativeRendering } from './-helpers';
 
 const { module, test } = QUnit;
@@ -39,6 +42,76 @@ module('gxt-native | debugRenderTree', function (hooks) {
     assert.notOk(all.includes('NativeComponent'), 'never the native factory name');
     assert.strictEqual(tree[0].type, 'component');
     assert.ok(tree[0].bounds && tree[0].bounds.firstNode, 'bounds captured');
+  });
+
+  test('capture() lists element modifiers under the component rendering the element', function (assert) {
+    // Glimmer (`ComponentElementOperations#addModifier`): a `modifier` node per
+    // element modifier — name, arguments, the manager's debug instance (null
+    // for `on`), the element as bounds — under the component rendering it,
+    // even from inside a block.
+    const instances = [];
+    function tagged() {}
+    setModifierManager(
+      () => ({
+        capabilities: capabilities('3.22'),
+        createModifier() {
+          const instance = { tagged: true };
+          instances.push(instance);
+          return instance;
+        },
+        installModifier() {},
+        updateModifier() {},
+        destroyModifier() {},
+      }),
+      tagged
+    );
+    const Leaf = <template><u>leaf</u></template>;
+    let card;
+    class Card extends Component {
+      @tracked show = true;
+      go = () => {};
+      constructor(owner, args) {
+        super(owner, args);
+        card = this;
+      }
+      <template>
+        <section><button {{on "click" this.go}}>go</button>{{#if this.show}}<i {{tagged "x" tone="red"}}>i</i><Leaf />{{/if}}</section>
+      </template>
+    }
+    this.render(Card);
+    const renderer = this.owner.lookup('renderer:-dom');
+    const sectionEl = this.element.querySelector('section');
+    const capture = () => renderer.debugRenderTree.capture()[0];
+
+    const [onNode, taggedNode, leafNode] = capture().children;
+    assert.strictEqual(onNode.type, 'modifier');
+    assert.strictEqual(onNode.name, 'on');
+    assert.strictEqual(onNode.instance, null, '`on` has no debug instance');
+    assert.deepEqual(onNode.args.named, {});
+    assert.strictEqual(onNode.args.positional[0], 'click');
+    assert.strictEqual(onNode.args.positional[1], card.go);
+    assert.strictEqual(onNode.bounds.parentElement, sectionEl);
+    assert.strictEqual(onNode.bounds.firstNode, sectionEl.querySelector('button'));
+    assert.strictEqual(onNode.bounds.lastNode, sectionEl.querySelector('button'));
+    assert.deepEqual(onNode.children, []);
+
+    // a modifier on an element inside `{{#if}}` (beside one component)
+    assert.strictEqual(taggedNode.type, 'modifier');
+    assert.strictEqual(taggedNode.name, 'tagged', 'a custom manager: the definition name');
+    assert.strictEqual(taggedNode.instance, instances[0], 'a custom manager: its modifier');
+    assert.deepEqual(taggedNode.args, { positional: ['x'], named: { tone: 'red' } });
+    assert.strictEqual(taggedNode.bounds.firstNode, sectionEl.querySelector('i'));
+    assert.strictEqual(leafNode.type, 'component');
+    assert.strictEqual(leafNode.name, 'Leaf');
+
+    // a removed element's modifier leaves the tree
+    run(() => (card.show = false));
+    const children = capture().children;
+    assert.deepEqual(
+      children.map((node) => node.name),
+      ['on'],
+      'only the button modifier is left'
+    );
   });
 
   test('capture() is scoped to the renderer owner and drops destroyed roots', function (assert) {

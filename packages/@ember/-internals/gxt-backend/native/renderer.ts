@@ -43,7 +43,7 @@ import {
   scheduleRevalidate,
 } from './host-hooks';
 import { instanceOfNode, OWNER, resolveComponentName } from './managers';
-import { commitModifiers, INTERACTIVE } from './modifier-manager';
+import { commitModifiers, debugModifierNodes, INTERACTIVE } from './modifier-manager';
 import { commitComponents } from './component-lifecycle';
 import { documentedDrop } from './not-implemented';
 import OutletView, { Outlet, OUTLET_STATE, outletNodeKind } from './outlet';
@@ -184,14 +184,18 @@ export function renderRoot(
 function captureRootsOf(owner: object): CapturedRenderNode[] {
   const roots = Array.from(rootsOf(owner), (r) => r.root);
   // Each gxt Root is a container node; its children are the rendered components.
-  return captureRenderTree(roots as never).flatMap((node) => emberNodes(node.children));
+  const seen = new Set<string>();
+  return captureRenderTree(roots as never).flatMap((node) => emberNodes(node.children, seen));
 }
 
 // Glimmer's render tree lists components, outlets and route templates only:
 // gxt's own block nodes (`{{#if}}` / `{{#each}}` / yield / wrapper / content
 // units — the nodes Ember has no name for) are transparent, their children
-// take their place.
-function emberNodes(nodes: CapturedRenderNode[]): CapturedRenderNode[] {
+// take their place. Element modifiers are listed too (`modifier` nodes, under
+// the component rendering the element): those of the elements a gxt node
+// rendered join that node's children — a transparent node's join its named
+// ancestor's. `seen` lists each modifier once (gxt may reach a block twice).
+function emberNodes(nodes: CapturedRenderNode[], seen: Set<string>): CapturedRenderNode[] {
   const out: CapturedRenderNode[] = [];
   for (const node of nodes) {
     const instance = node.instance;
@@ -199,17 +203,29 @@ function emberNodes(nodes: CapturedRenderNode[]): CapturedRenderNode[] {
       instance !== null &&
       typeof instance === 'object' &&
       (outletNodeKind(instance) !== undefined || resolveComponentName(instance) !== undefined);
-    if (named) out.push(withOutletKinds(node));
-    else out.push(...emberNodes(node.children));
+    if (named) out.push(withOutletKinds(node, seen));
+    else out.push(...modifierNodes(node, seen), ...emberNodes(node.children, seen));
   }
   return out;
+}
+
+function modifierNodes(node: CapturedRenderNode, seen: Set<string>): CapturedRenderNode[] {
+  const instance = node.instance;
+  if (instance === null || typeof instance !== 'object') return [];
+  const nodes = debugModifierNodes(instance);
+  if (nodes.length === 0) return nodes;
+  return nodes.filter((modifier) => {
+    if (seen.has(modifier.id)) return false;
+    seen.add(modifier.id);
+    return true;
+  });
 }
 
 // gxt captures every node as `type: 'component'`; the outlet layer knows which
 // nodes are outlets and route templates (classic shapes: an outlet node has no
 // args / instance; a route-template node's instance is its controller).
-function withOutletKinds(node: CapturedRenderNode): CapturedRenderNode {
-  const children = emberNodes(node.children);
+function withOutletKinds(node: CapturedRenderNode, seen: Set<string>): CapturedRenderNode {
+  const children = [...modifierNodes(node, seen), ...emberNodes(node.children, seen)];
   switch (outletNodeKind(node.instance)) {
     case 'outlet':
       return {
