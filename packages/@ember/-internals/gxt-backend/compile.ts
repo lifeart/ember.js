@@ -878,25 +878,14 @@ function protectGlobal(name: string, value: unknown): void {
 
 /**
  * Build the Ember named-args object from a GXT `$_args`-shaped `args` value:
- * copy every own descriptor whose key is not `args`/`$`-prefixed, merge the
- * nested `args.args` bag, and alias the gxt-slots symbol bag as `$slots`.
- *
- * Extracted from the two byte-identical inline copies in `$_c_ember` (the
- * `{{#@inner}}` string-component branch and the resolved-curried branch). The
- * OTHER namedArgs builders in this file are intentionally NOT routed through
- * here — they handle different input shapes (GXT tagProps arrays, curried-helper
- * unwrapping, fwProps/class building) and are not behavior-identical.
+ * copy every own descriptor whose key is not `args`/`$`-prefixed (see
+ * `copyOwnNamedArgs` for `unwrap`), merge the nested `args.args` bag as it is,
+ * and alias the gxt-slots symbol bag as `$slots`.
  */
-function buildNamedArgs(args: any): any {
+function buildNamedArgs(args: any, unwrap: NamedArgUnwrap = 'none'): any {
   const namedArgs: any = {};
   if (args) {
-    for (const key of Object.keys(args)) {
-      if (key === 'args' || key.startsWith('$')) continue;
-      const desc = Object.getOwnPropertyDescriptor(args, key);
-      if (desc) {
-        Object.defineProperty(namedArgs, key, desc);
-      }
-    }
+    copyOwnNamedArgs(args, namedArgs, unwrap);
     const argsObj = args['args'];
     if (argsObj && typeof argsObj === 'object') {
       for (const key of Object.keys(argsObj)) {
@@ -914,6 +903,141 @@ function buildNamedArgs(args: any): any {
     }
   }
   return namedArgs;
+}
+
+/**
+ * How `copyOwnNamedArgs` copies a descriptor:
+ * - `'none'`: as it is;
+ * - `'getters'`: a getter is wrapped so that a read resolves argument thunks
+ *   and curried `(helper)` values (`resolveNamedArgValue`);
+ * - `'all'`: also a value: a thunk becomes such a getter, anything else is
+ *   unwrapped once (`unwrapCurriedHelper`).
+ */
+type NamedArgUnwrap = 'none' | 'getters' | 'all';
+
+/** Copy `args`' own descriptors, except `args` and `$`-prefixed keys, onto `namedArgs`. */
+function copyOwnNamedArgs(args: any, namedArgs: any, unwrap: NamedArgUnwrap): void {
+  for (const key of Object.keys(args)) {
+    if (key === 'args' || key.startsWith('$')) continue;
+    const desc = Object.getOwnPropertyDescriptor(args, key);
+    if (!desc) continue;
+    if (unwrap !== 'none' && desc.get) {
+      const origGet = desc.get;
+      Object.defineProperty(namedArgs, key, {
+        get() {
+          return resolveNamedArgValue(origGet.call(args));
+        },
+        enumerable: desc.enumerable,
+        configurable: desc.configurable,
+      });
+    } else if (unwrap === 'all' && 'value' in desc) {
+      const v = desc.value;
+      if (isNamedArgThunk(v)) {
+        Object.defineProperty(namedArgs, key, {
+          get() {
+            return resolveNamedArgValue(v);
+          },
+          enumerable: desc.enumerable,
+          configurable: desc.configurable,
+        });
+      } else {
+        Object.defineProperty(namedArgs, key, {
+          value: unwrapCurriedHelper(v),
+          writable: desc.writable,
+          enumerable: desc.enumerable,
+          configurable: desc.configurable,
+        });
+      }
+    } else {
+      Object.defineProperty(namedArgs, key, desc);
+    }
+  }
+}
+
+// A plain arrow/getter function standing for an argument value. Curried
+// helpers and components, `fn` helpers, mut cells and classes are values.
+function isNamedArgThunk(v: any): boolean {
+  return (
+    typeof v === 'function' &&
+    !v.__isEmberCurriedHelper &&
+    !v.__isCurriedComponent &&
+    !v.__isFnHelper &&
+    !v.__isMutCell &&
+    !v.prototype
+  );
+}
+
+// Call argument thunks until a value comes out, then unwrap a curried
+// `(helper)` value: `{{helper foo "..."}}` in an argument position yields the
+// curried helper (or a thunk returning it), which must reach the component as
+// its result, not as a function to stringify.
+function resolveNamedArgValue(v: any): any {
+  while (isNamedArgThunk(v)) {
+    try {
+      v = v();
+    } catch {
+      break;
+    }
+  }
+  return unwrapCurriedHelper(v);
+}
+
+function unwrapCurriedHelper(v: any): any {
+  let out = v;
+  let guard = 8;
+  while (typeof out === 'function' && out.__isEmberCurriedHelper && guard-- > 0) {
+    try {
+      out = out();
+    } catch {
+      break;
+    }
+  }
+  return out;
+}
+
+// GXT passes component args either as a `$_args` object or, from `$_dc`, as a
+// tagProps tuple `[props, attrs, events]` (which is then also the fw).
+function isTagPropsTuple(args: any): boolean {
+  return Array.isArray(args) && args.length >= 2 && Array.isArray(args[1]);
+}
+
+/**
+ * Named args from a tagProps tuple: each `[name, value]` attrs entry becomes a
+ * named arg (`@` stripped; a function value without a prototype becomes the
+ * getter), and the tuple's gxt-slots bag becomes `$slots`.
+ */
+function namedArgsFromTagProps(tagProps: any): any {
+  const namedArgs: any = {};
+  for (const entry of tagProps[1]) {
+    if (Array.isArray(entry) && entry.length >= 2) {
+      let key = entry[0];
+      const val = entry[1];
+      if (typeof key === 'string' && key.startsWith('@')) {
+        key = key.slice(1);
+      }
+      if (typeof val === 'function' && !val.prototype) {
+        Object.defineProperty(namedArgs, key, {
+          get: val,
+          enumerable: true,
+          configurable: true,
+        });
+      } else {
+        namedArgs[key] = val;
+      }
+    }
+  }
+  const gxtSlots = tagProps[$SLOTS_SYMBOL];
+  if (gxtSlots && typeof gxtSlots === 'object') {
+    _setInternalProp(namedArgs, '$slots', gxtSlots);
+  }
+  return namedArgs;
+}
+
+// Render `comp` through the Ember component manager; `handle` returns either
+// the rendered nodes or a thunk producing them.
+function handleEmberComponent(managers: any, comp: any, namedArgs: any, fw: any, ctx: any): any {
+  const handleResult = managers.component.handle(comp, namedArgs, fw, ctx);
+  return typeof handleResult === 'function' ? handleResult() : handleResult;
 }
 
 /**
@@ -8681,102 +8805,28 @@ if (g.$_c && !g.$_c.__emberWrapped) {
         if (componentValue && componentValue.__isCurriedComponent) {
           const managers = g.$_MANAGERS;
           if (managers?.component?.canHandle?.(componentValue)) {
-            const namedArgs = buildNamedArgs(args);
-            const handleResult = managers.component.handle(componentValue, namedArgs, null, ctx);
-            if (typeof handleResult === 'function') {
-              return handleResult();
-            }
-            return handleResult;
+            return handleEmberComponent(managers, componentValue, buildNamedArgs(args), null, ctx);
           }
         }
       }
       const managers = g.$_MANAGERS;
       if (managers?.component?.canHandle?.(comp)) {
-        const $PROPS = $PROPS_SYMBOL;
-        const fw = args?.[$PROPS] || null;
-        const handleResult = managers.component.handle(comp, args, fw, ctx);
-        if (typeof handleResult === 'function') {
-          return handleResult();
-        }
-        return handleResult;
+        return handleEmberComponent(managers, comp, args, args?.[$PROPS_SYMBOL] || null, ctx);
       }
     }
 
     if (comp && comp.__isCurriedComponent) {
-      // Build args from the GXT args object
       const managers = g.$_MANAGERS;
       if (managers?.component?.canHandle?.(comp)) {
-        const $PROPS = $PROPS_SYMBOL;
-        const $SLOTS = $SLOTS_SYMBOL;
-        let fw = args?.[$PROPS] || null;
-
-        // Extract named args from the GXT args object
-        const namedArgs: any = {};
-        if (args) {
-          // GXT may pass args in tagProps format: [props[], attrs[], events[]]
-          // Check if args is an array (tagProps format from $_dc)
-          if (Array.isArray(args) && args.length >= 2 && Array.isArray(args[1])) {
-            // tagProps format: extract named args from attrs array (index 1)
-            fw = args; // The whole tagProps array is the fw
-            const attrs = args[1];
-            for (const entry of attrs) {
-              if (Array.isArray(entry) && entry.length >= 2) {
-                let key = entry[0];
-                const val = entry[1];
-                if (typeof key === 'string' && key.startsWith('@')) {
-                  key = key.slice(1);
-                }
-                if (typeof val === 'function' && !val.prototype) {
-                  Object.defineProperty(namedArgs, key, {
-                    get: val,
-                    enumerable: true,
-                    configurable: true,
-                  });
-                } else {
-                  namedArgs[key] = val;
-                }
-              }
-            }
-            // Extract slots from tagProps
-            const gxtSlots = args[$SLOTS as any];
-            if (gxtSlots && typeof gxtSlots === 'object') {
-              _setInternalProp(namedArgs, '$slots', gxtSlots);
-            }
-          } else {
-            // Plain object format
-            for (const key of Object.keys(args)) {
-              if (key === 'args' || key.startsWith('$')) continue;
-              const desc = Object.getOwnPropertyDescriptor(args, key);
-              if (desc) {
-                Object.defineProperty(namedArgs, key, desc);
-              }
-            }
-            // Also check args.args (GXT puts named args in args['args'])
-            const argsObj = args['args'];
-            if (argsObj && typeof argsObj === 'object') {
-              for (const key of Object.keys(argsObj)) {
-                if (!key.startsWith('$')) {
-                  const desc = Object.getOwnPropertyDescriptor(argsObj, key);
-                  if (desc) {
-                    Object.defineProperty(namedArgs, key, desc);
-                  }
-                }
-              }
-            }
-
-            // Extract slots from GXT args for {{yield}} support
-            const gxtSlots = args?.[$SLOTS] || args?.args?.[$SLOTS];
-            if (gxtSlots && typeof gxtSlots === 'object') {
-              _setInternalProp(namedArgs, '$slots', gxtSlots);
-            }
-          }
+        let fw = args?.[$PROPS_SYMBOL] || null;
+        let namedArgs: any;
+        if (isTagPropsTuple(args)) {
+          fw = args;
+          namedArgs = namedArgsFromTagProps(args);
+        } else {
+          namedArgs = buildNamedArgs(args);
         }
-
-        const handleResult = managers.component.handle(comp, namedArgs, fw, ctx);
-        if (typeof handleResult === 'function') {
-          return handleResult();
-        }
-        return handleResult;
+        return handleEmberComponent(managers, comp, namedArgs, fw, ctx);
       }
     }
 
@@ -8784,56 +8834,16 @@ if (g.$_c && !g.$_c.__emberWrapped) {
     if (typeof comp === 'function' && comp.__stringComponentName) {
       const managers = g.$_MANAGERS;
       if (managers?.component?.canHandle?.(comp)) {
-        const $SLOTS = $SLOTS_SYMBOL;
-        const namedArgs: any = {};
         let fw = null;
-        if (args) {
-          // args may be GXT tagProps format: [props, attrs, events]
-          if (Array.isArray(args) && args.length >= 2 && Array.isArray(args[1])) {
-            fw = args;
-            // Extract named args from attrs array (index 1)
-            // Each entry is ["@key", value] or ["@key", () => value]
-            const attrs = args[1];
-            for (const entry of attrs) {
-              if (Array.isArray(entry) && entry.length >= 2) {
-                let key = entry[0];
-                const val = entry[1];
-                // Strip @ prefix for named args
-                if (typeof key === 'string' && key.startsWith('@')) {
-                  key = key.slice(1);
-                }
-                if (typeof val === 'function' && !val.prototype) {
-                  Object.defineProperty(namedArgs, key, {
-                    get: val,
-                    enumerable: true,
-                    configurable: true,
-                  });
-                } else {
-                  namedArgs[key] = val;
-                }
-              }
-            }
-            // Also extract slots from GXT args
-            const gxtSlots = args[$SLOTS as any];
-            if (gxtSlots) {
-              _setInternalProp(namedArgs, '$slots', gxtSlots);
-            }
-          } else {
-            // Plain object format
-            for (const key of Object.keys(args)) {
-              if (key === 'args' || key.startsWith('$')) continue;
-              const desc = Object.getOwnPropertyDescriptor(args, key);
-              if (desc) {
-                Object.defineProperty(namedArgs, key, desc);
-              }
-            }
-          }
+        let namedArgs: any = {};
+        if (isTagPropsTuple(args)) {
+          fw = args;
+          namedArgs = namedArgsFromTagProps(args);
+        } else if (args) {
+          // Own named args only: no `args.args` bag and no slots on this path.
+          copyOwnNamedArgs(args, namedArgs, 'none');
         }
-        const handleResult = managers.component.handle(comp, namedArgs, fw, ctx);
-        if (typeof handleResult === 'function') {
-          return handleResult();
-        }
-        return handleResult;
+        return handleEmberComponent(managers, comp, namedArgs, fw, ctx);
       } else {
         // Component with __stringComponentName but canHandle returned false.
         // This means the component name could not be resolved. Throw an error
@@ -8858,136 +8868,10 @@ if (g.$_c && !g.$_c.__emberWrapped) {
     ) {
       const managers = g.$_MANAGERS;
       if (managers?.component?.canHandle?.(comp)) {
-        const $PROPS = $PROPS_SYMBOL;
-        const $SLOTS = $SLOTS_SYMBOL;
-        const fw = args?.[$PROPS] || null;
-        const namedArgs: any = {};
-        if (args) {
-          for (const key of Object.keys(args)) {
-            if (key === 'args' || key.startsWith('$')) continue;
-            const desc = Object.getOwnPropertyDescriptor(args, key);
-            if (desc) {
-              // Unwrap curried ember helpers in content-arg position.
-              // When {{helper foo "..."}} lands in @value, the underlying
-              // value/getter may be a GXT getter that yields a curried
-              // helper, or the curried helper function directly. Wrap in
-              // a getter that resolves all nested levels at read time so
-              // reactive reads see the resolved value instead of the
-              // function source (which would otherwise be stringified
-              // straight into the DOM).
-              const unwrapCurriedHelper = (v: any): any => {
-                let out = v;
-                let guard = 8;
-                while (
-                  typeof out === 'function' &&
-                  (out as any).__isEmberCurriedHelper &&
-                  guard-- > 0
-                ) {
-                  try {
-                    out = (out as any)();
-                  } catch {
-                    break;
-                  }
-                }
-                return out;
-              };
-              if (desc.get) {
-                const origGet = desc.get;
-                Object.defineProperty(namedArgs, key, {
-                  get() {
-                    let v = origGet.call(args);
-                    // Unwrap nested getters that yield a curried helper.
-                    // Stop at non-functions, curried components, and
-                    // fn helpers/mut cells (those must reach the manager
-                    // untouched).
-                    while (
-                      typeof v === 'function' &&
-                      !(v as any).__isEmberCurriedHelper &&
-                      !(v as any).__isCurriedComponent &&
-                      !(v as any).__isFnHelper &&
-                      !(v as any).__isMutCell &&
-                      !(v as any).prototype
-                    ) {
-                      try {
-                        v = (v as any)();
-                      } catch {
-                        break;
-                      }
-                    }
-                    return unwrapCurriedHelper(v);
-                  },
-                  enumerable: desc.enumerable,
-                  configurable: desc.configurable,
-                });
-              } else if ('value' in desc) {
-                let v = desc.value;
-                // For plain-value descriptors that hold a getter function
-                // returning a curried helper, wrap as a lazy getter too.
-                if (
-                  typeof v === 'function' &&
-                  !(v as any).__isEmberCurriedHelper &&
-                  !(v as any).__isCurriedComponent &&
-                  !(v as any).__isFnHelper &&
-                  !(v as any).__isMutCell &&
-                  !(v as any).prototype
-                ) {
-                  const vGet = v;
-                  Object.defineProperty(namedArgs, key, {
-                    get() {
-                      let r: any = vGet;
-                      while (
-                        typeof r === 'function' &&
-                        !(r as any).__isEmberCurriedHelper &&
-                        !(r as any).__isCurriedComponent &&
-                        !(r as any).__isFnHelper &&
-                        !(r as any).__isMutCell &&
-                        !(r as any).prototype
-                      ) {
-                        try {
-                          r = (r as any)();
-                        } catch {
-                          break;
-                        }
-                      }
-                      return unwrapCurriedHelper(r);
-                    },
-                    enumerable: desc.enumerable,
-                    configurable: desc.configurable,
-                  });
-                } else {
-                  Object.defineProperty(namedArgs, key, {
-                    value: unwrapCurriedHelper(v),
-                    writable: desc.writable,
-                    enumerable: desc.enumerable,
-                    configurable: desc.configurable,
-                  });
-                }
-              } else {
-                Object.defineProperty(namedArgs, key, desc);
-              }
-            }
-          }
-          const argsObj = args['args'];
-          if (argsObj && typeof argsObj === 'object') {
-            for (const key of Object.keys(argsObj)) {
-              if (!key.startsWith('$')) {
-                const desc = Object.getOwnPropertyDescriptor(argsObj, key);
-                if (desc) {
-                  Object.defineProperty(namedArgs, key, desc);
-                }
-              }
-            }
-          }
-          const gxtSlots = args?.[$SLOTS] || args?.args?.[$SLOTS];
-          if (gxtSlots && typeof gxtSlots === 'object') {
-            _setInternalProp(namedArgs, '$slots', gxtSlots);
-          }
-        }
-        const handleResult = managers.component.handle(comp, namedArgs, fw, ctx);
-        if (typeof handleResult === 'function') {
-          return handleResult();
-        }
-        return handleResult;
+        const fw = args?.[$PROPS_SYMBOL] || null;
+        // Curried `(helper)` values in content-arg position resolve on read
+        // (getters and thunk values) or once (plain values).
+        return handleEmberComponent(managers, comp, buildNamedArgs(args, 'all'), fw, ctx);
       }
     }
 
@@ -8999,77 +8883,9 @@ if (g.$_c && !g.$_c.__emberWrapped) {
     ) {
       const managers = g.$_MANAGERS;
       if (managers?.component?.canHandle?.(comp)) {
-        const $PROPS = $PROPS_SYMBOL;
-        const $SLOTS = $SLOTS_SYMBOL;
-        const fw = args?.[$PROPS] || null;
-        const namedArgs: any = {};
-        const unwrapCurriedHelper2 = (v: any): any => {
-          let out = v;
-          let guard = 8;
-          while (typeof out === 'function' && (out as any).__isEmberCurriedHelper && guard-- > 0) {
-            try {
-              out = (out as any)();
-            } catch {
-              break;
-            }
-          }
-          return out;
-        };
-        if (args) {
-          for (const key of Object.keys(args)) {
-            if (key === 'args' || key.startsWith('$')) continue;
-            const desc = Object.getOwnPropertyDescriptor(args, key);
-            if (desc) {
-              if (desc.get) {
-                const origGet = desc.get;
-                Object.defineProperty(namedArgs, key, {
-                  get() {
-                    let v = origGet.call(args);
-                    while (
-                      typeof v === 'function' &&
-                      !(v as any).__isEmberCurriedHelper &&
-                      !(v as any).__isCurriedComponent &&
-                      !(v as any).__isFnHelper &&
-                      !(v as any).__isMutCell &&
-                      !(v as any).prototype
-                    ) {
-                      try {
-                        v = (v as any)();
-                      } catch {
-                        break;
-                      }
-                    }
-                    return unwrapCurriedHelper2(v);
-                  },
-                  enumerable: desc.enumerable,
-                  configurable: desc.configurable,
-                });
-              } else {
-                Object.defineProperty(namedArgs, key, desc);
-              }
-            }
-          }
-          const argsObj = args['args'];
-          if (argsObj && typeof argsObj === 'object') {
-            for (const key of Object.keys(argsObj)) {
-              if (!key.startsWith('$')) {
-                const desc = Object.getOwnPropertyDescriptor(argsObj, key);
-                if (desc) {
-                  Object.defineProperty(namedArgs, key, desc);
-                }
-              }
-            }
-          }
-          const gxtSlots = args?.[$SLOTS] || args?.args?.[$SLOTS];
-          if (gxtSlots && typeof gxtSlots === 'object') {
-            _setInternalProp(namedArgs, '$slots', gxtSlots);
-          }
-        }
-        const handleResult = managers.component.handle(comp, namedArgs, fw, ctx);
-        if (typeof handleResult === 'function') {
-          return handleResult();
-        }
-        return handleResult;
+        const fw = args?.[$PROPS_SYMBOL] || null;
+        // Getter args resolve curried `(helper)` values on read.
+        return handleEmberComponent(managers, comp, buildNamedArgs(args, 'getters'), fw, ctx);
       }
     }
 
@@ -9099,14 +8915,14 @@ if (g.$_c && !g.$_c.__emberWrapped) {
       if (resolved && resolved.__isCurriedComponent) {
         const managers = g.$_MANAGERS;
         if (managers?.component?.canHandle?.(resolved)) {
-          const $PROPS = $PROPS_SYMBOL;
           const namedArgs = buildNamedArgs(args);
-          let fw = args?.[$PROPS] || null;
-          const handleResult = managers.component.handle(resolved, namedArgs, fw, ctx);
-          if (typeof handleResult === 'function') {
-            return handleResult();
-          }
-          return handleResult;
+          return handleEmberComponent(
+            managers,
+            resolved,
+            namedArgs,
+            args?.[$PROPS_SYMBOL] || null,
+            ctx
+          );
         }
       }
     }
