@@ -13,6 +13,7 @@
 // records the public manager factory.
 import { DEBUG } from '@glimmer/env';
 import { isTemplateFn } from '@lifeart/gxt';
+import { NULL_REFERENCE } from './reference';
 import { TemplateOnlyComponentDefinition } from './template-only';
 import type { Tag } from './validator';
 
@@ -57,6 +58,33 @@ export function setInternalComponentManager<T extends object>(manager: unknown, 
 export function getInternalComponentManager(definition: object, _isOptional?: boolean): any {
   return getManager(COMPONENT_MANAGERS, definition);
 }
+// Glimmer's TEMPLATE_ONLY_COMPONENT_MANAGER, registered on the `templateOnly()`
+// definition class as Glimmer does (@glimmer/runtime/lib/component/
+// template-only.ts): `getInternalComponentManager(templateOnly())` is this
+// manager. The native renderer draws template-only definitions itself
+// (managers.ts); this is the manager protocol a caller can observe.
+const TEMPLATE_ONLY_CAPABILITIES = {
+  dynamicLayout: false,
+  dynamicTag: false,
+  prepareArgs: false,
+  createArgs: false,
+  attributeHook: false,
+  elementHook: false,
+  createCaller: false,
+  dynamicScope: false,
+  updateHook: false,
+  createInstance: false,
+  wrapped: false,
+  willDestroy: false,
+  hasSubOwner: false,
+};
+export const TEMPLATE_ONLY_COMPONENT_MANAGER = {
+  getCapabilities: () => TEMPLATE_ONLY_CAPABILITIES,
+  getDebugName: ({ name }: TemplateOnlyComponentDefinition) => name,
+  getSelf: () => NULL_REFERENCE,
+  getDestroyable: () => null,
+};
+COMPONENT_MANAGERS.set(TemplateOnlyComponentDefinition.prototype, TEMPLATE_ONLY_COMPONENT_MANAGER);
 // A gxt template function (the compiled `<template>` of a template-only
 // `.gjs`/`.gts`, e.g. a route template) IS a component in the native build —
 // gxt renders it directly, the way Glimmer's TEMPLATE_ONLY_COMPONENT_MANAGER
@@ -65,14 +93,9 @@ export function getInternalComponentManager(definition: object, _isOptional?: bo
 // `factory(owner)`. The gxt compiler brands template functions under
 // NATIVE_FLAGS.EMBER_NATIVE (G14, `$_tpl`), so this is an exact check — a
 // TemplateFactory or a plain function is not a template function. A
-// `templateOnly()` definition is a component too (Glimmer registers its
-// TEMPLATE_ONLY_COMPONENT_MANAGER on the definition class).
+// `templateOnly()` definition has TEMPLATE_ONLY_COMPONENT_MANAGER (above).
 export function hasInternalComponentManager(definition: object): boolean {
-  return (
-    getManager(COMPONENT_MANAGERS, definition) !== undefined ||
-    isTemplateFn(definition) ||
-    definition instanceof TemplateOnlyComponentDefinition
-  );
+  return getManager(COMPONENT_MANAGERS, definition) !== undefined || isTemplateFn(definition);
 }
 
 export function setInternalHelperManager<T extends object>(manager: unknown, definition: T): T {

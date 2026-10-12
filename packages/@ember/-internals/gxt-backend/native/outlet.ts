@@ -44,6 +44,7 @@
 // comment, as Glimmer leaves `<!---->`.
 import { type InternalOwner, getOwner } from '@ember/-internals/owner';
 import { assert } from '@ember/debug';
+import { _instrumentStart } from '@ember/instrumentation';
 import { schedule } from '@ember/runloop';
 import {
   $_args,
@@ -153,6 +154,11 @@ interface Definition {
   readonly render: RenderState;
 }
 
+// classic component-managers/outlet.ts: "main" used to be the outlet name.
+function instrumentationPayload(definition: Definition): { object: string } {
+  return { object: `${definition.name}:main` };
+}
+
 function definitionOf(state: OutletState | undefined): Definition | null {
   const render = state?.render;
   if (render === undefined) return null;
@@ -257,9 +263,13 @@ export function Outlet(this: GxtNode): unknown {
     if (previous !== null) destroyElementSync(previous as never, false, api);
     if (placeholder.parentNode !== null) placeholder.parentNode.removeChild(placeholder);
     if (next !== null) {
+      // Classic `render.outlet` instrumentation: every route level an outlet
+      // renders (a view-less node), from its creation to its rendered layout.
+      const finalize = _instrumentStart('render.outlet', instrumentationPayload, next);
       rendered = renderRoute(next);
       // In place: where the outgoing content / the placeholder was.
       if (parent !== null) renderElement(api, outlet as never, parent, rendered as never, before);
+      finalize();
     }
     // A level without DOM keeps the placeholder so it can be filled in place.
     // (On the first render the content is not resolved yet — pending text /
