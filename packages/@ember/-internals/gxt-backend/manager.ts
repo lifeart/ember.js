@@ -13753,17 +13753,7 @@ export class CustomComponentManager {
     if (delegate?.capabilities?.destructor && typeof delegate.destroyComponent === 'function') {
       // Use the bucket as the destroyable — registering a destructor on the
       // bucket lets the VM's own destroyable plumbing drive teardown.
-      try {
-        // Lazy-load to avoid pulling @glimmer/destroyable into modules that
-        // never touch components.
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { registerDestructor } = require('@glimmer/destroyable');
-        registerDestructor(state, () => delegate.destroyComponent(component));
-      } catch {
-        // If destroyable registration fails, fall through and return the
-        // component itself so the VM still has SOMETHING to destroy.
-        return component;
-      }
+      _registerDestructor(state, () => delegate.destroyComponent(component));
       return state;
     }
     return null;
@@ -13785,7 +13775,7 @@ export class CustomComponentManager {
     }
     const { delegate, component } = state;
     if (
-      delegate?.capabilities?.asyncLifeCycleCallbacks &&
+      delegate?.capabilities?.asyncLifecycleCallbacks &&
       typeof delegate.didCreateComponent === 'function'
     ) {
       delegate.didCreateComponent(component);
@@ -13799,7 +13789,7 @@ export class CustomComponentManager {
     }
     const { delegate, component } = state;
     if (
-      delegate?.capabilities?.asyncLifeCycleCallbacks &&
+      delegate?.capabilities?.asyncLifecycleCallbacks &&
       delegate?.capabilities?.updateHook &&
       typeof delegate.didUpdateComponent === 'function'
     ) {
