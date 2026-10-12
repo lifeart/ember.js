@@ -63,93 +63,27 @@
       // after each test, preventing phantom failures from leaked state.
 
       QUnit.testStart(function () {
-        // Leak-debug: record reactor population at start of each test
-        // so the cross-test leak signal becomes visible against a known
-        // baseline. The label includes the upcoming test's name.
-        try {
-          if (typeof globalThis.__gxtLeakSnapshot === 'function') {
-            globalThis.__gxtLeakSnapshot('testStart:' + (QUnit.config.current?.testName || ''));
-          }
-        } catch (_e) {
-          /* ignore */
-        }
-        // Slice-121 (Cluster B): pre-slice-121 wrote
-        // `globalThis.__gxtTestTransition = false;` here. The slot was
-        // retired (reader-only orphan in compile.ts L7738, dropped) — write
-        // removed.
         // Reset the operation counter so each test gets a fresh budget
         if (globalThis.__gxtOpCount !== undefined) {
           globalThis.__gxtOpCount = 0;
         }
-        // Force-reset __gxtSyncing in case a previous test left it stuck true
-        // (e.g., an error thrown inside __gxtSyncDomNow that escaped the finally block)
-        globalThis.__gxtSyncing = false;
-        // Clean up GXT state BEFORE the test starts. If a prior test's afterEach
-        // failed or didn't fully clean up, this ensures a clean slate.
-        var cleanup = globalThis.__gxtCleanupActiveComponents;
-        if (typeof cleanup === 'function') {
-          try {
-            cleanup();
-          } catch (e) {
-            /* ignore cleanup errors */
-          }
-        }
-        // Reset sync flags that the cleanup might not cover
-        globalThis.__gxtPendingSync = false;
-        globalThis.__gxtPendingSyncFromPropertyChange = false;
-        globalThis.__gxtDeferredSyncError = null;
-        globalThis.__gxtForceRerenderInProgress = false;
         // A mid-render throw in a prior test can leave the live-render signal
         // set (see the templateFn.call catch in compile.ts); a stale truthy
         // value makes every later {{unbound}} deferred pass look live and
         // silently un-freezes unbound values. Always start a test clear.
         globalThis.__gxtCurrentTemplateThis = undefined;
-        // Drain any render-error queue left over from a prior test. Async
-        // paths (afterInsert callbacks, deferred sync) can push into
-        // _renderErrors after runAppend's flushRenderErrors() ran, leaving
-        // a stale error that re-throws in the NEXT test's runAppend (the
-        // "Died on test #N" bleed observed in cumulative-state runs).
-        if (typeof globalThis.__gxtClearRenderErrors === 'function') {
-          globalThis.__gxtClearRenderErrors();
-        }
-        // Reset the interval sync budget so the fallback timer works for this test
-        if (typeof globalThis.__gxtResetIntervalBudget === 'function') {
-          globalThis.__gxtResetIntervalBudget();
-        }
       });
 
       QUnit.testDone(function () {
-        // Leak-debug: record reactor population at end of each test.
-        // A reactor that survives the cleanup hook is a confirmed leak.
-        try {
-          if (typeof globalThis.__gxtLeakSnapshot === 'function') {
-            globalThis.__gxtLeakSnapshot('testDone:' + (QUnit.config.current?.testName || ''));
-          }
-        } catch (_e) {
-          /* ignore */
-        }
-        // Slice-121 (Cluster B): pre-slice-121 wrote
-        // `globalThis.__gxtTestTransition = true;` here. The slot was retired
-        // (reader-only orphan in compile.ts L7738, dropped) — write removed.
-        // The first interval guard (`_gxtGetPendingSync()`) already short-
-        // circuits between tests because the next line below resets
-        // `__gxtPendingSync = false`.
-        // Safety net: reset syncing flag after each test in case it got stuck
-        globalThis.__gxtSyncing = false;
-        globalThis.__gxtPendingSync = false;
-        globalThis.__gxtPendingSyncFromPropertyChange = false;
-        globalThis.__gxtDeferredSyncError = null;
-        globalThis.__gxtForceRerenderInProgress = false;
         // Reset op counter
         if (globalThis.__gxtOpCount !== undefined) {
           globalThis.__gxtOpCount = 0;
         }
-        // Periodically force GC when the harness exposes it (testem passes
-        // --js-flags=--expose-gc, see testem.cjs). The cumulative single-page
-        // run accumulates renderer GC debt across ~10k tests; without this the
-        // realm eventually fails allocations outright (RangeError: Array
-        // buffer allocation failed). Every-50 cadence mirrors the Playwright
-        // runner's session-recycle GC.
+        // Periodically force GC when the harness exposes it (the GXT test
+        // runner launches Chromium with --js-flags=--expose-gc). The
+        // cumulative single-page run accumulates renderer GC debt across ~10k
+        // tests; without this the realm eventually fails allocations outright
+        // (RangeError: Array buffer allocation failed).
         globalThis.__gxtTestDoneCount = (globalThis.__gxtTestDoneCount || 0) + 1;
         if (typeof window.gc === 'function' && globalThis.__gxtTestDoneCount % 50 === 0) {
           try {
@@ -166,11 +100,6 @@
       // during module initialization (before compile.ts sets it)
       globalThis.__GXT_MODE__ = true;
 
-      // Morph retirement: fine-grained is the committed default. The former
-      // runtime `globalThis.__GXT_SPIKE_SKIP_MORPH` gate is now the build-time
-      // const `__GXT_SKIP_MORPH__` (always true; inlined by replaceGxtModeFlag),
-      // so no runtime flag set is needed here.
-
       // R6 (census-shave, EXPERIMENTAL): skip the nested each-body proxy wrap
       // for self-reactive wrapper instances (e.g. RFC#1071 cells) whose reads
       // entangle their OWN native reactivity, so the wrap's per-prop cell is
@@ -178,24 +107,6 @@
       // revert. See `_isSelfReactiveWrapper` in compile.ts.
       if (typeof globalThis.__gxtR6SkipSelfReactive === 'undefined') {
         globalThis.__gxtR6SkipSelfReactive = true;
-      }
-
-      // Leak diagnostics: enable via QUnit URL param (?gxtLeakDebug=true)
-      // or by setting globalThis.__GXT_LEAK_DEBUG__ before tests start.
-      // When on, validator.ts tags every classic reactor with the test
-      // it was registered in and logs cross-test leaks at fire time.
-      // NOTE: leak diagnostics are EXPENSIVE — every classic-reactor fire
-      // produces a console.log per leaked reactor. With 18+ leaked reactors
-      // and thousands of dirtyTagFor calls per test, this floods testem's
-      // websocket and triggers a 41min hang in CI as the browser saturates
-      // the channel with diagnostic output. Keep it OPT-IN via URL param.
-      try {
-        var _u = new URL(location.href);
-        if (_u.searchParams.get('gxtLeakDebug') === 'true') {
-          globalThis.__GXT_LEAK_DEBUG__ = true;
-        }
-      } catch (_e) {
-        /* ignore */
       }
 
       // Global operation counter to detect infinite synchronous loops
