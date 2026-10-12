@@ -342,7 +342,8 @@ function printHelp() {
   --module-timeout <ms>   Per-module wall-clock timeout (default 300000)
   --test-timeout <ms>     QUnit.config.testTimeout (default 20000)
   --per-test-timeout <ms> Abort module if no QUnit progress for this long (default 30000)
-  --gc-interval <n>       Call window.gc() every Nth test (default 50). Requires --expose-gc.
+  --gc-interval <n>       Call window.gc() at each module's first test and every Nth test
+                          after it (default 50; 0 = never). Requires --expose-gc.
   --retries <n>           QUnit-level retries per failing test (default 2)
   --url <url>             Dev server URL (default http://localhost:5180/;
                           gxt native page: http://localhost:5181/native.html)
@@ -609,11 +610,17 @@ async function installCollectorInitScript(ctx, opts) {
           window.__gxtCollector.currentTestName = (d && d.module + ' :: ' + d.name) || null;
           window.__gxtCollector.currentTestStartedAt = Date.now();
           window.__gxtCollector.lastProgressAt = Date.now();
-          // Periodic GC: every N tests trigger window.gc() (exposed via
-          // --js-flags=--expose-gc) to release GXT pipeline pressure that
-          // builds up cumulatively. Best-effort; missing gc() = harmless.
+          // Periodic GC: window.gc() (exposed via --js-flags=--expose-gc) at
+          // the module's first test and every Nth test after it, to release
+          // GXT pipeline pressure that builds up cumulatively. The first-test
+          // GC also collects the documents of the page's earlier module runs:
+          // every navigation left two detached documents that V8 did not
+          // collect in time, and after ~17 (compat) / ~22 (native)
+          // navigations the renderer crashed ("Target crashed"), which cost
+          // the boot watchdog + a cold retry each time. Best-effort; missing
+          // gc() = harmless.
           const idx = window.__gxtCollector.testsCompleted;
-          if (gcInterval > 0 && idx > 0 && idx % gcInterval === 0) {
+          if (gcInterval > 0 && idx % gcInterval === 0) {
             try {
               if (typeof window.gc === 'function') {
                 window.gc();
@@ -1030,10 +1037,12 @@ async function main() {
       const name = modules[i];
       const startedAt = Date.now();
       // Proactive session recycle: a single long-lived page accumulates
-      // renderer GC debt across hundreds of heavy test realms; periodically a
-      // goto lands in a multi-second GC pause and trips the boot watchdog
-      // (observed as scattered `partial 0/0` ~30s timeouts). Recycling every
-      // 50 modules bounds that debt while keeping ONE tab at any moment.
+      // renderer memory across hundreds of heavy test realms (the detached
+      // documents of earlier module runs, see the first-test GC in the
+      // collector); left alone the renderer crashes and trips the boot
+      // watchdog (observed as scattered `partial 0/0` ~30s timeouts).
+      // Recycling every 50 modules bounds it while keeping ONE tab at any
+      // moment.
       if (modulesSinceRecycle >= 50) {
         await disposeSession();
         modulesSinceRecycle = 0;
@@ -1041,8 +1050,9 @@ async function main() {
       let r = await runModule(browser, args.url, name, args);
       modulesSinceRecycle += 1;
       // A `partial 0/0` timeout means the page never booted — almost always
-      // the GC-pause artifact above, not a real hang. runModule already
-      // disposed the session on timeout, so one retry runs on a fresh page.
+      // the renderer crash above (now prevented by the first-test GC), not a
+      // real hang. runModule already disposed the session on timeout, so one
+      // retry runs on a fresh page.
       if (r.status === 'timeout' && (r.partialTotal || 0) === 0) {
         process.stdout.write(
           `[ ${String(i + 1).padStart(3)}/${modules.length}] retrying after cold timeout: ${name}\n`
