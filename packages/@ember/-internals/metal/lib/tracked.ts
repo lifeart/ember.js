@@ -57,7 +57,9 @@ const tagFor = compatTagFor;
 // Accessed via the namespace import to avoid a classic-build link error on a
 // missing named export.
 const _gxtRecordTrackedRead = (validator as { recordTrackedCellRead?: unknown })
-  .recordTrackedCellRead as ((cell: unknown, key: string | symbol, obj: object) => void) | undefined;
+  .recordTrackedCellRead as
+  | ((cell: unknown, key: string | symbol, obj: object) => void)
+  | undefined;
 const _gxtAssertTrackedBacktrack = (validator as { assertTrackedCellBacktrack?: unknown })
   .assertTrackedCellBacktrack as
   | ((cell: unknown, key: string | symbol, obj: object) => void)
@@ -319,7 +321,9 @@ function _gxtTrackedCellSet(
   const _cellFor = getGxtRenderer()?.compilePipeline.cellFor;
   if (typeof _cellFor !== 'function') return false;
   const apply = () => {
-    const cell = _cellFor(obj, key, /* skipDefine */ true) as { update: (v: unknown) => void } | undefined;
+    const cell = _cellFor(obj, key, /* skipDefine */ true) as
+      | { update: (v: unknown) => void }
+      | undefined;
     // The single-cell scheme relies on the gxt cell exposing a synchronous
     // `update()` (true for gxt 0.0.67, where tagFor's lazy MergedCell extends
     // Cell). Assert it in DEBUG so a future gxt contract change fails loudly

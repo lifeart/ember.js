@@ -139,8 +139,7 @@ function getGxtDebugRenderTree(): DebugRenderTree {
         // No args → gxt auto-discovers the render roots from its own
         // component-parent registry and returns Ember-compatible
         // CapturedRenderNode[] (see the SEAM note above).
-        capture: (): CapturedRenderNode[] =>
-          _gxtLib().captureRenderTree() as CapturedRenderNode[],
+        capture: (): CapturedRenderNode[] => _gxtLib().captureRenderTree() as CapturedRenderNode[],
       } as DebugRenderTree;
     }
     return gxtDebugRenderTree;

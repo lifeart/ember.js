@@ -1797,10 +1797,7 @@ if (ENV._DEBUG_RENDER_TREE && __GXT_MODE__) {
             assert.ok('name' in node, 'node has a name');
             assert.ok('id' in node, 'node has an id');
             assert.ok('instance' in node, 'node has an instance slot');
-            assert.ok(
-              node.args && typeof node.args === 'object',
-              'node.args is present'
-            );
+            assert.ok(node.args && typeof node.args === 'object', 'node.args is present');
             assert.ok(Array.isArray(node.args.positional), 'node.args.positional is an array');
             assert.ok(
               node.args.named && typeof node.args.named === 'object',

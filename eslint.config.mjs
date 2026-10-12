@@ -43,6 +43,10 @@ export default [
       // Assembled ember-source-gxt package output (git-ignored build artifact;
       // scripts/build-gxt-package.mjs) — lint the sources, not the dist.
       'dist-gxt-package/',
+      'dist-gxt-native-package/',
+      // Type declarations shipped by the gxt-native package; not part of the
+      // root tsconfig project that typed linting uses.
+      'scripts/gxt-native-package/*.d.ts',
     ],
   },
   pluginJs.configs.recommended,

@@ -2087,8 +2087,7 @@ function createEmberDc(original: Function) {
     // class/attrs to the resolved component's `...attributes` the way a static
     // invocation does. Replaces the ~160-line $_dc_splatfix wrapper.
     let __fw: any = null;
-    const __tuple =
-      gxtArgs && typeof gxtArgs === 'object' ? (gxtArgs as any)[$PROPS] : null;
+    const __tuple = gxtArgs && typeof gxtArgs === 'object' ? (gxtArgs as any)[$PROPS] : null;
     if (
       typeof (gxtModule as any).hasDynamicSplatProps === 'function' &&
       (gxtModule as any).hasDynamicSplatProps(__tuple)

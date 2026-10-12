@@ -245,7 +245,6 @@ moduleFor(
       this.assertText('Godfrey Chan');
     }
 
-
     // ---------------------------------------------------------------------
     // (hash) reference-identity coverage — RFC dual-backend "(hash) / (array)
     // helper identity across renders" row.

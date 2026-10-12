@@ -534,7 +534,6 @@ function hasAttrsInBlockParams(str: string): boolean {
   return false;
 }
 
-
 // Dynamic `(helper)` / `(modifier)` keyword usage (`{{helper this.x}}` /
 // `(modifier this.x)`) is now DETECTED by the `gxtDynamicHelperAssert` /
 // `gxtDynamicModifierAssert` AST visitors (the assert fires post-compile from
@@ -1930,7 +1929,9 @@ if (_gxtRegisterHostHooks) {
       }
       if (
         typeof value === 'symbol' ||
-        (value !== null && typeof value === 'object' && typeof (value as any).toString !== 'function')
+        (value !== null &&
+          typeof value === 'object' &&
+          typeof (value as any).toString !== 'function')
       ) {
         // Symbol values throw on implicit string coercion inside setAttribute.
         // Objects with no toString method (e.g. Object.create(null)) likewise
@@ -4830,12 +4831,7 @@ function _gxtDestroyHelperScope(scope: Set<any>): void {
   evictFromCache(_tagHelperInstanceCache);
   for (const inst of copy) {
     try {
-      if (
-        inst &&
-        typeof inst.destroy === 'function' &&
-        !inst.isDestroyed &&
-        !inst.isDestroying
-      ) {
+      if (inst && typeof inst.destroy === 'function' && !inst.isDestroyed && !inst.isDestroying) {
         inst.destroy();
       }
     } catch {
@@ -4872,12 +4868,7 @@ function _gxtDestroyNewClassHelperCacheEntriesSince(prev: Set<string> | null): v
       const entry = cache.get(k);
       cache.delete(k);
       const inst = entry && entry.__managerBucket ? entry.bucket?.instance : entry;
-      if (
-        inst &&
-        typeof inst.destroy === 'function' &&
-        !inst.isDestroyed &&
-        !inst.isDestroying
-      ) {
+      if (inst && typeof inst.destroy === 'function' && !inst.isDestroyed && !inst.isDestroying) {
         try {
           inst.destroy();
         } catch {
@@ -12574,7 +12565,6 @@ const templateCache = new Map<string, any>();
 
 let _functionCodeCache: Map<string, Function> | null = null;
 
-
 // HTML comments `<!-- ... -->` are now preserved by the `gxtHtmlCommentTransform`
 // AST visitor, and the implicit `<table><tbody>` wrap is now inserted by the
 // `gxtTableTbodyTransform` AST visitor (both wired into the compiler `transforms`
@@ -13464,8 +13454,7 @@ export function precompileTemplate(
   // gxtCompileTemplate from the unmodified code) — the legacy assembly below is
   // skipped entirely, none of its rewrites are needed for this template class.
   const __gxtUseNativeTemplateFn =
-    !!compilationResult.code &&
-    _gxtNativeTemplateEligible(compilationResult, options);
+    !!compilationResult.code && _gxtNativeTemplateEligible(compilationResult, options);
   if (__gxtUseNativeTemplateFn) {
     (compilationResult as any).__gxtNativePath = true;
     _gxtNativePathStats.native++;
@@ -13589,8 +13578,7 @@ export function precompileTemplate(
         (compilationResult as any).usedArgsAlias === true || /\$a[.[]/.test(modifiedCode);
       const needsSlots =
         (compilationResult as any).usedSlots === true || modifiedCode.includes('$slots');
-      const needsFw =
-        (compilationResult as any).usedFw === true || modifiedCode.includes('$fw');
+      const needsFw = (compilationResult as any).usedFw === true || modifiedCode.includes('$fw');
       const g = globalThis as any;
       // Inject Ember keyword helpers as local variables so GXT-compiled code
       // that references them as bare identifiers (e.g. inside {{#let}}) works.

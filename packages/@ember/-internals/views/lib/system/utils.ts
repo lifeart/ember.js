@@ -62,7 +62,10 @@ export function getRootViews(owner: InternalOwner): View[] {
       // preserved: we still fall through and read the registry as before.
       if (DEBUG) {
         // eslint-disable-next-line no-console
-        console.warn('[gxt] viewUtils.rebuildViewTreeFromDom failed; view registry may be stale', e);
+        console.warn(
+          '[gxt] viewUtils.rebuildViewTreeFromDom failed; view registry may be stale',
+          e
+        );
       }
     }
   }
@@ -162,7 +165,10 @@ export function getChildViews(view: View): View[] {
       // preserved: we still fall through and read the registry as before.
       if (DEBUG) {
         // eslint-disable-next-line no-console
-        console.warn('[gxt] viewUtils.rebuildViewTreeFromDom failed; view registry may be stale', e);
+        console.warn(
+          '[gxt] viewUtils.rebuildViewTreeFromDom failed; view registry may be stale',
+          e
+        );
       }
     }
   }

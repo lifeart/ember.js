@@ -198,4 +198,3 @@ describe('doubleColonToSlash', () => {
     expect(doubleColonToSlash('::Foo::')).toBe('/Foo/');
   });
 });
-
