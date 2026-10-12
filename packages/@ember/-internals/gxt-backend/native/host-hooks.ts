@@ -25,6 +25,8 @@
 // already been used previously in the same computation" (replaces G13).
 import { DEBUG } from '@glimmer/env';
 import { ENV } from '@ember/-internals/environment';
+import { constructStyleDeprecationMessage } from '@ember/-internals/views/lib/system/utils';
+import { warn } from '@ember/debug';
 import { _backburner, _getCurrentRunLoop } from '@ember/runloop';
 import toBool from '@ember/-internals/glimmer/lib/utils/to-bool';
 import { flushRevalidation } from '@lifeart/gxt';
@@ -200,6 +202,41 @@ function isSafeString(value: unknown): value is { toHTML(): string } {
   );
 }
 
+// Glimmer's `normalizeStringValue` (dom/normalize.ts).
+function normalizeStringValue(value: unknown): string {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof (value as { toString?: unknown }).toString !== 'function'
+  ) {
+    return '';
+  }
+  return String(value);
+}
+
+// A trusting attribute value (`style={{{value}}}`: gxt `$_trustAttr` → the
+// `trustedAttrValue` hook, registered in DEBUG only — install.ts), unwrapped by
+// normalizeAttrValue below.
+class TrustedAttrValue {
+  constructor(readonly value: unknown) {}
+}
+
+/** gxt `trustedAttrValue` host hook (DEBUG): mark a trusting binding's value. */
+export function trustedAttrValue(value: unknown): unknown {
+  return value === null || value === undefined ? value : new TrustedAttrValue(value);
+}
+
+// classic environment.ts `warnIfStyleNotTrusted` (Glimmer's
+// DebugStyleAttributeManager calls it on every set / update of a non-trusting
+// `style` binding).
+function warnIfStyleNotTrusted(value: unknown): void {
+  warn(
+    constructStyleDeprecationMessage(String(value)),
+    value === null || value === undefined || isSafeString(value),
+    { id: 'ember-htmlbars.style-xss-warning' }
+  );
+}
+
 /** gxt `normalizeAttrValue` host hook. */
 export function normalizeAttrValue(
   name: string,
@@ -207,7 +244,25 @@ export function normalizeAttrValue(
   element: Element,
   isProp: boolean
 ): unknown {
+  if (DEBUG) {
+    // A trusting binding (`style={{{value}}}`) arrives wrapped (see
+    // trustedAttrValue). Every other bound `style` is Glimmer's
+    // DebugStyleAttributeManager: the gxt compiler writes a bound `style`
+    // through the property side (`isProp`) and a static `style="…"` through
+    // the attribute side, which Glimmer never warns about.
+    if (value instanceof TrustedAttrValue) {
+      value = value.value;
+    } else if (isProp && name === 'style') {
+      warnIfStyleNotTrusted(value);
+    }
+  }
   if (isProp) {
+    // Glimmer InputValueDynamicAttribute: an <input> / <textarea> `value`
+    // is the string `normalizeStringValue` gives (null, undefined, a value
+    // without `toString` → '').
+    if (name === 'value' && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA')) {
+      return normalizeStringValue(value);
+    }
     // Glimmer DefaultDynamicProperty assigns the value as-is (SafeStrings
     // become their HTML); URL-bearing properties are sanitized.
     const resolved = isSafeString(value) ? value.toHTML() : value;

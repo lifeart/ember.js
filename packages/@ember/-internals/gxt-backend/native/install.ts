@@ -6,7 +6,13 @@
 import { DEBUG } from '@glimmer/env';
 import { _getProp } from '@ember/-internals/metal';
 import { registerHostHooks, registerHostManagers } from '@lifeart/gxt';
-import { installRenderLoop, normalizeAttrValue, scheduleRevalidate, toBool } from './host-hooks';
+import {
+  installRenderLoop,
+  normalizeAttrValue,
+  scheduleRevalidate,
+  toBool,
+  trustedAttrValue,
+} from './host-hooks';
 import { helperManager } from './helper-manager';
 import { componentManager, resolveComponentName } from './managers';
 import { modifierManager } from './modifier-manager';
@@ -23,6 +29,10 @@ export function install(): void {
     scheduleRevalidate,
     toBool,
     normalizeAttrValue,
+    // A trusting `style={{{value}}}` (gxt `$_trustAttr`): marked so the DEV
+    // untrusted-style warning in normalizeAttrValue skips it (Glimmer's
+    // TrustingDynamicAttribute). Production has no warning and no marker.
+    trustedAttrValue: DEBUG ? trustedAttrValue : undefined,
     resolveComponentName,
     // `{{outlet}}` (G3: compiled to `$_outlet(ctx)` under NATIVE_FLAGS.EMBER_OUTLET)
     outletComponent: Outlet,
