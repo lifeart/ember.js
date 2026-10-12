@@ -1454,15 +1454,8 @@ function _gxtUpdateRootTagValues(): void {
   _gxtDirtyRootsAtSync = dirtyRoots;
 }
 
-// Slice-9 (Cluster B): publish the renderer-owned root-component hooks to the
-// gxt-bridge `rootComponent` namespace. Mirrors slice 6's
-// `installCompilePipelinePart` from ember-template-compiler.ts and slice 7's
-// `installRuntimePart` from gxt-with-runtime-hbs.ts; this is the first cross-
-// package writer for an install-API namespace (renderer.ts lives in
-// `@ember/-internals/glimmer`, the bridge namespace is consumed inside
-// `@ember/-internals/gxt-backend/compile.ts`). The install is direction-
-// agnostic — see gxt-bridge.ts `GxtRootComponentCapabilities` for the design
-// note on "reverse-flow".
+// Publish the renderer-owned root-component hooks to the gxt-bridge
+// `rootComponent` namespace (consumed by gxt-backend/compile.ts).
 if (__GXT_MODE__) {
   installRootComponentPart({
     isRootComponent: _gxtIsRootComponent,

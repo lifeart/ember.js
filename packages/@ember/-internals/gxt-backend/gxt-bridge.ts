@@ -49,13 +49,6 @@ export interface GxtDestructionCapabilities {
   destroyDestroyable(destroyable: object): void;
 
   /**
-   * Flush any custom-managed (manager.ts:_customManagedInstances) component
-   * instances whose DOM nodes are no longer connected. Invoked from
-   * `__gxtDestroyUnclaimedPoolEntries` near the start of its sweep.
-   */
-  destroyCustomManagedInstances(): void;
-
-  /**
    * Drive the unclaimed-pool-entry destroy sweep. Called from compile.ts at
    * the end of `__gxtSyncDomNow` Phase 2 to fire lifecycle hooks on pool
    * entries that were in the previous render but not in the new one.
@@ -313,23 +306,6 @@ export interface GxtViewUtilsCapabilities {
 }
 
 /**
- * Format / attribute-value helpers. Implemented by manager.ts and currently
- * only consumed intra-package, but exposed via the bridge to give future
- * cross-package consumers a typed entry point.
- */
-export interface GxtFormatCapabilities {
-  /**
-   * Decide whether to emit a style-binding XSS warning for the given
-   * (element, value) pair. The implementation tracks per-element dedup and
-   * suppresses warnings during force-rerender (`__gxtIsForceRerender`).
-   *
-   * Returns `true` if the caller SHOULD emit the warning, `false` if the
-   * element has already been warned about (or force-rerender is in flight).
-   */
-  shouldWarnStyle(element: unknown, value?: string): boolean;
-}
-
-/**
  * Compile-pipeline capabilities. Composite namespace: methods are contributed
  * both from manager.ts (initial `setGxtRenderer` install) and from compile.ts /
  * ember-template-compiler.ts via `installCompilePipelinePart`.
@@ -443,17 +419,11 @@ export interface GxtCompilePipelineCapabilities {
   captureRenderError(err: unknown): void;
 
   /**
-   * Classic-validator reactivity hooks, replacing the retired
-   * `globalThis.__classicConsumeTag` / `__classicTagFor` /
-   * `__classicDirtyTagFor` slots. `classicDirtyTagFor` is the REBUILD-GUARDED
-   * variant (no-ops while `__gxtRebuildViewTreeFromDom` runs — see
-   * `classicDirtyTagForGuarded` in manager.ts); intra-package callers in
-   * manager.ts use the module-locals directly, cross-package callers
-   * (helper-manager recompute bridge, @ember/routing's router-property
-   * dirty) route through these.
+   * The REBUILD-GUARDED classic `dirtyTagFor` (no-ops while
+   * `__gxtRebuildViewTreeFromDom` runs — see `classicDirtyTagForGuarded` in
+   * manager.ts), for cross-package callers (helper-manager recompute bridge,
+   * @ember/routing's router-property dirty).
    */
-  classicConsumeTag(tag: unknown): void;
-  classicTagFor(obj: object, key: string | symbol): unknown;
   classicDirtyTagFor(obj: object, key: string | symbol): void;
 
   /**
@@ -1244,8 +1214,7 @@ export interface GxtCompilePipelineCapabilities {
    * two-way-binding source-getter lookup. The capture must happen at
    * helper-creation time (inside the helper body, NOT inside the inner
    * `mutCell` closure) because the helper body runs while the
-   * `ember-gxt-wrappers.ts` save/set/finally-restore triplet is open
-   * (i.e., between `setMutContext(ctx)` and `setMutContext(prevCtx)`);
+   * `ember-gxt-wrappers.ts` save/set/finally-restore triplet is open;
    * the inner `mutCell` closure runs LATER (e.g., when the user clicks
    * an `<input>` and a `set(...)` is dispatched), well after the writer
    * frame has unwound and the global slot has been restored to its
@@ -1256,21 +1225,6 @@ export interface GxtCompilePipelineCapabilities {
    *  - `compile.ts:7209` — `__EMBER_BUILTIN_HELPERS__.__mutGet` body.
    */
   getMutContext?(): unknown;
-
-  /**
-   * Write the `__gxtMutContext` runtime context value. The value's
-   * lifetime and semantics are described in the `getMutContext` doc
-   * above.
-   *
-   * Writers (6 sites, all intra-`ember-gxt-wrappers.ts`,
-   * two save/set/finally-restore triplets around `helper(...)`
-   * invocations):
-   *  - `ember-gxt-wrappers.ts:530-536` — `__mutGet` branch
-   *    save/set/finally-restore triplet.
-   *  - `ember-gxt-wrappers.ts:592-599` — `mut` branch save/set/
-   *    finally-restore triplet.
-   */
-  setMutContext?(value: unknown): void;
 
   /**
    * Read-only access to the resolver-cache counters object that mirrors the
@@ -2019,76 +1973,6 @@ export interface GxtCompilePipelineCapabilities {
   cleanupActiveComponents?(): void;
 
   /**
-   * Run `fn` while the morph-render in-progress flag is `true` AND the
-   * morph-modifier-invocations array is exposed to the modifier-manager
-   * handle path. The save-restore pair sets both pieces of state on entry,
-   * invokes `fn` (the `(gxtTemplate as any).render(freshContext, tempContainer)`
-   * call in `renderer.ts:967-983`), and clears the flag back to `false` and
-   * the invocations slot back to `null` on completion (including when `fn`
-   * throws) via try/finally. The caller passes the empty invocations array
-   * it owns — `withMorphRender` only writes the bridge-visible slot and never
-   * mutates the array itself; mutation happens via the modifier-manager
-   * `handle` reader (which pushes `{ modifier, element, props, hashArgs }`
-   * entries onto the same array the caller still holds a reference to).
-   *
-   *   const morphModInvocations: any[] = [];
-   *   (globalThis as any).__gxtMorphModifierInvocations = morphModInvocations;
-   *   (globalThis as any).__gxtMorphRenderInProgress = true;
-   *   try {
-   *     (gxtTemplate as any).render(freshContext, tempContainer);
-   *   } finally {
-   *     (globalThis as any).__gxtMorphRenderInProgress = false;
-   *     (globalThis as any).__gxtMorphModifierInvocations = null;
-   *     popParentView();
-   *   }
-   *
-   * Reader contract (3 readers, all in `gxt-backend`):
-   *  - `manager.ts:8938` — modifier-manager `handle` flag-check gate (intercept
-   *    modifier installation during morph re-renders). Routed through
-   *    `getGxtRenderer()?.compilePipeline.isMorphRenderInProgress?.()`.
-   *  - `manager.ts:8941` — modifier-manager `handle` invocations-array push
-   *    (queues the modifier invocation for post-morph replay). Routed
-   *    through `getGxtRenderer()?.compilePipeline.getMorphModifierInvocations?.()`.
-   *  - `compile.ts:15905` — `$_each` empty-comment cleanup gate during
-   *    morph re-renders (skips empty-comment removal on temp containers).
-   *    Intra-file reader; routes directly through the module-local
-   *    `_gxtIsMorphRenderInProgress` helper.
-   *
-   * The canonical state is the module-local `_gxtMorphRenderInProgressFlag` +
-   * `_gxtMorphModifierInvocations` bindings in `compile.ts`; the bridge
-   * methods are the sole cross-package surface, and the intra-file reader
-   * (`compile.ts:15905`) uses the module-local helper directly.
-   */
-  withMorphRender?<T>(invocations: any[], fn: () => T): T;
-
-  /**
-   * Read-only predicate for the morph-render in-progress flag set by
-   * `withMorphRender(invocations, fn)` above. Returns `true` iff the
-   * current synchronous stack is nested inside the temp-container render
-   * pass that produces the diff input for `morphChildren(gxtRenderTarget,
-   * tempContainer)` in renderer.ts:986. Used by `manager.ts:8938`'s
-   * modifier-manager `handle` gate (intercepts modifier installation on
-   * temp elements — those installs would drift the add/remove counter
-   * tracked by `INTERNAL_MODIFIER_MANAGERS`) and by `compile.ts:15905`'s
-   * `$_each` empty-comment cleanup gate (skips empty-comment removal so
-   * the morph diff sees the same comment topology on both sides).
-   */
-  isMorphRenderInProgress?(): boolean;
-
-  /**
-   * Read-only accessor for the morph-modifier-invocations array exposed
-   * during a `withMorphRender(invocations, fn)` frame. Returns the array
-   * passed to `withMorphRender`, or `null` when no morph render is in
-   * progress (slot is cleared in the wrapper's `finally`). The
-   * modifier-manager `handle` reader at `manager.ts:8941` reads the array
-   * (when non-null) and pushes a `{ modifier, element, props, hashArgs }`
-   * entry to queue the invocation for post-morph replay against the real
-   * DOM element (the modifier-replay loop in renderer.ts immediately after
-   * the morph-and-diff pass).
-   */
-  getMorphModifierInvocations?(): any[] | null;
-
-  /**
    * Mark a component instance as having been explicitly rerendered via
    * `.rerender()`. Adds the instance to the manager.ts module-local
    * `_forcedRerenderInstances` Set; the next `__gxtSyncAllWrappers` pass
@@ -2184,51 +2068,9 @@ export interface GxtCompilePipelineCapabilities {
   getTopOutletRef?(): any;
 
   /**
-   * Set the current `{{#if}}`-branch helper-teardown scope. Called by
-   * compile.ts's `patchGlobalIf`/`wrapBranch` save-restore frames (three
-   * intra-file writer pairs at compile.ts:5488/5624, 5489 and 5592/5616,
-   * 5593) to publish the per-branch `Set<any>` (`trueBranchHelpers` /
-   * `falseBranchHelpers`) for the duration of a branch evaluation body
-   * (`fn.apply(this, branchArgs)` / `inner.apply(this, innerArgs)`).
-   * Three readers consult the slot to associate freshly-created class-
-   * based helper instances with the enclosing branch's teardown scope so
-   * that destroy + willDestroy fire on branch swap, matching Ember's
-   * classic Helper lifecycle (not only on top-level component teardown).
-   *
-   * Readers route through `getCurrentHelperScope?.()` and treat a
-   * non-`null`/`undefined` `scope` with a callable `.add(...)` as the active
-   * branch scope; absence or non-Set values short-circuit silently:
-   *   - compile.ts:10345 — intra-file, inside `$_tag` class-based-helper
-   *     instance creation; after pushing the freshly-created instance into
-   *     `_tagHelperInstanceCache` + the destroy-tracking array, calls
-   *     `ifScopeTag.add(helperInstance)` to wire the instance to the
-   *     enclosing branch scope.
-   *   - ember-gxt-wrappers.ts:918 — cross-file, inside `$_maybeHelper`'s
-   *     branch-swap recreation branch, calls `ifScope2.add(destroyable)`.
-   *   - ember-gxt-wrappers.ts:1092 — cross-file, inside `$_maybeHelper`'s
-   *     class-based-helper path (factory.create() cache miss), calls
-   *     `ifScope.add(instance)`.
-   *
-   * The canonical state is `_gxtCurrentHelperScope` in compile.ts. The
-   * writers are all intra-file (compile.ts's `patchGlobalIf`/`wrapBranch`
-   * save-restore frames), and the intra-file reader at compile.ts:10345 uses
-   * the module-local directly; the bridge `set` surface is shipped so that
-   * any future cross-file writer can extend through the typed surface rather
-   * than re-publishing on globalThis.
-   *
-   * Overwrite contract: each write OVERWRITES the prior captured scope.
-   * Intra-file callers save the prior scope into a local `prev`/`prev2`
-   * binding and restore it in `finally` so nested branch evaluations restore
-   * the outer scope. Bridge writers are responsible for their own
-   * save-restore (the bridge does NOT auto-wrap).
-   */
-  setCurrentHelperScope?(scope: any): void;
-
-  /**
-   * Read the current `{{#if}}`-branch helper-teardown scope written by
-   * `setCurrentHelperScope` above (or by compile.ts's intra-file save-
-   * restore frames using the module-local binding directly). Returns
-   * `undefined` if no branch frame is currently active.
+   * Read the current `{{#if}}`-branch helper-teardown scope, set by
+   * compile.ts's `patchGlobalIf`/`wrapBranch` save-restore frames. Returns
+   * `null` if no branch frame is currently active.
    */
   getCurrentHelperScope?(): any;
 
@@ -2549,54 +2391,6 @@ export interface GxtRenderPassCapabilities {
 }
 
 /**
- * Runtime / module-handoff capabilities. Implemented by
- * `gxt-with-runtime-hbs.ts` (the file that imports `* as gxtModule from
- * '@lifeart/gxt'` and re-exports the runtime-hbs-flavored namespace) AND by
- * `compile.ts` (the file that imports `$_MANAGERS` directly from
- * `@lifeart/gxt` for use in template-emit code). Both writers contribute the
- * SAME `$_MANAGERS` object reference (the `manualChunks` rollup consolidation
- * guarantees a single GXT module instance; see compile.ts:1242 note). The
- * dual-write is for entry-point independence — either file may load alone in
- * different bundles, so each must be able to publish the manager reference
- * autonomously.
- *
- * Consumed by manager.ts to obtain the SAME `@lifeart/gxt` namespace and
- * `$_MANAGERS` object that GXT's internal manager-handler functions close
- * over. manager.ts must mutate the original `$_MANAGERS` object in place
- * (GXT's `$_maybeHelper` etc. capture a reference to it at module-init time;
- * replacing the object wholesale would not be observed).
- */
-export interface GxtRuntimeCapabilities {
-  /**
-   * Return the `@lifeart/gxt` namespace object as imported by
-   * `gxt-with-runtime-hbs.ts`. Returns `undefined` if the writer file never
-   * loaded (i.e., the gxt-with-runtime-hbs entry was not part of the import
-   * graph for this build).
-   *
-   * Used by manager.ts's `$_MANAGERS`-mutation block to obtain the
-   * GXT-internal `$_MANAGERS` reference and install the Ember
-   * component/helper/modifier handlers in place.
-   */
-  getGxtModule?(): unknown;
-
-  /**
-   * Return the GXT-original `$_MANAGERS` object — the exact reference that
-   * GXT's internal `$_maybeHelper`, `$_maybeModifier`, etc. close over at
-   * module init. Returns `undefined` if neither writer file
-   * (`gxt-with-runtime-hbs.ts` nor `compile.ts`) is in the import graph.
-   *
-   * Both `gxt-with-runtime-hbs.ts` and `compile.ts` register this method via
-   * `installRuntimePart`; the second `Object.assign` wins, but both return
-   * the same object since the rollup `manualChunks` consolidation ensures a
-   * single `@lifeart/gxt` module instance across the gxt-backend package.
-   *
-   * Used by manager.ts (in a `queueMicrotask` so contributors get a chance
-   * to register) to mutate the original managers object in place.
-   */
-  getOriginalManagers?(): unknown;
-}
-
-/**
  * Root-component / renderer-state capabilities. Implemented by
  * `glimmer/lib/renderer.ts` (the file that owns the `renderers` set and the
  * per-renderer `RendererState.debug.roots` walk), consumed by
@@ -2636,8 +2430,8 @@ export interface GxtRootComponentCapabilities {
 
 /**
  * The aggregate GXT renderer capabilities object. Grouped into namespaces
- * (destruction, backtracking, view-utils, format, compile-pipeline,
- * render-pass, runtime, root-component).
+ * (destruction, backtracking, view-utils, compile-pipeline, render-pass,
+ * root-component).
  *
  * Why a single object rather than many individual exports? Easier to extend
  * incrementally without re-wiring imports each time; readers do
@@ -2647,7 +2441,6 @@ export interface GxtRenderer {
   readonly destruction: GxtDestructionCapabilities;
   readonly backtracking: GxtBacktrackingCapabilities;
   readonly viewUtils: GxtViewUtilsCapabilities;
-  readonly format: GxtFormatCapabilities;
   readonly compilePipeline: GxtCompilePipelineCapabilities;
 
   /**
@@ -2687,7 +2480,6 @@ export interface GxtRenderer {
     readonly internalModifierManagers: WeakMap<object, any>;
   };
   readonly renderPass: GxtRenderPassCapabilities;
-  readonly runtime: GxtRuntimeCapabilities;
   readonly rootComponent: GxtRootComponentCapabilities;
 }
 
@@ -2701,14 +2493,6 @@ let _renderer: GxtRenderer | null = null;
 // compile.ts first; entering via the renderer loads manager.ts first). Buffer
 // until the renderer is available, then flush.
 let _pendingCompilePipelineParts: Partial<GxtCompilePipelineCapabilities>[] = [];
-
-// Deferred-install queue for the `runtime` namespace. The writer
-// (`gxt-with-runtime-hbs.ts`) re-exports `$_MANAGERS` from manager.ts, so
-// importing the writer file pulls manager.ts in transitively — but the
-// top-level install statement in gxt-with-runtime-hbs.ts can run before that
-// transitive `setGxtRenderer` has executed on some import paths, leaving a
-// null renderer. Buffer until the renderer is available, then flush.
-let _pendingRuntimeParts: Partial<GxtRuntimeCapabilities>[] = [];
 
 // Deferred-install queue for the `renderPass` namespace. The host-hook
 // contributor (`compile.ts`) may load before OR after manager.ts depending
@@ -2744,13 +2528,8 @@ let _pendingViewUtilsParts: Partial<GxtViewUtilsCapabilities>[] = [];
  * and ember-template-compiler.ts via `installCompilePipelinePart` after this
  * initial install. See the design note in `GxtCompilePipelineCapabilities`.
  *
- * The `runtime` slot is populated entirely via `installRuntimePart` from
- * `gxt-with-runtime-hbs.ts`; manager.ts seeds an empty `runtime: {}` so the
- * namespace exists for `Object.assign` to merge into.
- *
- * On install we also flush any compile-pipeline / runtime parts that were
- * registered BEFORE manager.ts loaded (see `_pendingCompilePipelineParts`
- * and `_pendingRuntimeParts` above).
+ * On install we also flush any parts that were registered BEFORE manager.ts
+ * loaded (see the `_pending*Parts` queues above).
  */
 export function setGxtRenderer(renderer: GxtRenderer): void {
   _renderer = renderer;
@@ -2765,12 +2544,6 @@ export function setGxtRenderer(renderer: GxtRenderer): void {
       Object.assign(_renderer.renderPass, part);
     }
     _pendingRenderPassParts = [];
-  }
-  if (_pendingRuntimeParts.length > 0) {
-    for (const part of _pendingRuntimeParts) {
-      Object.assign(_renderer.runtime, part);
-    }
-    _pendingRuntimeParts = [];
   }
   if (_pendingRootComponentParts.length > 0) {
     for (const part of _pendingRootComponentParts) {
@@ -2814,19 +2587,6 @@ export function installCompilePipelinePart(part: Partial<GxtCompilePipelineCapab
     return;
   }
   Object.assign(_renderer.compilePipeline, part);
-}
-
-/**
- * Used by `gxt-with-runtime-hbs.ts` to publish the `@lifeart/gxt` namespace
- * object so manager.ts can mutate the GXT-internal `$_MANAGERS` in place. See
- * `GxtRuntimeCapabilities` for the namespace docs.
- */
-export function installRuntimePart(part: Partial<GxtRuntimeCapabilities>): void {
-  if (_renderer === null) {
-    _pendingRuntimeParts.push(part);
-    return;
-  }
-  Object.assign(_renderer.runtime, part);
 }
 
 /**

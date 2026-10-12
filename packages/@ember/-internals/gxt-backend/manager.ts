@@ -730,8 +730,6 @@ const _customManagedInstances: CustomManagedEntry[] = [];
 /**
  * Destroy any custom-managed component instances whose DOM nodes are no longer connected.
  * Called during the destroy phase (e.g., after a conditional block removes content).
- *
- * Exposed via the gxt-bridge as `destruction.destroyCustomManagedInstances`.
  */
 function _gxtDestroyCustomManagedInstances(): void {
   for (let i = _customManagedInstances.length - 1; i >= 0; i--) {
@@ -805,9 +803,6 @@ function _shouldWarnStyle(element: unknown, _value?: string): boolean {
   }
   return true;
 }
-
-const _gxtBridgeShouldWarnStyle = (element: unknown, value?: string) =>
-  _shouldWarnStyle(element, value);
 
 /**
  * Rebuild the view-tree parent/child relationships from DOM ancestry.
@@ -14518,7 +14513,6 @@ setGxtRenderer({
   },
   destruction: {
     destroyDestroyable: _gxtBridgeDestroyDestroyable,
-    destroyCustomManagedInstances: _gxtDestroyCustomManagedInstances,
     destroyUnclaimedPoolEntries: _gxtDestroyUnclaimedPoolEntries,
     destroyInstancesInNodes: _gxtDestroyInstancesInNodes,
     destroyTrackedInstances: _gxtDestroyTrackedInstances,
@@ -14549,9 +14543,6 @@ setGxtRenderer({
     // body runs, to drain the in-element deferred-render queue.
     flushAfterInsertQueue: _gxtBridgeFlushAfterInsertQueue,
   },
-  format: {
-    shouldWarnStyle: _gxtBridgeShouldWarnStyle,
-  },
   compilePipeline: {
     // CLASSIC-ONLY (gated): _gxtSyncWrapper updates classic wrapper
     // classNameBindings/attributeBindings on property change. Glimmer is
@@ -14565,15 +14556,8 @@ setGxtRenderer({
     clearInstancePools: _gxtClearInstancePools,
     // `clearRenderErrors` is read cross-package by `internal-test-helpers/`.
     clearRenderErrors,
-    // Typed replacements for the retired globalThis slots
-    // `__captureRenderError`, `__classicConsumeTag`, `__classicTagFor`,
-    // `__classicDirtyTagFor` and the ember-side READS of `__gxtCellFor`
-    // (that global itself stays — the GXT runtime publishes it for
-    // runtime-compiled template Function bodies). See the interface docs in
-    // gxt-bridge.ts.
+    // See the interface docs in gxt-bridge.ts.
     captureRenderError,
-    classicConsumeTag: _classicConsumeTagHook,
-    classicTagFor: _classicTagForHook,
     classicDirtyTagFor: classicDirtyTagForGuarded,
     cellFor: _gxtCellFor,
     // Dynamic-component listener bridge methods. `addDynamicComponentListener`
@@ -14617,10 +14601,6 @@ setGxtRenderer({
     endRenderPass,
     markTemplateRendered,
   },
-  // Populated entirely via `installRuntimePart` from gxt-with-runtime-hbs.ts.
-  // Seeded empty here so `Object.assign` has a target object regardless of
-  // which side loads first.
-  runtime: {},
   // Populated entirely via `installRootComponentPart` from
   // glimmer/lib/renderer.ts. Seeded empty here so `Object.assign` has a target
   // object regardless of which side loads first.

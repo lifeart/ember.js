@@ -8,8 +8,6 @@
  * This module must be imported AFTER setupGlobalScope() has been called.
  */
 
-// Use direct path to avoid circular alias (since @lifeart/gxt is aliased to gxt-with-runtime-hbs.ts)
-// @ts-ignore - direct path import
 import * as gxtModule from '@lifeart/gxt';
 import { DEBUG } from '@glimmer/env';
 
@@ -40,7 +38,7 @@ const g = globalThis as any;
 // without re-threading the context through every `mut` argument. The 6 writers
 // here (two save/set/finally-restore triplets around the `mut` / `__mutGet`
 // helper invocations) keep the state intra-file; the 2 readers in compile.ts
-// reach it through the paired `getMutContext` / `setMutContext` bridge methods.
+// reach it through the `getMutContext` bridge method.
 // The save/set/finally-restore pattern preserves the previous value across the
 // restore step (save = read previous, set = write new, restore = write
 // previous), so a read-only predicate or mark+consume surface won't do.
@@ -52,22 +50,21 @@ function _gxtSetMutContext(value: unknown): void {
   _gxtMutContext = value;
 }
 
-// Register the paired get/set bridge methods on the `compilePipeline` namespace
-// so that `compile.ts` (cross-package reader) can route through the bridge to
-// read the writer-side state. Runs at module-init time; by the time the
+// Register the read accessor on the `compilePipeline` namespace so that
+// `compile.ts` (cross-package reader) can route through the bridge to read the
+// writer-side state. Runs at module-init time; by the time the
 // `$_maybeHelper` wrapper dispatches a `mut` / `__mutGet` helper invocation
 // (well past module init), both the wrapper-side writer helpers and the
 // cross-package bridge readers are wired and the bridge slot is installed.
 installCompilePipelinePart({
   getMutContext: _gxtGetMutContext,
-  setMutContext: _gxtSetMutContext,
 });
 
 // $_maybeHelper wrapper
 
 /**
  * Wraps GXT's $_maybeHelper to support:
- * - Function arguments (like $_blockParam from block params)
+ * - Function arguments (e.g. values yielded as block params)
  * - Ember's built-in keyword helpers (readonly, mut, unbound)
  * - Helper lookup from Ember's container via owner
  * - Component invocation for kebab-case names ({{foo-bar}})
@@ -358,8 +355,6 @@ function _trackComponentDefinition(nameOrFactory: string | object | null | undef
     _resolverCacheCounters.componentDefinitionCount++;
   }
 }
-(g as any).__gxtTrackHelperDefinition = _trackHelperDefinition;
-(g as any).__gxtTrackComponentDefinition = _trackComponentDefinition;
 
 // Register the resolver-cache counting wrapper for the curried-component
 // factory: named component curries — produced by `(component "x")` /
@@ -1367,7 +1362,6 @@ function createEmberMaybeHelper(original: Function) {
     return original(name, args, hashOrCtx, maybeCtx);
   };
   (wrapped as any).__emberWrapped = true;
-  (wrapped as any).__emberAware = true;
   return wrapped;
 }
 
@@ -2278,8 +2272,6 @@ function createEmberDc(original: Function) {
     // mechanism causes regressions with Ember's component manager.
     if (componentValue && componentValue.__isCurriedComponent) {
       const RNODES = gxtModule.RENDERED_NODES_PROPERTY;
-      const RCTX = gxtModule.RENDERING_CONTEXT_PROPERTY;
-      const CID = gxtModule.COMPONENT_ID_PROPERTY;
 
       // --- Initial one-shot render ---
       let initialResult: any = null;
@@ -2932,7 +2924,6 @@ function createEmberModifierHelper(original: Function) {
 
       // Mark as curried modifier so $_maybeModifier and canHandle recognize it
       (curriedModifier as any).__isCurriedModifier = true;
-      (curriedModifier as any).__modifierName = resolved;
 
       // Register with INTERNAL_MODIFIER_MANAGERS so canHandle() finds it
       if (getGxtRenderer()?.registries.internalModifierManagers) {

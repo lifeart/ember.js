@@ -536,10 +536,6 @@ function hasAttrsInBlockParams(str: string): boolean {
 // precompileTemplate) — see `buildGxtDialectTransforms`. The former
 // `hasDynamicHelper` / `hasDynamicModifier` source scanners were deleted here.
 
-// `_shouldWarnStyle` + `_styleWarnedElements` are defined in manager.ts (next
-// to their two reader sites) and surfaced via `gxt-bridge`'s `format`
-// capability. See gxt-bridge.ts `GxtFormatCapabilities`.
-
 import { buildUntouchableThis } from '@glimmer/debug-util';
 // Import the GXT runtime compiler
 // @ts-ignore - direct path to avoid GXT Babel plugin
