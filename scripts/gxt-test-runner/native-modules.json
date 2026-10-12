@@ -4,6 +4,8 @@
     "packages/@ember/-internals/gxt-backend/native/__tests__/**/*.{js,ts,gjs,gts}",
     "packages/@glimmer/validator/test/**/*-test.ts",
     "packages/@glimmer/destroyable/test/**/*-test.ts",
+    "packages/@glimmer/manager/test/managers-test.ts",
+    "packages/@glimmer/reference/test/references-test.ts",
     "packages/@ember/-internals/metal/tests/tracked/*_test.js",
     "packages/@ember/-internals/metal/tests/cached/*_test.js",
     "packages/@ember/-internals/metal/tests/accessors/*_test.js",

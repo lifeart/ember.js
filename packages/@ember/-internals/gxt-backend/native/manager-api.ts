@@ -28,7 +28,14 @@ function setManager<T extends object>(map: WeakMap<object, unknown>, manager: un
     throw new Error(`Attempted to set a manager on a non-object value: ${String(obj)}`);
   }
   if (DEBUG && map.has(obj)) {
-    throw new Error(`Attempted to set the same type of manager multiple times on a value`);
+    // Glimmer's message (manager/lib/internal/api.ts); the value label never
+    // throws (a null-prototype object has no toString).
+    const label =
+      (typeof obj === 'function' && (obj as { name?: string }).name) ||
+      Object.prototype.toString.call(obj);
+    throw new Error(
+      `Attempted to set the same type of manager multiple times on a value. You can only associate one manager of each type with a given value. Value was ${label}`
+    );
   }
   map.set(obj, manager);
   return obj;

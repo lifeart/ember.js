@@ -121,7 +121,19 @@ export function childRefFor(parentRef: Reference, path: string): Reference {
   let children = parentRef.children;
   if (children === null) children = parentRef.children = new Map();
   let child = children.get(path);
-  if (child === undefined) {
+  if (child === undefined && parentRef[REFERENCE] === UNBOUND) {
+    // Glimmer parity: a child of an unbound (or primitive) ref is itself a
+    // snapshot — read once, plain property access, never reactive.
+    const parent = parentRef.value;
+    child =
+      parent === null || parent === undefined
+        ? UNDEFINED_REFERENCE
+        : createUnboundRef(
+            (parent as Record<string, unknown>)[path],
+            DEBUG && `${parentRef.debugLabel ?? ''}.${path}`
+          );
+    children.set(path, child);
+  } else if (child === undefined) {
     child = createComputeRef(
       () => {
         const parent = valueForRef(parentRef);
