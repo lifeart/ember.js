@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-12T02:45:39.840Z",
+    "capturedAt": "2026-10-12T03:59:34.390Z",
     "gxtVersion": "0.0.81",
-    "emberCommit": "1df13a8f43",
-    "totalTests": 3060,
-    "totalModules": 213,
+    "emberCommit": "73b9aaa684",
+    "totalTests": 3123,
+    "totalModules": 224,
     "quarantinedTests": 0,
-    "totalAssertions": 13984,
-    "totalAssertionsPassing": 13975
+    "totalAssertions": 14149,
+    "totalAssertionsPassing": 14140
   },
   "modules": {
     "<LinkTo /> component (rendering tests)": {
@@ -659,11 +659,88 @@
       "assertionsPassing": 14,
       "failingTests": []
     },
+    "Managers": {
+      "total": 20,
+      "passing": 20,
+      "assertionsTotal": 36,
+      "assertionsPassing": 36,
+      "failingTests": []
+    },
+    "Managers > Component": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "Managers > Helper": {
+      "total": 7,
+      "passing": 7,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
+    "Managers > Modifier": {
+      "total": 6,
+      "passing": 6,
+      "assertionsTotal": 11,
+      "assertionsPassing": 11,
+      "failingTests": []
+    },
     "Owner": {
       "total": 1,
       "passing": 1,
       "assertionsTotal": 2,
       "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "References": {
+      "total": 12,
+      "passing": 12,
+      "assertionsTotal": 48,
+      "assertionsPassing": 48,
+      "failingTests": []
+    },
+    "References > compute ref": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 30,
+      "assertionsPassing": 30,
+      "failingTests": []
+    },
+    "References > const ref": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "References > debugAliasRef": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 9,
+      "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "References > invokable ref": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 1,
+      "assertionsPassing": 1,
+      "failingTests": []
+    },
+    "References > read only ref": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "References > unbound ref": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
       "failingTests": []
     },
     "Registry": {
