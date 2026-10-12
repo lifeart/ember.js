@@ -157,7 +157,7 @@ export const GXT_DIST_VM_STUBS = {
     // the gxt pipeline (compile.ts) and has no Glimmer-compiler fallback (a
     // wire-format template cannot render without the VM), but the classic
     // fallback's top-level import kept @glimmer/compiler + @glimmer/syntax +
-    // @handlebars/parser + simple-html-tokenizer (~190KB min) in the dist.
+    // @handlebars/parser + simple-html-tokenizer (~310 KB of the prod dist).
     '@glimmer/compiler/lib/compiler',
     // The VM evaluation-context constructors the classic renderer imports at
     // top level for `createContext` (renderer.ts), which is a thrower under
