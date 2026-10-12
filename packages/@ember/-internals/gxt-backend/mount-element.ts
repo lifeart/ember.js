@@ -1,5 +1,5 @@
-import { createRoot, setParentContext, getParentContext } from '@lifeart/gxt';
-import { getGxtRenderer, getAmbientOwner, setAmbientOwner } from './gxt-bridge';
+import { createRoot, setParentContext, getParentContext, $SLOTS_SYMBOL } from '@lifeart/gxt';
+import { getGxtRenderer, getAmbientOwner, setAmbientOwner, GXT_ARGS_SYMBOL } from './gxt-bridge';
 
 /**
  * EmberMountElement - Custom HTML element for Ember's {{mount}} helper.
@@ -135,14 +135,11 @@ class EmberMountElement extends HTMLElement {
       }
 
       // Set up the rendering context
-      const $ARGS_KEY = Symbol.for('gxt-args');
-      const $SLOTS_KEY = Symbol.for('gxt-slots');
-
       const renderContext: any = controller ? Object.create(controller) : {};
       renderContext.owner = engineInstance;
       renderContext.args = {};
-      renderContext[$ARGS_KEY] = {};
-      renderContext[$SLOTS_KEY] = {};
+      renderContext[GXT_ARGS_SYMBOL] = {};
+      renderContext[$SLOTS_SYMBOL] = {};
       renderContext.$fw = [[], [], []];
 
       // Swap owner to engine for component/helper resolution

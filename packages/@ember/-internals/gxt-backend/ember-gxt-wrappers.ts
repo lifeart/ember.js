@@ -9,6 +9,7 @@
  */
 
 import * as gxtModule from '@lifeart/gxt';
+import { $PROPS_SYMBOL, $SLOTS_SYMBOL } from '@lifeart/gxt';
 import { DEBUG } from '@glimmer/env';
 
 // Typed bridge populated by manager.ts at its module init (e.g. the
@@ -23,6 +24,7 @@ import {
   setDcComponentGetter,
   getCreateCurriedComponent,
   setCreateCurriedComponentWrapper,
+  GXT_ARGS_SYMBOL,
 } from './gxt-bridge';
 import { createComputeRef, valueForRef } from '@glimmer/reference';
 
@@ -366,16 +368,14 @@ function createEmberMaybeHelper(original: Function) {
     // Determine which param is the hash (named args) and which is the context.
     // If maybeCtx is provided, hashOrCtx is the hash and maybeCtx is context.
     // If only hashOrCtx and it looks like a context (has $_eval or GXT symbols), it's context.
-    const $PROPS = Symbol.for('gxt-props');
-    const $ARGS = Symbol.for('gxt-args');
     const isCtx =
       !maybeCtx &&
       hashOrCtx &&
       typeof hashOrCtx === 'object' &&
       (hashOrCtx.hasOwnProperty?.('$_eval') ||
-        hashOrCtx[$PROPS] !== undefined ||
-        hashOrCtx.hasOwnProperty?.($PROPS) ||
-        hashOrCtx[$ARGS] !== undefined ||
+        hashOrCtx[$PROPS_SYMBOL] !== undefined ||
+        hashOrCtx.hasOwnProperty?.($PROPS_SYMBOL) ||
+        hashOrCtx[GXT_ARGS_SYMBOL] !== undefined ||
         // Detect Ember component instances used as context (not as hash)
         (hashOrCtx.isView === true && hashOrCtx.isComponent === true));
     const hash = maybeCtx ? hashOrCtx : isCtx ? {} : (hashOrCtx ?? {});
@@ -1335,8 +1335,6 @@ function _emberTagFastPathEligible(tag: unknown, tagProps: any): boolean {
  * `<@foo>` element.
  */
 function createEmberTag(original: Function) {
-  const $ARGS_SYMBOL = Symbol.for('gxt-args');
-
   // GXT's $_tag signature is: $_tag(tag, tagProps, ctx, children)
   // We receive (tag, tagProps, ctx, children) from GXT's compiled output
   return function $_tag_ember(
@@ -1359,7 +1357,7 @@ function createEmberTag(original: Function) {
       // Dynamic component: <@foo />
       if (resolvedTag.startsWith('@')) {
         const argName = resolvedTag.slice(1);
-        const args = ctx?.[$ARGS_SYMBOL] || ctx?.args || {};
+        const args = ctx?.[GXT_ARGS_SYMBOL] || ctx?.args || {};
         const componentValue = args[argName];
         if (componentValue) {
           const managers = g.$_MANAGERS;
@@ -1853,9 +1851,6 @@ function createEmberTag(original: Function) {
  * Ember's component manager instead of GXT's native component system.
  */
 function createEmberDc(original: Function) {
-  const $PROPS = Symbol.for('gxt-props');
-  const $SLOTS_SYM = Symbol.for('gxt-slots');
-
   function extractArgsAndSlots(gxtArgs: any, allowPositionalParams = false): { mergedArgs: any } {
     const mergedArgs: any = {};
     if (gxtArgs && typeof gxtArgs === 'object') {
@@ -1883,7 +1878,7 @@ function createEmberDc(original: Function) {
     }
 
     // Extract slots from GXT args
-    const gxtSlots = gxtArgs?.[$SLOTS_SYM];
+    const gxtSlots = gxtArgs?.[$SLOTS_SYMBOL];
     const slots: Record<string, any> = {};
     if (gxtSlots) {
       for (const slotName of Object.keys(gxtSlots)) {
@@ -1944,11 +1939,11 @@ function createEmberDc(original: Function) {
 
     const { mergedArgs } = extractArgsAndSlots(gxtArgs, allowPositionalParams);
     // Derive fw (forwarded splat attrs) from the invocation's own props tuple
-    // `gxtArgs[$PROPS]` and re-home @-args onto mergedArgs, so a dynamic-tag
+    // `gxtArgs[$PROPS_SYMBOL]` and re-home @-args onto mergedArgs, so a dynamic-tag
     // invocation (`<x.foo class="…" @a=… {{on …}} />`) forwards class/attrs to
     // the resolved component's `...attributes` the way a static invocation does.
     let __fw: any = null;
-    const __tuple = gxtArgs && typeof gxtArgs === 'object' ? (gxtArgs as any)[$PROPS] : null;
+    const __tuple = gxtArgs && typeof gxtArgs === 'object' ? (gxtArgs as any)[$PROPS_SYMBOL] : null;
     if (gxtModule.hasDynamicSplatProps(__tuple)) {
       const __derived = gxtModule.deriveManagerFwFromPropsTuple(__tuple);
       __fw = __derived.fw;
@@ -1981,10 +1976,10 @@ function createEmberDc(original: Function) {
   }
 
   return function $_dc_ember(componentGetter: () => any, gxtArgs: any, ctx: any): any {
-    // Inject $PROPS on args so GXT's $_c (component function) can find them.
-    if (gxtArgs && typeof gxtArgs === 'object' && !($PROPS in gxtArgs)) {
+    // Inject $PROPS_SYMBOL on args so GXT's $_c (component function) can find them.
+    if (gxtArgs && typeof gxtArgs === 'object' && !($PROPS_SYMBOL in gxtArgs)) {
       try {
-        Object.defineProperty(gxtArgs, $PROPS, {
+        Object.defineProperty(gxtArgs, $PROPS_SYMBOL, {
           value: gxtArgs,
           enumerable: false,
           configurable: true,

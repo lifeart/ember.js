@@ -91,6 +91,9 @@ import {
   // here instead of reading `globalThis.__gxt*` slots.
   registerHostHooks as _gxtRegisterHostHooks,
   registerHostManagers as _gxtRegisterHostManagers,
+  // gxt's render-context keys for the slots and the forwarded-attributes tuple.
+  $SLOTS_SYMBOL,
+  $PROPS_SYMBOL,
 } from '@lifeart/gxt';
 // The members of `@lifeart/gxt` that glimmer-package call sites read through
 // the typed bridge as `gxtLib` (see the setGxtRenderer install at file EOF).
@@ -243,8 +246,6 @@ interface PoolEntry {
 // Symbols and Constants
 // =============================================================================
 
-const $PROPS_SYMBOL = Symbol.for('gxt-props');
-const $SLOTS_SYMBOL = Symbol.for('gxt-slots');
 // GXT uses the plain string 'args' as the key ($args = 'args' in shared.ts)
 const $ARGS_KEY = 'args';
 
@@ -6331,7 +6332,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
       /* non-configurable */
     }
   }
-  // GXT runtime compiler uses Symbol.for('gxt-args') for this[$args].foo
+  // gxt reads `@foo` as `this['args'].foo` (its `$args` key).
   renderContext[$ARGS_KEY] = attrsProxy;
 
   if (instance) {
@@ -8365,7 +8366,6 @@ const $_MANAGERS = {
               resolvedTpl = resolvedTpl(owner);
             }
             if (resolvedTpl?.render) {
-              const $SLOTS = Symbol.for('gxt-slots');
               const renderCtx: any = {};
               if (args) {
                 for (const key of Object.keys(args)) {
@@ -8379,10 +8379,10 @@ const $_MANAGERS = {
               renderCtx.args = args || {};
               renderCtx.owner = owner;
               // Pass through slots for {{yield}} support
-              const slots = args?.[$SLOTS] || args?.args?.[$SLOTS];
+              const slots = args?.[$SLOTS_SYMBOL] || args?.args?.[$SLOTS_SYMBOL];
               if (slots) {
                 renderCtx.$slots = slots;
-                renderCtx[Symbol.for('gxt-slots')] = slots;
+                renderCtx[$SLOTS_SYMBOL] = slots;
               }
               // Forward the splat-attrs (parent's tagProps `[props, attrs,
               // events]`) into `renderCtx.$fw` so the GXT-emitted template
@@ -8419,7 +8419,6 @@ const $_MANAGERS = {
             resolvedTpl = resolvedTpl(owner);
           }
           if (resolvedTpl?.render) {
-            const $SLOTS = Symbol.for('gxt-slots');
             const renderCtx: any = {};
             if (args) {
               for (const key of Object.keys(args)) {
@@ -8432,10 +8431,10 @@ const $_MANAGERS = {
             }
             renderCtx.args = args || {};
             renderCtx.owner = owner;
-            const slots = args?.[$SLOTS] || args?.args?.[$SLOTS];
+            const slots = args?.[$SLOTS_SYMBOL] || args?.args?.[$SLOTS_SYMBOL];
             if (slots) {
               renderCtx.$slots = slots;
-              renderCtx[Symbol.for('gxt-slots')] = slots;
+              renderCtx[$SLOTS_SYMBOL] = slots;
             }
             // Forward splat-attrs into `$fw` (see the sibling branch above).
             const propsFromArgs2 = args?.[$PROPS_SYMBOL];
@@ -10125,7 +10124,7 @@ function handleStringComponent(
         resolvedTemplate = {
           __gxtCompiled: true,
           render(ctx: any, container: Element) {
-            const slots = ctx.$slots || ctx[Symbol.for('gxt-slots')] || {};
+            const slots = ctx.$slots || ctx[$SLOTS_SYMBOL] || {};
             if (typeof slots.default !== 'function') {
               return { nodes: [] };
             }
@@ -11468,8 +11467,7 @@ function renderLinkToElement(instance: any, args: any, fw: any): HTMLAnchorEleme
     }
   } else {
     // Fallback: use slot function (for block content from ember-gxt-wrappers path)
-    const $SLOTS = Symbol.for('gxt-slots');
-    const slots = args?.[$SLOTS] || args?.$slots || {};
+    const slots = args?.[$SLOTS_SYMBOL] || args?.$slots || {};
     if (typeof slots.default === 'function') {
       const result = slots.default(null);
       const items = Array.isArray(result) ? result : [result];
@@ -14088,6 +14086,7 @@ setGxtRenderer({
     cellFor: _gxtCellFor,
     Component: _gxtLibComponent,
     RENDERED_NODES_PROPERTY: _gxtLibRenderedNodesProperty,
+    $SLOTS_SYMBOL,
   },
   // See `registries` doc in gxt-bridge.ts.
   registries: {

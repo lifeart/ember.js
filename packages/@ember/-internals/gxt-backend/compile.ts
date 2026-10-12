@@ -588,6 +588,11 @@ import {
   // Sole consumer is `_gxtWithRootContext` below (additive, SSR-only).
   withRenderRoot as _gxtWithRenderRoot,
   createRenderRootState as _gxtCreateRenderRootState,
+  $SLOTS_SYMBOL,
+  $PROPS_SYMBOL,
+  // Set by gxt on its native block wrappers ($_ucw / $_inElement); the $_tag
+  // root-id re-stamp skips contexts that carry it (see the guard's use site).
+  $BLOCK_WRAPPER_SYMBOL,
 } from '@lifeart/gxt';
 // Host hooks: the gxt runtime calls the hooks registered here instead of
 // reading `globalThis.__gxt*` slots. `registerHostHooks`, the named-block
@@ -752,16 +757,13 @@ import {
   setDcComponentGetter,
   getControllerOutletRerender,
   getCreateCurriedComponent,
+  GXT_ARGS_SYMBOL,
 } from './gxt-bridge';
 
 // `peekInstanceCapture` exposes the last-created Ember instance, used by the
 // $_tag component thunk's template-only-detection snapshots. The writer
 // (`setInstanceCapture` in `./manager`) stores into a module-local.
 import { peekInstanceCapture, getOwnerWithFallback } from './manager';
-
-const _SLOTS_SYM = Symbol.for('gxt-slots');
-const _PROPS_SYM = Symbol.for('gxt-props');
-const _ARGS_SYM = Symbol.for('gxt-args');
 
 // JS reserved words cannot be used as JS variable names, so scope-binding
 // injection (strict-mode templates with scopeValues) prefixes any binding
@@ -912,7 +914,7 @@ function buildNamedArgs(args: any): any {
         }
       }
     }
-    const gxtSlots = args?.[_SLOTS_SYM] || args?.args?.[_SLOTS_SYM];
+    const gxtSlots = args?.[$SLOTS_SYMBOL] || args?.args?.[$SLOTS_SYMBOL];
     if (gxtSlots && typeof gxtSlots === 'object') {
       _setInternalProp(namedArgs, '$slots', gxtSlots);
     }
@@ -920,19 +922,11 @@ function buildNamedArgs(args: any): any {
   return namedArgs;
 }
 
-// Set by glimmer-next on its native block wrappers ($_ucw / $_inElement). When
-// present on a ctx, the $_tag root-id re-stamp below must be skipped — the
-// wrapper is already a real TREE-registered node and re-stamping its
-// COMPONENT_ID collapses its CHILD bucket into the gxt-root's, causing
-// over-broad destroy cascades on branch teardown. See the guard usage site for
-// the full rationale. Symbol.for keeps the contract package-boundary-safe.
-const BLOCK_WRAPPER_SYMBOL = Symbol.for('gxt-block-wrapper');
-
 /**
  * Set a GXT-internal property on an object as non-enumerable so it doesn't
  * leak into user-visible iteration (Object.keys, each-in, etc.).
  *
- * For the `$slots` key we also set the `Symbol.for('gxt-slots')` alias so
+ * For the `$slots` key we also set the `$SLOTS_SYMBOL` alias so
  * downstream consumers that prefer the symbol lookup (e.g. the template-only
  * component render path in manager.ts, which reads `args?.[$SLOTS]`) still
  * find the slots. Without this, block-form scope-bound component calls like
@@ -948,7 +942,7 @@ function _setInternalProp(obj: any, key: string, value: any): void {
     configurable: true,
   });
   if (key === '$slots') {
-    const sym = _SLOTS_SYM;
+    const sym = $SLOTS_SYMBOL;
     try {
       Object.defineProperty(obj, sym, {
         value,
@@ -8657,7 +8651,7 @@ if (g.$_c && !g.$_c.__emberWrapped) {
     // with the appropriate namespace flag set for $_tag to use.
     if (comp === _gxtSVGProvider || comp === _gxtHTMLProvider || comp === _gxtMathMLProvider) {
       const ns = comp === _gxtSVGProvider ? 'svg' : comp === _gxtMathMLProvider ? 'mathml' : null;
-      const $SLOTS = _SLOTS_SYM;
+      const $SLOTS = $SLOTS_SYMBOL;
       const slots = args?.[$SLOTS] || args?.args?.[$SLOTS];
       const defaultSlot = slots?.default;
       if (typeof defaultSlot === 'function') {
@@ -8684,7 +8678,7 @@ if (g.$_c && !g.$_c.__emberWrapped) {
       // This occurs with {{#@inner}}content{{/@inner}} where @inner holds a curried component.
       if (comp.startsWith('@') && ctx) {
         const argName = comp.slice(1);
-        const $ARGS_KEY = _ARGS_SYM;
+        const $ARGS_KEY = GXT_ARGS_SYMBOL;
         const ctxArgs = ctx[$ARGS_KEY] || ctx['args'] || ctx?.args || {};
         let componentValue = ctxArgs[argName];
         // Resolve getter functions
@@ -8715,7 +8709,7 @@ if (g.$_c && !g.$_c.__emberWrapped) {
       }
       const managers = g.$_MANAGERS;
       if (managers?.component?.canHandle?.(comp)) {
-        const $PROPS = _PROPS_SYM;
+        const $PROPS = $PROPS_SYMBOL;
         const fw = args?.[$PROPS] || null;
         const handleResult = managers.component.handle(comp, args, fw, ctx);
         if (typeof handleResult === 'function') {
@@ -8729,8 +8723,8 @@ if (g.$_c && !g.$_c.__emberWrapped) {
       // Build args from the GXT args object
       const managers = g.$_MANAGERS;
       if (managers?.component?.canHandle?.(comp)) {
-        const $PROPS = _PROPS_SYM;
-        const $SLOTS = _SLOTS_SYM;
+        const $PROPS = $PROPS_SYMBOL;
+        const $SLOTS = $SLOTS_SYMBOL;
         let fw = args?.[$PROPS] || null;
 
         // Extract named args from the GXT args object
@@ -8807,7 +8801,7 @@ if (g.$_c && !g.$_c.__emberWrapped) {
     if (typeof comp === 'function' && comp.__stringComponentName) {
       const managers = g.$_MANAGERS;
       if (managers?.component?.canHandle?.(comp)) {
-        const $SLOTS = _SLOTS_SYM;
+        const $SLOTS = $SLOTS_SYMBOL;
         const namedArgs: any = {};
         let fw = null;
         if (args) {
@@ -8881,8 +8875,8 @@ if (g.$_c && !g.$_c.__emberWrapped) {
     ) {
       const managers = g.$_MANAGERS;
       if (managers?.component?.canHandle?.(comp)) {
-        const $PROPS = _PROPS_SYM;
-        const $SLOTS = _SLOTS_SYM;
+        const $PROPS = $PROPS_SYMBOL;
+        const $SLOTS = $SLOTS_SYMBOL;
         const fw = args?.[$PROPS] || null;
         const namedArgs: any = {};
         if (args) {
@@ -9022,8 +9016,8 @@ if (g.$_c && !g.$_c.__emberWrapped) {
     ) {
       const managers = g.$_MANAGERS;
       if (managers?.component?.canHandle?.(comp)) {
-        const $PROPS = _PROPS_SYM;
-        const $SLOTS = _SLOTS_SYM;
+        const $PROPS = $PROPS_SYMBOL;
+        const $SLOTS = $SLOTS_SYMBOL;
         const fw = args?.[$PROPS] || null;
         const namedArgs: any = {};
         const unwrapCurriedHelper2 = (v: any): any => {
@@ -9122,7 +9116,7 @@ if (g.$_c && !g.$_c.__emberWrapped) {
       if (resolved && resolved.__isCurriedComponent) {
         const managers = g.$_MANAGERS;
         if (managers?.component?.canHandle?.(resolved)) {
-          const $PROPS = _PROPS_SYM;
+          const $PROPS = $PROPS_SYMBOL;
           const namedArgs = buildNamedArgs(args);
           let fw = args?.[$PROPS] || null;
           const handleResult = managers.component.handle(resolved, namedArgs, fw, ctx);
@@ -9178,8 +9172,8 @@ if (g.$_c && !g.$_c.__emberWrapped) {
         (elDef as any).__isElementHelperDefinition === true
       ) {
         const tagName = (elDef as any).tagName;
-        const $SLOTS = _SLOTS_SYM;
-        const $PROPS = _PROPS_SYM;
+        const $SLOTS = $SLOTS_SYMBOL;
+        const $PROPS = $PROPS_SYMBOL;
         const fw = args?.[$PROPS] || null;
         const gxtSlots = args?.[$SLOTS] || args?.args?.[$SLOTS];
         const defaultSlot =
@@ -9408,9 +9402,9 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
       // (every sibling {{#each}} row, other {{#if}} blocks, etc.) instead of
       // just this wrapper's own children. That cascade is what wiped the whole
       // template on in-place array mutation (life-cycle-test `that thing about
-      // destroying`). The wrapper sets Symbol.for('gxt-block-wrapper') on itself
+      // destroying`). The wrapper sets `$BLOCK_WRAPPER_SYMBOL` on itself
       // (glimmer-next dom.ts) before its body renders, so this guard sees it.
-      !(ctx as any)[BLOCK_WRAPPER_SYMBOL]
+      !(ctx as any)[$BLOCK_WRAPPER_SYMBOL]
     ) {
       const gxtRootCtx = _gxtRootContext;
       const rootId = gxtRootCtx && gxtRootCtx[COMPONENT_ID_PROPERTY as any];
@@ -10718,7 +10712,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
           // Pass slots via args so manager.ts can access them.
           // Set on both string key and Symbol key to survive GXT's slot processing.
           _setInternalProp(args, '$slots', slots);
-          args[_SLOTS_SYM] = slots;
+          args[$SLOTS_SYMBOL] = slots;
 
           // Store raw (unevaluated) children for components that need reactive
           // slot rendering (e.g., LinkTo). The slot function eagerly resolves
@@ -14586,7 +14580,7 @@ export function precompileTemplate(
             /* ignore */
           }
 
-          _gxtCurrentSlots = context.$slots || context[_SLOTS_SYM] || {};
+          _gxtCurrentSlots = context.$slots || context[$SLOTS_SYMBOL] || {};
           _gxtCurrentFw = context.$fw || [[], [], []];
 
           // Ensure the ambient owner is set before the template renders.
@@ -14711,7 +14705,7 @@ export function precompileTemplate(
           // via `$_GET_SLOTS/$_GET_FW(this, arguments)`, which (with no args
           // passed at the call seam below) read `this['args'][$SLOTS_SYMBOL]` /
           // `this['args'][$PROPS_SYMBOL]`. Ember historically stored slots on
-          // the context root (context.$slots / context[_SLOTS_SYM]) and fw on
+          // the context root (context.$slots / context[$SLOTS_SYMBOL]) and fw on
           // context.$fw — which is exactly why the ambient
           // _gxtCurrentSlots/_gxtCurrentFw module stack (+ the injected
           // __gxtGetSlots/__gxtGetFw wrapper params) exists on the legacy path.
@@ -14723,12 +14717,12 @@ export function precompileTemplate(
             const __argsObj = renderContext['args'];
             if (__argsObj && typeof __argsObj === 'object') {
               try {
-                __argsObj[_SLOTS_SYM] = _gxtCurrentSlots;
+                __argsObj[$SLOTS_SYMBOL] = _gxtCurrentSlots;
               } catch {
                 /* frozen args — legacy-only shape, ignore */
               }
               try {
-                __argsObj[_PROPS_SYM] = _gxtCurrentFw;
+                __argsObj[$PROPS_SYMBOL] = _gxtCurrentFw;
               } catch {
                 /* ignore */
               }

@@ -14,6 +14,16 @@
  */
 
 /**
+ * Render-context key for the named args of the root, outlet, engine-mount and
+ * classic-component render contexts. Ember-only and separate from the plain
+ * string key `'args'` (gxt's `$args`), which is where gxt reads named args; the
+ * ember wrappers read this key first (`<@foo/>` and `{{#@foo}}` lookups,
+ * `$_maybeHelper` context detection). gxt's own context keys (`$SLOTS_SYMBOL`,
+ * `$PROPS_SYMBOL`) come from `@lifeart/gxt`.
+ */
+export const GXT_ARGS_SYMBOL: symbol = Symbol.for('gxt-args');
+
+/**
  * Teardown of component instances and destroyables. Implemented by manager.ts.
  */
 export interface GxtDestructionCapabilities {

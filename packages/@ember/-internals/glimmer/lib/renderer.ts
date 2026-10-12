@@ -15,6 +15,7 @@ import {
   installViewUtilsPart,
   getAmbientOwner,
   setAmbientOwner,
+  GXT_ARGS_SYMBOL,
 } from '@ember/-internals/gxt-backend/gxt-bridge';
 
 // Lazy accessor for @lifeart/gxt symbols through the bridge. Every call site
@@ -528,11 +529,8 @@ class ClassicRootState {
                 renderContext = component;
 
                 // Add GXT-required symbols for template rendering
-                const $ARGS_SYMBOL = Symbol.for('gxt-args');
-                const $SLOTS_SYMBOL = Symbol.for('gxt-slots');
-
-                renderContext[$ARGS_SYMBOL] = component.args || {};
-                renderContext[$SLOTS_SYMBOL] = {};
+                renderContext[GXT_ARGS_SYMBOL] = component.args || {};
+                renderContext[_gxtLib().$SLOTS_SYMBOL] = {};
                 renderContext.$fw = [[], [], []];
                 renderContext.owner = owner;
 

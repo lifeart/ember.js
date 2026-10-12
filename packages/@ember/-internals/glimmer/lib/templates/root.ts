@@ -11,6 +11,7 @@ import {
   setCurrentOutletState,
   setAmbientOwner,
   setControllerOutletRerender,
+  GXT_ARGS_SYMBOL,
 } from '@ember/-internals/gxt-backend/gxt-bridge';
 // Lazy accessor for @lifeart/gxt symbols through the bridge. Avoiding a static
 // `import * as _gxt from '@lifeart/gxt'` keeps the GXT runtime out of the
@@ -602,9 +603,7 @@ function createRootTemplate(_owner: any) {
         }
       }
 
-      // Build render context with GXT args symbols so @model works
-      const $ARGS_KEY = Symbol.for('gxt-args');
-      const $SLOTS_KEY = Symbol.for('gxt-slots');
+      // Build the render context; `args` carries @model and @controller.
       const argsObj: any = {
         model: model,
         controller: controller,
@@ -629,8 +628,8 @@ function createRootTemplate(_owner: any) {
       renderContext.owner = outletOwner;
       renderContext.outletState = outletState;
       renderContext.args = argsObj;
-      renderContext[$ARGS_KEY] = argsObj;
-      renderContext[$SLOTS_KEY] = {};
+      renderContext[GXT_ARGS_SYMBOL] = argsObj;
+      renderContext[_gxtLib().$SLOTS_SYMBOL] = {};
       renderContext.$fw = [[], [], []];
 
       // Set model as a plain property so cellFor can install a tracked
