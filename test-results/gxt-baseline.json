@@ -1,15 +1,15 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-06-15T07:37:37.043Z",
-    "gxtVersion": "0.0.67",
-    "emberCommit": "f99870e4e4",
-    "totalTests": 10234,
-    "totalModules": 922,
+    "capturedAt": "2026-10-12T22:57:35.988Z",
+    "gxtVersion": "0.0.82",
+    "emberCommit": "cc8057bf0e",
+    "totalTests": 10247,
+    "totalModules": 928,
     "quarantinedTests": 0,
-    "totalAssertions": 66350,
-    "totalAssertionsPassing": 66346,
-    "note": "Fresh full-suite baseline @ 4ee96307dd (gxt 0.0.67). The 3 {{#each}}-over-non-Array-iterable index modules were marked passing post-fix (commit f99870e4e4), empirically verified 23/23 each in the Gate-2 --baseline run. Remaining known non-failure: ember-template-compiler custom-plugins (DEBUG-only module, no GXT tests registered)."
+    "totalAssertions": 64631,
+    "totalAssertionsPassing": 64602,
+    "note": "Compat full run at cc8057bf0e (gxt 0.0.82), written by runner.mjs. The [integration] rehydration suites run on the rebuilt GxtRehydrationDelegate: 85 tests are QUnit.skip as unsupported under GXT (skippedTests; reasons in gxt-delegate.ts GXT_UNSUPPORTED) and 16 are known reds (keyed {{#each}} stale item, null attribute after a value). The other failure is the known non-bug: ember-template-compiler custom plugins passed to compile (no tests registered)."
   },
   "modules": {
     "<LinkTo /> component (rendering tests)": {
@@ -73,7 +73,11 @@
       "passing": 11,
       "assertionsTotal": 12,
       "assertionsPassing": 12,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        " action decorator works with parent native class actions",
+        " action decorator super works correctly when bound"
+      ]
     },
     "@cached decorator: get": {
       "total": 2,
@@ -447,10 +451,10 @@
       "failingTests": []
     },
     "AngleBracket Invocation": {
-      "total": 40,
-      "passing": 40,
-      "assertionsTotal": 463,
-      "assertionsPassing": 463,
+      "total": 41,
+      "passing": 41,
+      "assertionsTotal": 466,
+      "assertionsPassing": 466,
       "failingTests": []
     },
     "AngleBracket Invocation (splattributes)": {
@@ -558,6 +562,13 @@
       "assertionsPassing": 16,
       "failingTests": []
     },
+    "Application test: GXT debug render tree (captureRenderTree)": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 26,
+      "assertionsPassing": 26,
+      "failingTests": []
+    },
     "Application test: engine rendering": {
       "total": 20,
       "passing": 20,
@@ -626,7 +637,10 @@
       "passing": 7,
       "assertionsTotal": 20,
       "assertionsPassing": 20,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        " unregistering a factory clears caches with source of that factory"
+      ]
     },
     "ArrayProxy - arrangedContent": {
       "total": 13,
@@ -1550,7 +1564,10 @@
       "passing": 30,
       "assertionsTotal": 46,
       "assertionsPassing": 46,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        " #factoryFor does not add properties to the object being instantiated"
+      ]
     },
     "Container.lookup": {
       "total": 4,
@@ -2152,7 +2169,10 @@
       "passing": 4,
       "assertionsTotal": 12,
       "assertionsPassing": 12,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        " it can recover resets the transaction when an error is thrown during rerender"
+      ]
     },
     "EventDispatcher": {
       "total": 9,
@@ -2210,6 +2230,41 @@
       "assertionsPassing": 2,
       "failingTests": []
     },
+    "GXT correctness: CustomComponentManager": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
+    "GXT correctness: compile pipeline throwOnCompileError": {
+      "total": 2,
+      "passing": 2,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "GXT correctness: ember-template-compiler shim": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 4,
+      "assertionsPassing": 4,
+      "failingTests": []
+    },
+    "GXT correctness: route models": {
+      "total": 1,
+      "passing": 1,
+      "assertionsTotal": 2,
+      "assertionsPassing": 2,
+      "failingTests": []
+    },
+    "GXT correctness: {{#if}} truthiness": {
+      "total": 3,
+      "passing": 3,
+      "assertionsTotal": 3,
+      "assertionsPassing": 3,
+      "failingTests": []
+    },
     "Glimmer OutletView": {
       "total": 1,
       "passing": 1,
@@ -2243,7 +2298,10 @@
       "passing": 6,
       "assertionsTotal": 17,
       "assertionsPassing": 17,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        " invoking a helper with quotes in named argument position"
+      ]
     },
     "Helpers test: custom helpers": {
       "total": 35,
@@ -2332,8 +2390,8 @@
     "Helpers test: {{array}}": {
       "total": 14,
       "passing": 14,
-      "assertionsTotal": 87,
-      "assertionsPassing": 87,
+      "assertionsTotal": 88,
+      "assertionsPassing": 88,
       "failingTests": []
     },
     "Helpers test: {{concat}}": {
@@ -2367,8 +2425,8 @@
     "Helpers test: {{hash}}": {
       "total": 12,
       "passing": 12,
-      "assertionsTotal": 51,
-      "assertionsPassing": 51,
+      "assertionsTotal": 50,
+      "assertionsPassing": 50,
       "failingTests": []
     },
     "Helpers test: {{if}} used in attribute position": {
@@ -2411,7 +2469,10 @@
       "passing": 18,
       "assertionsTotal": 65,
       "assertionsPassing": 65,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        " helper form updates on parent re-render"
+      ]
     },
     "Helpers test: {{unique-id}}": {
       "total": 4,
@@ -3524,7 +3585,10 @@
       "passing": 11,
       "assertionsTotal": 17,
       "assertionsPassing": 17,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        "RouteInfo#resolve runs afterModel hook on handler"
+      ]
     },
     "Router Service - currentURL | currentRouteName | currentRoute.name": {
       "total": 6,
@@ -3748,7 +3812,11 @@
       "passing": 27,
       "assertionsTotal": 129,
       "assertionsPassing": 129,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        " when args are a custom tracked class, the rendered component response appropriately",
+        " can *not* render in to a TextNode"
+      ]
     },
     "Strict Mode - renderComponent (direct)": {
       "total": 2,
@@ -3914,15 +3982,15 @@
     "Syntax test: {{#each}} with array-like objects implementing Symbol.iterator": {
       "total": 23,
       "passing": 23,
-      "assertionsTotal": 179,
-      "assertionsPassing": 179,
+      "assertionsTotal": 192,
+      "assertionsPassing": 192,
       "failingTests": []
     },
     "Syntax test: {{#each}} with array-like objects implementing forEach": {
       "total": 23,
       "passing": 23,
-      "assertionsTotal": 179,
-      "assertionsPassing": 179,
+      "assertionsTotal": 192,
+      "assertionsPassing": 192,
       "failingTests": []
     },
     "Syntax test: {{#each}} with emberA-wrapped arrays": {
@@ -3935,8 +4003,8 @@
     "Syntax test: {{#each}} with native Set": {
       "total": 23,
       "passing": 23,
-      "assertionsTotal": 164,
-      "assertionsPassing": 164,
+      "assertionsTotal": 177,
+      "assertionsPassing": 177,
       "failingTests": []
     },
     "Syntax test: {{#each}} with native arrays": {
@@ -5309,7 +5377,11 @@
       "passing": 11,
       "assertionsTotal": 783,
       "assertionsPassing": 783,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        "{{each-in}} works with new items",
+        "{{each-in}} works when updating old items"
+      ]
     },
     "[integration] jit :: trackedMap() (rendering)": {
       "total": 21,
@@ -5358,7 +5430,10 @@
       "passing": 1,
       "assertionsTotal": 0,
       "assertionsPassing": 0,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        "each with undefined item https://github.com/emberjs/ember.js/issues/20786"
+      ]
     },
     "[integration] jit :: {{log}} keyword": {
       "total": 6,
@@ -5425,59 +5500,322 @@
     },
     "[integration] rehydration :: Components :: initial render": {
       "total": 303,
-      "passing": 303,
-      "assertionsTotal": 2132,
-      "assertionsPassing": 2132,
-      "failingTests": []
+      "passing": 291,
+      "assertionsTotal": 2061,
+      "assertionsPassing": 2049,
+      "failingTests": [
+        {
+          "name": "Loops",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted a href attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `undefined`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Loops",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted a href attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `undefined`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Loops",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted a href attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `undefined`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        }
+      ],
+      "skippedTests": [
+        "Dynamic multi-select",
+        "Dynamic selected options",
+        "mismatched blocks interacting with builtins",
+        "mismatched interacting with builtins",
+        "interacting with builtins",
+        "Mismatched Multiple invocations",
+        "Multiple invocations",
+        "Component invocations with empty args",
+        "Mismatched Component invocations with template",
+        "Component invocations with template",
+        "Mismatched Component invocations with block params",
+        "Component invocations with block params",
+        "<p> invoking a block which emits a <div>",
+        "Mismatched Component invocations",
+        "Component invocations",
+        "Dynamic multi-select",
+        "Dynamic selected options",
+        "mismatched blocks interacting with builtins",
+        "mismatched interacting with builtins",
+        "interacting with builtins",
+        "Mismatched Multiple invocations",
+        "Multiple invocations",
+        "Component invocations with empty args",
+        "Mismatched Component invocations with template",
+        "Component invocations with template",
+        "Mismatched Component invocations with block params",
+        "Component invocations with block params",
+        "<p> invoking a block which emits a <div>",
+        "Mismatched Component invocations",
+        "Component invocations",
+        "Dynamic multi-select",
+        "Dynamic selected options",
+        "mismatched blocks interacting with builtins",
+        "mismatched interacting with builtins",
+        "interacting with builtins",
+        "Mismatched Multiple invocations",
+        "Multiple invocations",
+        "Component invocations with empty args",
+        "Mismatched Component invocations with template",
+        "Component invocations with template",
+        "Mismatched Component invocations with block params",
+        "Component invocations with block params",
+        "<p> invoking a block which emits a <div>",
+        "Mismatched Component invocations",
+        "Component invocations"
+      ]
     },
     "[integration] rehydration :: Components :: initial render > [integration] Curly": {
       "total": 101,
-      "passing": 101,
-      "assertionsTotal": 704,
-      "assertionsPassing": 704,
-      "failingTests": []
+      "passing": 97,
+      "assertionsTotal": 579,
+      "assertionsPassing": 575,
+      "failingTests": [
+        {
+          "name": "Loops",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted a href attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `undefined`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        }
+      ],
+      "skippedTests": [
+        "Dynamic multi-select",
+        "Dynamic selected options",
+        "mismatched blocks interacting with builtins",
+        "mismatched interacting with builtins",
+        "interacting with builtins",
+        "Mismatched Multiple invocations",
+        "Multiple invocations",
+        "Component invocations with empty args",
+        "Mismatched Component invocations with template",
+        "Component invocations with template",
+        "Mismatched Component invocations with block params",
+        "Component invocations with block params",
+        "<p> invoking a block which emits a <div>",
+        "Mismatched Component invocations",
+        "Component invocations"
+      ]
     },
     "[integration] rehydration :: Components :: initial render > [integration] Dynamic": {
       "total": 101,
-      "passing": 101,
-      "assertionsTotal": 704,
-      "assertionsPassing": 704,
-      "failingTests": []
+      "passing": 97,
+      "assertionsTotal": 579,
+      "assertionsPassing": 575,
+      "failingTests": [
+        {
+          "name": "Loops",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted a href attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `undefined`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        }
+      ],
+      "skippedTests": [
+        "Dynamic multi-select",
+        "Dynamic selected options",
+        "mismatched blocks interacting with builtins",
+        "mismatched interacting with builtins",
+        "interacting with builtins",
+        "Mismatched Multiple invocations",
+        "Multiple invocations",
+        "Component invocations with empty args",
+        "Mismatched Component invocations with template",
+        "Component invocations with template",
+        "Mismatched Component invocations with block params",
+        "Component invocations with block params",
+        "<p> invoking a block which emits a <div>",
+        "Mismatched Component invocations",
+        "Component invocations"
+      ]
     },
     "[integration] rehydration :: Components :: initial render > [integration] Glimmer": {
       "total": 101,
-      "passing": 101,
-      "assertionsTotal": 724,
-      "assertionsPassing": 724,
-      "failingTests": []
+      "passing": 97,
+      "assertionsTotal": 579,
+      "assertionsPassing": 575,
+      "failingTests": [
+        {
+          "name": "Loops",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted a href attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `undefined`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        }
+      ],
+      "skippedTests": [
+        "Dynamic multi-select",
+        "Dynamic selected options",
+        "mismatched blocks interacting with builtins",
+        "mismatched interacting with builtins",
+        "interacting with builtins",
+        "Mismatched Multiple invocations",
+        "Multiple invocations",
+        "Component invocations with empty args",
+        "Mismatched Component invocations with template",
+        "Component invocations with template",
+        "Mismatched Component invocations with block params",
+        "Component invocations with block params",
+        "<p> invoking a block which emits a <div>",
+        "Mismatched Component invocations",
+        "Component invocations"
+      ]
     },
     "[integration] rehydration :: chaos-partial-rehydration": {
       "total": 2,
       "passing": 2,
-      "assertionsTotal": 604,
-      "assertionsPassing": 604,
-      "failingTests": []
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": [],
+      "skippedTests": [
+        "adjacent text nodes",
+        "<p> invoking a block which emits a <div>"
+      ]
     },
     "[integration] rehydration :: chaos-rehydration": {
       "total": 2,
       "passing": 2,
-      "assertionsTotal": 604,
-      "assertionsPassing": 604,
-      "failingTests": []
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": [],
+      "skippedTests": [
+        "adjacent text nodes",
+        "<p> invoking a block which emits a <div>"
+      ]
     },
     "[integration] rehydration :: partial rehydration": {
       "total": 2,
       "passing": 2,
-      "assertionsTotal": 19,
-      "assertionsPassing": 19,
-      "failingTests": []
+      "assertionsTotal": 0,
+      "assertionsPassing": 0,
+      "failingTests": [],
+      "skippedTests": [
+        "can rehydrate from non starting blocks",
+        "can rehydrate multiple call sites"
+      ]
     },
     "[integration] rehydration :: rehydration": {
       "total": 123,
-      "passing": 123,
-      "assertionsTotal": 875,
-      "assertionsPassing": 875,
-      "failingTests": []
+      "passing": 119,
+      "assertionsTotal": 767,
+      "assertionsPassing": 763,
+      "failingTests": [
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted img src attribute is not rendered when set to `undefined`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Unquoted a href attribute is not rendered when set to `null`",
+          "category": "gxt:triage"
+        },
+        {
+          "name": "Loops",
+          "category": "gxt:triage"
+        }
+      ],
+      "skippedTests": [
+        "rehydrates into element with pre-existing content",
+        "table with omitted tbody",
+        "table with thead",
+        "table with tfoot",
+        "mismatched text nodes",
+        "mismatched text nodes (server-render empty)",
+        "missing closing block within multiple text nodes",
+        "resumes correct block after reenabling rehydration",
+        "mismatched elements",
+        "text nodes surrounding single line handlebars comments",
+        "text nodes surrounding multi line handlebars comments",
+        "text nodes surrounding \"stand alone\" handlebars comment",
+        "extra nodes at the end",
+        "missing attributes",
+        "remove extra attributes",
+        "updates attribute to current value",
+        "does not mutate attributes that already match",
+        "Node curlies",
+        "in-element can rehydrate",
+        "in-element with insertBefore=null can rehydrate",
+        "in-element with insertBefore=element can rehydrate",
+        "in-element can rehydrate into pre-existing content",
+        "in-element with insertBefore=null can rehydrate into pre-existing content",
+        "in-element with insertBefore=element can rehydrate into pre-existing content",
+        "nested in-element can rehydrate",
+        "svg elements",
+        "title tag",
+        "script tag",
+        "style tag",
+        "clearing bounds",
+        "top-level clearing bounds",
+        "#each rehydration",
+        "Dynamic selected options",
+        "Dynamic multi-select"
+      ]
     },
     "addObserver": {
       "total": 12,
@@ -5881,14 +6219,22 @@
       "passing": 2,
       "assertionsTotal": 0,
       "assertionsPassing": 0,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        " @test works with native decorators",
+        " @test uses the decorated property key if not provided"
+      ]
     },
     "inject - decorator (TS)": {
       "total": 2,
       "passing": 2,
       "assertionsTotal": 0,
       "assertionsPassing": 0,
-      "failingTests": []
+      "failingTests": [],
+      "skippedTests": [
+        " @test works with native decorators",
+        " @test uses the decorated property key if not provided"
+      ]
     },
     "integration - Render Tests: I-N-U-R": {
       "total": 4,
@@ -6473,6 +6819,6 @@
     }
   },
   "categories": {
-    "gxt:triage": 4
+    "gxt:triage": 29
   }
 }
