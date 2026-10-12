@@ -19,10 +19,9 @@ import { fileURLToPath } from 'node:url';
 //
 // The gxt NATIVE layer (`EMBER_RENDER_BACKEND=gxt-native`, the native vite
 // config AND the rollup native dist) also skips it: native has no wire-format
-// templates — `precompileTemplate` is left for the gxt compiler (G10, Inc 8;
-// rollup.config.mjs gxtNativeCompiler) and the native
-// `@ember/template-compilation` (docs-internal-gxt-native-layer-design.md
-// §2.2/§4). Classic and compat rollup builds keep the pass.
+// templates — `precompileTemplate` is left for the gxt compiler
+// (rollup.config.mjs gxtNativeCompiler) and the native
+// `@ember/template-compilation`. Classic and compat rollup builds keep the pass.
 const useGxt = process.env.GXT_MODE === 'true' || process.env.EMBER_RENDER_BACKEND === 'gxt-native';
 
 export default {

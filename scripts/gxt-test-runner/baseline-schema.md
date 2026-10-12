@@ -85,10 +85,10 @@ Passing modules have `failingTests: []`.
 
 Per-test record for failing tests only. Deliberately minimal:
 
-| field      | type   | notes                                                    |
-| ---------- | ------ | -------------------------------------------------------- |
-| `name`     | string | `QUnit.testDone` test name (not prefixed with module)    |
-| `category` | string | triage bucket (default `gxt:triage`, see categorize.mjs) |
+| field      | type   | notes                                                 |
+| ---------- | ------ | ----------------------------------------------------- |
+| `name`     | string | `QUnit.testDone` test name (not prefixed with module) |
+| `category` | string | triage bucket (default `gxt:triage`)                  |
 
 No error messages, no stack traces, no source links — that keeps the baseline
 small (roughly 3k failing entries fit in ~200 KB). Detail goes to

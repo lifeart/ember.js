@@ -50,9 +50,8 @@ export default defineConfig(({ mode }) => {
   // bare `EMBER_RENDER_BACKEND=gxt npx vite` working). See scripts/gxt-alias-map.mjs
   // for why rollup's USE_GXT_BACKEND must NOT symmetrically honor GXT_MODE.
   //
-  // EMBER_RENDER_BACKEND=gxt-native selects the gxt NATIVE layer instead
-  // (design: docs-internal-gxt-native-layer-design.md §2.1/§4): classic Ember
-  // source with `__GXT_MODE__ = false`, the GXT_NATIVE_ALIASES boundary swapping
+  // EMBER_RENDER_BACKEND=gxt-native selects the gxt NATIVE layer instead:
+  // classic Ember source with `__GXT_MODE__ = false`, the GXT_NATIVE_ALIASES boundary swapping
   // only the VM-touching modules for gxt-backend/native/*, the gxt compiler with
   // NATIVE_FLAGS, NO gxtEmberWrapperRedirect, and a separate prebundle cacheDir.
   // It wins over GXT_MODE. Classic and compat configs are untouched by it.

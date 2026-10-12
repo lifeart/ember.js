@@ -219,7 +219,7 @@ export function isGxtEnabled(env = process.env) {
 }
 
 // ---------------------------------------------------------------------------
-// gxt NATIVE layer (P1 design: docs-internal-gxt-native-layer-design.md §2/§4)
+// gxt NATIVE layer
 // ---------------------------------------------------------------------------
 //
 // `EMBER_RENDER_BACKEND=gxt-native` builds CLASSIC Ember source with
@@ -532,8 +532,7 @@ export function gxtNativeSpecifierForPath(absPath, packagesDir) {
 }
 
 /**
- * DoD #2 (design docs-internal-gxt-native-layer-design.md §4): modules an app
- * closure of the native build must not ship — the Glimmer VM, its tag-revision
+ * Modules an app closure of the native build must not ship — the Glimmer VM, its tag-revision
  * protocol, the gxt COMPAT bridge, the classic VM renderer, and the template
  * compilers. `[pattern, reason]`; patterns match absolute module ids / sourcemap
  * sources (vite harness, scripts/bundle-modern-app.mjs --assert-native) AND the

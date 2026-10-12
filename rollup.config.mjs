@@ -52,7 +52,7 @@ const RENDER_BACKEND = process.env.EMBER_RENDER_BACKEND || 'classic';
 // `gxt` = the GXT COMPAT backend (gxt-backend shims + bridge).
 //
 // `gxt-native` is the gxt NATIVE layer (scripts/gxt-alias-map.mjs
-// GXT_NATIVE_ALIASES; design docs-internal-gxt-native-layer-design.md §2.1/§4):
+// GXT_NATIVE_ALIASES):
 // CLASSIC Ember source with `__GXT_MODE__ = false` (USE_GXT_BACKEND stays false,
 // so exposedDependencies()/resolvePackages() are the classic dependency map —
 // vite.config.mjs imports them from here for its native config too), with

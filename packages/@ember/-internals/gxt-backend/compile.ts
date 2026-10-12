@@ -610,10 +610,9 @@ import {
   withRenderRoot as _gxtWithRenderRoot,
   createRenderRootState as _gxtCreateRenderRootState,
 } from '@lifeart/gxt';
-// §2d host-hooks adoption (docs-internal-gxt-globalthis-wiring.md), capability
-// detected: dists shipping the formal `registerHostHooks()` API get the hooks
-// registered module-locally on the gxt side; older dists keep the legacy
-// `globalThis.__gxt*` slot writes. Namespace import so the missing export on a
+// Host hooks, capability detected: dists shipping the formal
+// `registerHostHooks()` API get the hooks registered module-locally on the gxt
+// side; older dists keep the legacy `globalThis.__gxt*` slot writes. Namespace import so the missing export on a
 // pre-API dist binds as `undefined` instead of a build error (the
 // `__lifeartGxtForOptional` pattern in manager.ts).
 import * as __gxtForHostHooks from '@lifeart/gxt';

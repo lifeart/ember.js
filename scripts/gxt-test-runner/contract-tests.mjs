@@ -50,9 +50,8 @@ function gxtBackendSourceFiles() {
 
 /**
  * Scan every gxt-backend source file for `import { ... } from '@lifeart/gxt[/subpath]'`
- * statements AND `export { ... } from '@lifeart/gxt'` re-exports (the alias
- * entry module gxt-with-runtime-hbs.ts re-exports ~70 upstream symbols, which
- * are just as much a static dependency on the published surface). Blocks are
+ * statements AND `export { ... } from '@lifeart/gxt'` re-exports (a re-export
+ * is just as much a static dependency on the published surface). Blocks are
  * multi-line with comments interspersed. Collects the ORIGINAL upstream names
  * per subpath: `orig as alias` contributes `orig`; `type X` specifiers are
  * skipped.

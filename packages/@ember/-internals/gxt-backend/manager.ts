@@ -99,9 +99,8 @@ const _gxtSetComponentRenderErrorReporter:
 // runtimes that lack it.
 const _gxtFlushCellOpcodes: ((cell: unknown) => void) | undefined = (__lifeartGxtForOptional as any)
   .flushCellOpcodes;
-// §2d host-hooks adoption (docs-internal-gxt-globalthis-wiring.md): dists
-// shipping the formal `registerHostHooks()` API get hooks registered
-// module-locally on the gxt side; older dists keep the legacy
+// Host hooks: dists shipping the formal `registerHostHooks()` API get hooks
+// registered module-locally on the gxt side; older dists keep the legacy
 // `globalThis.__gxt*` slot writes. compile.ts holds its own detection const
 // for its writer sites.
 const _gxtRegisterHostHooks: ((hooks: Record<string, unknown>) => void) | undefined = (
@@ -726,8 +725,7 @@ if (!_gxtRegisterHostHooks) {
 // loud failure, and cross-package readers (glimmer renderer/root, compile.ts)
 // reach the maps through the typed `registries` bridge namespace.
 // (`EmberFunctionalHelpers` above intentionally stays a global: the GXT
-// runtime dist itself consults it — a §2d host hook in
-// docs-internal-gxt-globalthis-wiring.md, retired by the upstream
+// runtime dist itself consults it; it retires with the upstream
 // registerHostHooks API, not here.)
 {
   const sentinel = Symbol.for('ember.gxt-backend.instance');
@@ -14707,7 +14705,7 @@ function _createUpdatableTagForModifier(): any {
 // =============================================================================
 
 // Install our handlers onto GXT's $_MANAGERS table. Hook-capable dists expose
-// `registerHostManagers()` (§2f, docs-internal-gxt-globalthis-wiring.md) — a
+// `registerHostManagers()` — a
 // function living in the same module instance the runtime call sites close
 // over, so the registration reaches the canonical table directly (no
 // object-identity hunting, no deferred retry). Legacy dists keep the original
@@ -14879,7 +14877,7 @@ setGxtRenderer({
     // `__classicDirtyTagFor` and the ember-side READS of `__gxtCellFor`
     // (that global itself stays — the GXT runtime publishes it for
     // runtime-compiled template Function bodies). See the interface docs in
-    // gxt-bridge.ts and docs-internal-gxt-globalthis-wiring.md §2c.
+    // gxt-bridge.ts.
     captureRenderError,
     classicConsumeTag: _classicConsumeTagHook,
     classicTagFor: _classicTagForHook,

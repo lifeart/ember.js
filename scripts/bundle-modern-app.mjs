@@ -477,11 +477,11 @@ const RULES = [
   ],
   [/gxt-backend\/gxt-bridge\.ts$/, 'gxt-backend: gxt-bridge registry', V],
   [
-    /gxt-backend\/(ast-transforms|runtime-hbs|gxt-with-runtime-hbs|ember-template-compiler|gxt-template-factory|glimmer-syntax)\.ts$/,
+    /gxt-backend\/(ast-transforms|ember-template-compiler|glimmer-syntax)\.ts$/,
     'gxt-backend: runtime-compile support',
     L,
   ],
-  [/gxt-backend\//, 'gxt-backend: other (helper-manager, stubs, outlet/link-to .gts, utils)', V],
+  [/gxt-backend\//, 'gxt-backend: other (helper-manager, stubs, outlet .gts, utils)', V],
   // ---- @glimmer/* (in-repo vendored VM)
   [
     /^packages\/@glimmer\/(component|tracking|owner|env)\//,
@@ -612,8 +612,7 @@ function inventory(variant, files) {
 }
 
 // ---------------------------------------------------------------- --assert-native
-// DoD #2 (design docs-internal-gxt-native-layer-design.md §4): the native app
-// closure must not contain the Glimmer VM, the compat bridge, the classic VM
+// The native app closure must not contain the Glimmer VM, the compat bridge, the classic VM
 // renderer, or the runtime template compiler. Patterns (shared with the rollup
 // dist assertion, scripts/assert-native-dist.mjs) match absolute module ids
 // (rollup) and absolute sourcemap sources.

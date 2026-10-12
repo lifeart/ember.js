@@ -462,9 +462,8 @@ export interface GxtCompilePipelineCapabilities {
    * tracked bridge, the glimmer renderer/outlet/root templates). The
    * globalThis slot itself remains: the GXT runtime publishes it via
    * `setupGlobalScope()` for runtime-compiled template Function bodies —
-   * that emitted-code surface is the §2e item in
-   * docs-internal-gxt-globalthis-wiring.md and retires with the upstream
-   * symbol-injection API, not with this bridge method.
+   * that emitted-code surface retires with the upstream symbol-injection
+   * API, not with this bridge method.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   cellFor(obj: object, key: string | symbol, debug?: boolean): any;

@@ -512,7 +512,7 @@ export function isInBacktrackingFrame() {
 // `__classicDirtyTagFor` are now reached via direct imports (intra-package)
 // and the typed `compilePipeline.classicConsumeTag/classicTagFor/
 // classicDirtyTagFor` bridge methods (cross-package) — see manager.ts's
-// setGxtRenderer install and docs-internal-gxt-globalthis-wiring.md §2c.
+// setGxtRenderer install.
 
 // ── Tracked backtracking bookkeeping (reusable across cell backings) ─────────
 // The DEV "You attempted to update `X` ... already used in the same
