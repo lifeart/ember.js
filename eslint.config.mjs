@@ -37,7 +37,6 @@ export default [
       // typed-lint parserOptions.project cannot parse it.
       'packages/@glimmer/component-gxt/**',
       'scripts/gxt-test-runner/**',
-      'scripts/debug-artifacts/**',
       // Assembled ember-source-gxt package output (git-ignored build artifact;
       // scripts/build-gxt-package.mjs) — lint the sources, not the dist.
       'dist-gxt-package/',
