@@ -119,10 +119,24 @@ const _gxtRegisterHostManagers: ((managers: Record<string, unknown>) => void) | 
 // classic-mode callers are gated on __GXT_MODE__ and never reach those
 // symbols. Eliminates ~50KB experiment-bundle bloat and any @lifeart/gxt
 // module-load side effects from the classic-mode hot path.
-import * as __lifeartGxtNamespace from '@lifeart/gxt';
-// The namespace is contributed to the typed bridge as `gxtLib` (see the
-// setGxtRenderer install at file EOF) — the replacement for the retired
-// `globalThis.__lifeartGxt` stash.
+// The members of `@lifeart/gxt` that glimmer-package call sites read through
+// the typed bridge as `gxtLib` (see the setGxtRenderer install at file EOF) —
+// the replacement for the retired `globalThis.__lifeartGxt` stash. Named
+// imports, NOT the namespace object: a namespace that escapes into a value
+// pins every gxt export (and the rehydration chunk) in the app bundle.
+import {
+  HTMLBrowserDOMApi as _gxtLibHTMLBrowserDOMApi,
+  destroyElementSync as _gxtLibDestroyElementSync,
+  createRoot as _gxtLibCreateRoot,
+  provideContext as _gxtLibProvideContext,
+  RENDERING_CONTEXT as _gxtLibRenderingContext,
+  getParentContext as _gxtLibGetParentContext,
+  setParentContext as _gxtLibSetParentContext,
+  captureRenderTree as _gxtLibCaptureRenderTree,
+  renderComponent as _gxtLibRenderComponent,
+  Component as _gxtLibComponent,
+  RENDERED_NODES_PROPERTY as _gxtLibRenderedNodesProperty,
+} from '@lifeart/gxt';
 //
 // Single-instance guard: the GXT reactive graph (cells, trackers, opcode
 // queues) is module-instance state, so TWO copies of @lifeart/gxt in one
@@ -139,7 +153,9 @@ import * as __lifeartGxtNamespace from '@lifeart/gxt';
   const sentinel = Symbol.for('lifeart.gxt.instance');
   const g = globalThis as Record<symbol, unknown>;
   const existing = g[sentinel];
-  if (existing !== undefined && existing !== __lifeartGxtNamespace) {
+  // Identity token of this @lifeart/gxt module instance: its `cellFor`
+  // (module-singleton state behind it), not the namespace object (see above).
+  if (existing !== undefined && existing !== _gxtCellFor) {
     throw new Error(
       'Two copies of @lifeart/gxt loaded in the same page. The GXT reactive ' +
         'graph is a per-module singleton, so duplicate copies fork reactivity ' +
@@ -148,7 +164,7 @@ import * as __lifeartGxtNamespace from '@lifeart/gxt';
         'to the Vite config (see smoke-tests/v2-app-gxt-template/vite.config.mjs).'
     );
   }
-  g[sentinel] = __lifeartGxtNamespace;
+  g[sentinel] = _gxtCellFor;
 }
 import {
   destroy as _destroyDestroyable,
@@ -14785,7 +14801,20 @@ import {
 } from './gxt-bridge';
 setGxtRenderer({
   // See `gxtLib` doc in gxt-bridge.ts (retired `globalThis.__lifeartGxt`).
-  gxtLib: __lifeartGxtNamespace,
+  gxtLib: {
+    HTMLBrowserDOMApi: _gxtLibHTMLBrowserDOMApi,
+    destroyElementSync: _gxtLibDestroyElementSync,
+    createRoot: _gxtLibCreateRoot,
+    provideContext: _gxtLibProvideContext,
+    RENDERING_CONTEXT: _gxtLibRenderingContext,
+    getParentContext: _gxtLibGetParentContext,
+    setParentContext: _gxtLibSetParentContext,
+    captureRenderTree: _gxtLibCaptureRenderTree,
+    renderComponent: _gxtLibRenderComponent,
+    cellFor: _gxtCellFor,
+    Component: _gxtLibComponent,
+    RENDERED_NODES_PROPERTY: _gxtLibRenderedNodesProperty,
+  },
   // See `registries` doc in gxt-bridge.ts (retired globalThis registries).
   registries: {
     componentTemplates: COMPONENT_TEMPLATES,
