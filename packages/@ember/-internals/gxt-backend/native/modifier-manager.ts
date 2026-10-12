@@ -64,11 +64,6 @@ interface ModifierInstance {
   scheduled: boolean;
   removed: boolean;
   stopTracking: (() => void) | null;
-  /** The manager's debug instance (Glimmer `getDebugInstance`): a custom
-   * manager's modifier, `null` for the internal `on`. */
-  readonly debugInstance: unknown;
-  /** Its debug render tree entry, while the debug render tree records. */
-  debug: DebugModifier | null;
 }
 
 const NO_NAMED: Readonly<Record<string, unknown>> = Object.freeze({});
@@ -162,7 +157,6 @@ function remove(instance: ModifierInstance): void {
   instance.removed = true;
   instance.stopTracking?.();
   instance.stopTracking = null;
-  if (instance.debug !== null) forgetDebugModifier(instance.debug);
   destroy(instance.state);
 }
 
@@ -172,13 +166,13 @@ function remove(instance: ModifierInstance): void {
 // (`ComponentElementOperations#addModifier`): its name, its arguments, the
 // manager's debug instance and the element as its bounds. Glimmer records them
 // only while the environment has a debug render tree (`ENV._DEBUG_RENDER_TREE`:
-// DEBUG builds, or the Inspector's opt-in); so does this layer. Entries are
-// keyed by the gxt render context the element was created in
-// (native/renderer.ts attaches them to that context's render node) and dropped
-// when the modifier is removed.
-export interface DebugModifier {
+// DEBUG builds, or the Inspector's opt-in); so does this layer — and with it
+// off nothing here runs. Entries are keyed by the gxt render context the
+// element was created in (native/renderer.ts attaches them to that context's
+// render node) and dropped when the modifier's state is destroyed (Glimmer's
+// `willDestroy` destructor on the same state).
+interface DebugModifier {
   readonly id: string;
-  readonly ctx: object;
   readonly name: string;
   readonly element: Element;
   readonly source: ArgsSource;
@@ -186,6 +180,8 @@ export interface DebugModifier {
 }
 
 const DEBUG_MODIFIERS = new WeakMap<object, Set<DebugModifier>>();
+// A custom manager's modifier (its debug instance), by the instance's state.
+const DEBUG_INSTANCES = new WeakMap<object, unknown>();
 let debugModifierId = 0;
 
 function recordDebugModifier(
@@ -198,33 +194,30 @@ function recordDebugModifier(
   const manager = getInternalModifierManager(definition) as
     | CustomModifierManager
     | InternalModifierManager;
-  // Glimmer: `definition.resolvedName ?? manager.getDebugName(definition.state)`.
-  const name =
-    resolvedName ??
-    (manager instanceof CustomModifierManager
-      ? typeof definition === 'function'
-        ? (definition as { name?: string }).name || definition.toString()
-        : '<unknown>'
-      : manager.getDebugName());
+  const custom = manager instanceof CustomModifierManager;
   const entry: DebugModifier = {
     id: `modifier:${++debugModifierId}`,
-    ctx,
-    name,
+    // Glimmer: `definition.resolvedName ?? manager.getDebugName(definition.state)`.
+    name:
+      resolvedName ??
+      (custom
+        ? typeof definition === 'function'
+          ? (definition as { name?: string }).name || definition.toString()
+          : '<unknown>'
+        : manager.getDebugName()),
     element: instance.element,
     source,
-    instance: instance.debugInstance,
+    // Glimmer `getDebugInstance`: a custom manager's modifier, `null` for `on`.
+    instance: custom ? (DEBUG_INSTANCES.get(instance.state) ?? null) : null,
   };
   let entries = DEBUG_MODIFIERS.get(ctx);
   if (entries === undefined) {
     entries = new Set();
     DEBUG_MODIFIERS.set(ctx, entries);
   }
-  entries.add(entry);
-  instance.debug = entry;
-}
-
-function forgetDebugModifier(entry: DebugModifier): void {
-  DEBUG_MODIFIERS.get(entry.ctx)?.delete(entry);
+  const live = entries;
+  live.add(entry);
+  registerDestructor(instance.state, () => live.delete(entry));
 }
 
 /**
@@ -287,6 +280,7 @@ function createInstance(
     const modifier = delegate.createModifier(definition, args);
     const state = {};
     registerDestructor(state, () => delegate.destroyModifier(modifier, args));
+    if (ENV._DEBUG_RENDER_TREE) DEBUG_INSTANCES.set(state, modifier);
     const untracked = delegate.capabilities.disableAutoTracking === true;
     return {
       element,
@@ -301,8 +295,6 @@ function createInstance(
       scheduled: false,
       removed: false,
       stopTracking: null,
-      debugInstance: modifier,
-      debug: null,
     };
   }
 
@@ -318,8 +310,6 @@ function createInstance(
     scheduled: false,
     removed: false,
     stopTracking: null,
-    debugInstance: null,
-    debug: null,
   };
 }
 

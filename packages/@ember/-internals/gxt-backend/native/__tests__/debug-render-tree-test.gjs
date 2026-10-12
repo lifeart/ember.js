@@ -114,6 +114,42 @@ module('gxt-native | debugRenderTree', function (hooks) {
     );
   });
 
+  test('capture(): a modifier replaced on the same element leaves the tree', function (assert) {
+    const manager = () => ({
+      capabilities: capabilities('3.22'),
+      createModifier() {
+        return {};
+      },
+      installModifier() {},
+      updateModifier() {},
+      destroyModifier() {},
+    });
+    function first() {}
+    function second() {}
+    setModifierManager(manager, first);
+    setModifierManager(manager, second);
+    let probe;
+    class Probe extends Component {
+      @tracked current = first;
+      constructor(owner, args) {
+        super(owner, args);
+        probe = this;
+      }
+      <template><b {{this.current "v"}}>b</b></template>
+    }
+    this.render(Probe);
+    const renderer = this.owner.lookup('renderer:-dom');
+    const modifierNames = () =>
+      renderer.debugRenderTree
+        .capture()[0]
+        .children.filter((node) => node.type === 'modifier')
+        .map((node) => node.name);
+    assert.deepEqual(modifierNames(), ['first']);
+    // a new definition re-creates the modifier on the same element
+    run(() => (probe.current = second));
+    assert.deepEqual(modifierNames(), ['second'], 'the replaced modifier is gone');
+  });
+
   test('capture() is scoped to the renderer owner and drops destroyed roots', function (assert) {
     const Leaf = <template>leaf</template>;
     this.render(Leaf);
