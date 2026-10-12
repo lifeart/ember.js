@@ -74,6 +74,6 @@ export function precompileTemplate(
   return failingTemplateFactory(
     `precompileTemplate: a template string reached runtime (${
       options?.moduleName ?? 'unknown module'
-    }). The gxt-native build has no runtime template compiler: \`precompileTemplate\` must be called with a static template string and static options (\`strictMode\` literal, \`scope: () => ({ … })\`) so the gxt compiler compiles it at build time (G10).`
+    }). The gxt-native build has no runtime template compiler: \`precompileTemplate\` must be called with a static template string and static options (\`strictMode\` literal, \`scope: () => ({ … })\`) so the gxt compiler compiles it at build time.`
   );
 }

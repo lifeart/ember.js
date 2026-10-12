@@ -236,30 +236,22 @@ try {
     templateCompilerOut,
     [
       "'use strict';",
-      '// DOCUMENTED STUB (design §5.5 S-item, descoped per the packaging brief).',
+      '// STUB: the CJS template-compiler build failed when this package was built.',
       '//',
-      '// Purpose: this file exists so the GXT addon-main can expose a DEFINED,',
-      '// require.resolve-able `absolutePaths.templateCompiler`, which is the exact',
-      '// thing ember-cli-htmlbars@7 reads via',
+      '// This file exists so the GXT addon-main can expose a defined,',
+      '// require.resolve-able `absolutePaths.templateCompiler`, which',
+      '// ember-cli-htmlbars@7 reads via',
       "//   findAddonByName('ember-source').absolutePaths.templateCompiler",
-      '// — fixing the `TypeError: Cannot read properties of undefined',
-      "// (reading 'templateCompiler')` crash from design §1.6.",
+      '// (without it: `TypeError: Cannot read properties of undefined',
+      "// (reading 'templateCompiler')`).",
       '//',
-      '// Why it is a stub and not the real classic wire-format compiler: the GXT',
-      '// Rollup build chunk-merges the ESM-only `@lifeart/gxt` (reached via',
-      "// `@ember/-internals/metal`'s `@lifeart/gxt/glimmer-compatibility` import)",
-      "// into the template-compiler's shared-chunk graph, so a self-contained CJS",
-      '// `require()` of the emitted ESM entry is impossible without a dedicated',
-      '// classic (non-GXT) Rollup pass — a >2-layer yak-shave descoped per the brief.',
-      '//',
-      "// In GXT mode, real template compilation is the @lifeart/gxt Vite plugin's",
-      '// job (the open L-item), NOT this entry. If a classic wire-format precompile',
-      '// is actually invoked here, we fail loud (no silent swallowing).',
+      '// In GXT mode templates are compiled by the @lifeart/gxt Vite plugin, not',
+      '// by this entry. Calling the classic wire-format precompile here throws.',
       'function notBuilt() {',
       '  throw new Error(',
-      "    'ember-source-gxt: dist/ember-template-compiler.js is a stub (design §5.5 S-item). ' +",
+      "    'ember-source-gxt: dist/ember-template-compiler.js is a stub. ' +",
       "    'The classic wire-format compiler was not extractable from the GXT build; ' +",
-      "    'GXT template compilation is handled by the @lifeart/gxt Vite plugin (L-item).'",
+      "    'GXT template compilation is handled by the @lifeart/gxt Vite plugin.'",
       '  );',
       '}',
       'module.exports.precompile = notBuilt;',
@@ -393,11 +385,10 @@ function buildGxtAddonMain() {
     `module.exports = {
   ...shim,
 
-  // GXT addition (design §3.1 / §5.5 S-item): expose absolutePaths so
-  // ember-cli-htmlbars@7's findAddonByName('ember-source').absolutePaths
-  // .templateCompiler resolves instead of TypeError-ing. NOTE: this is the
-  // CLASSIC wire-format compiler even in GXT mode (design §1.5) — real GXT
-  // template compilation is the Vite plugin's job (open L-item).
+  // GXT addition: expose absolutePaths so ember-cli-htmlbars@7's
+  // findAddonByName('ember-source').absolutePaths.templateCompiler resolves
+  // instead of TypeError-ing. NOTE: this is the CLASSIC wire-format compiler
+  // even in GXT mode — GXT template compilation is the Vite plugin's job.
   absolutePaths: {
     templateCompiler: path.join(__dirname, '..', 'dist', 'ember-template-compiler.js'),
   },`
@@ -751,6 +742,6 @@ function selfVerify() {
   log('  ok: assembled package.json is the GXT set (name, renamed-modules, no devDeps)');
 
   if (!templateCompilerBuilt) {
-    log('  NOTE: dist/ember-template-compiler.js is a STUB (S-item descoped this run).');
+    log('  NOTE: dist/ember-template-compiler.js is a STUB (its CJS build failed this run).');
   }
 }

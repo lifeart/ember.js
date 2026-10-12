@@ -383,7 +383,8 @@ function checkMode(mode) {
     /import\s*\{[^}]*\bcurrentRevision\b[^}]*\}\s*from\s*["']@lifeart\/gxt["']/.test(
       appForbidden.text
     );
-  if (markerHits.length) errors.push(`DoD #3 markers present in the app closure: ${markerHits}`);
+  if (markerHits.length)
+    errors.push(`single-reactive-system markers present in the app closure: ${markerHits}`);
   if (!nativeValidator) errors.push('native/validator.ts is not in the app closure');
   if (!currentRevisionImported) errors.push('the app closure does not import gxt currentRevision');
 
@@ -445,7 +446,7 @@ for (const r of results) {
   );
   for (const v of r.vmReach) console.log(`    - ${v.specifier} [${v.reasons.join('; ')}]`);
   console.log(
-    `  DoD #3 markers absent from the app closure: ${r.markers.absent.length - r.markers.hits.length}/${r.markers.absent.length}` +
+    `  single-reactive-system markers absent from the app closure: ${r.markers.absent.length - r.markers.hits.length}/${r.markers.absent.length}` +
       (r.markers.hits.length ? ` — PRESENT: ${r.markers.hits.join('; ')}` : '')
   );
   for (const i of r.markers.inert) console.log(`    known inert residue (allowed): ${i}`);

@@ -123,6 +123,6 @@ export function selfComponent(
 export default function templateFactory(serialized: unknown): NativeTemplateFactory {
   if (isTemplateFn(serialized)) return factoryForTemplate(serialized as GxtTemplate);
   return failingTemplateFactory(
-    'native template factory: a wire-format (pre-compiled Glimmer VM) template cannot render in the gxt-native build — compile the template with the gxt compiler (`.gjs`/`.gts`, or `precompileTemplate(…)`, G10)'
+    'native template factory: a wire-format (pre-compiled Glimmer VM) template cannot render in the gxt-native build — compile the template with the gxt compiler (`.gjs`/`.gts`, or `precompileTemplate(…)`)'
   );
 }

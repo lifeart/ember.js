@@ -435,11 +435,7 @@ const RULES = [
   [/^npm:decorator-transforms\//, 'decorator-transforms runtime', M],
   [/^npm:ember-strict-application-resolver\//, 'app code', M],
   // ---- ember gxt-backend
-  [
-    /gxt-backend\/native\//,
-    'gxt-backend/native: native layer (Inc-1 skeleton: stubs + placeholders)',
-    M,
-  ],
+  [/gxt-backend\/native\//, 'gxt-backend/native: native layer', M],
   [
     /gxt-backend\/compile\.ts$/,
     'gxt-backend: compile.ts (runtime render layer + runtime compile)',

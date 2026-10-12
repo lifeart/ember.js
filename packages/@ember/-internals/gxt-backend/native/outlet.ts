@@ -223,7 +223,7 @@ export function Outlet(this: GxtNode): unknown {
     const loose = isLooseTemplate(template);
     if (!loose && !hasInternalComponentManager(template)) {
       throw new Error(
-        `native route template for \`${definition.name}\` is neither a component nor a gxt-compiled template (a wire-format template from a pre-compiled addon?): compile it with the gxt compiler — a \`.gjs\`/\`.gts\` route template, or a \`precompileTemplate(…)\` call (G10)`
+        `native route template for \`${definition.name}\` is neither a component nor a gxt-compiled template (a wire-format template from a pre-compiled addon?): compile it with the gxt compiler — a \`.gjs\`/\`.gts\` route template, or a \`precompileTemplate(…)\` call`
       );
     }
     // Routable engines render with their own owner (classic outletOwner).
