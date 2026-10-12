@@ -7,7 +7,6 @@ import {
   CLOSE,
   content,
   equalTokens,
-  isGxtModeActive,
   OPEN,
   PartialRehydrationDelegate,
   qunitFixture,
@@ -77,16 +76,6 @@ abstract class AbstractChaosMonkeyTest extends RenderTest {
     // cannot remove the first opening block node and last closing block node, that is what makes it rehydrateable
     nodes = nodes.slice(1, -1);
 
-    // GXT-mode: if there are no interior nodes to remove (GXT emits
-    // fewer block markers than stock VM), skip the havoc step — the
-    // rehydration outcome is still checked in `runIterations` against
-    // `expectedHTML`, and a no-op iteration is a valid "did not
-    // break" assertion.
-    if (isGxtModeActive() && nodes.length === 0) {
-      this.assert.ok(true, 'wreakHavoc: no interior nodes available under GXT, skipping');
-      return;
-    }
-
     // select a random node to remove
     const indexToRemove = Math.floor(this.getRandomForIteration(iteration) * nodes.length);
 
@@ -126,19 +115,6 @@ abstract class AbstractChaosMonkeyTest extends RenderTest {
     const element = castToBrowser(this.element, 'HTML');
     const elementResetValue = element.innerHTML;
 
-    const assertHTMLMatches = (actual: string, message?: string) => {
-      // GXT emits placeholder `<!---->` comments for branch/text
-      // reactivity boundaries that stock Glimmer-VM doesn't. For
-      // chaos rehydration we only care that the structural HTML
-      // (after stripping those placeholders) matches the expected
-      // string — not the exact innerHTML bytes.
-      if (isGxtModeActive()) {
-        equalTokens(actual, expectedHTML, message);
-      } else {
-        this.assert.strictEqual(actual, expectedHTML, message);
-      }
-    };
-
     const urlParams = (QUnit as any).urlParams as Dict<string>;
     if (urlParams['iteration']) {
       // runs a single iteration directly, no try/catch, with logging
@@ -148,7 +124,7 @@ abstract class AbstractChaosMonkeyTest extends RenderTest {
       this.renderClientSide(template, context);
 
       const element = castToBrowser(this.element, 'HTML');
-      assertHTMLMatches(element.innerHTML);
+      this.assert.strictEqual(element.innerHTML, expectedHTML);
     } else {
       for (let i = 0; i < count; i++) {
         const seed = QUnit.config.seed ? `&seed=${QUnit.config.seed}` : '';
@@ -160,8 +136,9 @@ abstract class AbstractChaosMonkeyTest extends RenderTest {
           this.renderClientSide(template, context);
 
           const element = castToBrowser(this.element, 'HTML');
-          assertHTMLMatches(
+          this.assert.strictEqual(
             element.innerHTML,
+            expectedHTML,
             `should match after iteration ${i}; rerun with these query params: '${rerunUrl}'`
           );
         } catch (error) {
@@ -281,33 +258,30 @@ class ChaosMonkeyPartialRehydration extends AbstractChaosMonkeyTest {
     );
     const html = this.delegate.renderComponentServerSide('Root', args);
 
-    const expected = content([
-      OPEN,
-      OPEN,
-      '<div>',
-      OPEN,
-      'a ',
-      OPEN,
-      'b',
-      CLOSE,
-      OPEN,
-      'c',
-      CLOSE,
-      OPEN,
-      'd',
-      CLOSE,
-      CLOSE,
-      '</div>',
-      CLOSE,
-      CLOSE,
-    ]);
-    if (isGxtModeActive()) {
-      // GXT doesn't emit stock VM `%+b:N%` block markers. Compare
-      // structural tokens with markers stripped on both sides.
-      equalTokens(html, expected, 'server html is correct');
-    } else {
-      this.assert.strictEqual(html, expected, 'server html is correct');
-    }
+    this.assert.strictEqual(
+      html,
+      content([
+        OPEN,
+        OPEN,
+        '<div>',
+        OPEN,
+        'a ',
+        OPEN,
+        'b',
+        CLOSE,
+        OPEN,
+        'c',
+        CLOSE,
+        OPEN,
+        'd',
+        CLOSE,
+        CLOSE,
+        '</div>',
+        CLOSE,
+        CLOSE,
+      ]),
+      'server html is correct'
+    );
     replaceHTML(qunitFixture(), html);
     this.element = castToSimple(castToBrowser(qunitFixture(), 'HTML').querySelector('div')!);
     this.runIterations('RehydratingComponent', args, 'a bcd', 100);
@@ -327,26 +301,24 @@ class ChaosMonkeyPartialRehydration extends AbstractChaosMonkeyTest {
       '<div><RehydratingComponent @show={{@show}}/></div>'
     );
     const html = this.delegate.renderComponentServerSide('Root', args);
-    const expected = content([
-      OPEN,
-      OPEN,
-      '<div>',
-      OPEN,
-      '<p>hello ',
-      OPEN,
-      '<div>world!</div>',
-      CLOSE,
-      '</p>',
-      CLOSE,
-      '</div>',
-      CLOSE,
-      CLOSE,
-    ]);
-    if (isGxtModeActive()) {
-      equalTokens(html, expected);
-    } else {
-      this.assert.strictEqual(html, expected);
-    }
+    this.assert.strictEqual(
+      html,
+      content([
+        OPEN,
+        OPEN,
+        '<div>',
+        OPEN,
+        '<p>hello ',
+        OPEN,
+        '<div>world!</div>',
+        CLOSE,
+        '</p>',
+        CLOSE,
+        '</div>',
+        CLOSE,
+        CLOSE,
+      ])
+    );
 
     replaceHTML(qunitFixture(), html);
     this.element = castToSimple(castToBrowser(qunitFixture(), 'HTML').querySelector('div')!);

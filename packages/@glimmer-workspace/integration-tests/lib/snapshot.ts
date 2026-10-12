@@ -4,7 +4,6 @@ import { COMMENT_NODE, TEXT_NODE } from '@glimmer/constants';
 import { castToSimple, unwrap } from '@glimmer/debug-util';
 import { tokenize } from 'simple-html-tokenizer';
 
-import { __setAssertSerializedTokenCompare } from './dom/assertions';
 import { replaceHTML, toInnerHTML } from './dom/simple-utils';
 
 export type IndividualSnapshot = 'up' | 'down' | SimpleNode;
@@ -87,35 +86,13 @@ export function generateSnapshot(element: SimpleElement): SimpleNode[] {
   return snapshot;
 }
 
-// Phase 4.2 — marker-format translation for rehydration assertions under
-// GXT_MODE. Tests hard-code Glimmer-VM-style block comment markers like
-// `<!--%+b:1%-->` / `<!--%-b:1%-->` / `<!--%glmr%-->`. GXT's runtime
-// instead emits `data-node-id="N"` attributes and `$[N]` comment markers.
-// To keep the existing assertion strings usable under both backends, we
-// strip both marker families from the token stream on BOTH sides of
-// `equalTokens` when GXT_MODE is active. Net effect: the structural
-// HTML shape is compared; marker bookkeeping is ignored.
-export function isGxtModeActive(): boolean {
-  return __GXT_MODE__;
-}
-
-// Empty comment (`<!---->`) is emitted by GXT as a cheap placeholder
-// for list/branch boundaries; classic Glimmer-VM tests never assert on
-// it, so strip it too.
-//
-// GXT also wraps `{{{triple-curly}}}` / `htmlRaw` output in a pair of
-// `<!--htmlRaw-->` / `<!--/htmlRaw-->` boundary comments so it can
-// later replace the raw HTML span reactively. Classic Glimmer-VM tests
-// assert on the inner HTML only, so strip these boundary comments.
-// Patterns covered:
-//   `%+b:N%` / `%-b:N%`  — block open/close markers
-//   `%glmr%`            — glimmer token markers
-//   `%|%`                — separator marker
-//   `% %`                — empty text placeholder (space-only "name")
-//   `$[N]`              — GXT per-element id comment
-//   `/?htmlRaw`         — GXT htmlRaw boundary comments
-//   ``                   — empty comment (`<!---->`)
-const MARKER_COMMENT_RE = /^(%[-+][^%]*%|%[a-z]+%|%\|%|% %|\$\[[^\]]*\]|\/?htmlRaw|)$/u;
+// Under GXT (`__GXT_MODE__`), `equalTokens` ignores the comments GXT renders
+// for its own bookkeeping, on both sides of the comparison:
+//   ``           the empty `<!---->` placeholder at list/branch boundaries
+//   `/?htmlRaw`  the boundary comments around `{{{triple-curly}}}` output
+//   `$[N]`       the per-element id comment of GXT's SSR mode
+// and GXT's SSR `data-node-id` attribute.
+const MARKER_COMMENT_RE = /^(\$\[[^\]]*\]|\/?htmlRaw|)$/u;
 
 function stripMarkers(tokens: Token[]): Token[] {
   const filtered = tokens
@@ -135,12 +112,8 @@ function stripMarkers(tokens: Token[]): Token[] {
       return token;
     });
 
-  // Merge adjacent `Chars` tokens. The marker-stripping above can leave
-  // what used to be `[Chars "hello", Comment "%|%", Chars " world"]` as
-  // two separate `Chars` tokens, while the corresponding GXT-rendered
-  // string is a single merged text node (tokenized as one `Chars`).
-  // Browsers auto-merge adjacent text nodes, so for structural equality
-  // we do the same on the token stream.
+  // Merge adjacent `Chars` tokens: removing a comment between two text
+  // nodes leaves two `Chars` tokens where a browser-parsed string has one.
   const merged: Token[] = [];
   for (const token of filtered) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
@@ -168,7 +141,7 @@ function generateTokens(divOrHTML: SimpleElement | string): { tokens: Token[]; h
   }
 
   let tokens = tokenize(toInnerHTML(div), {});
-  if (isGxtModeActive()) {
+  if (__GXT_MODE__) {
     tokens = stripMarkers(tokens);
   }
 
@@ -286,8 +259,3 @@ class SnapshotIterator {
     return unwrap(token);
   }
 }
-
-// Install the callback `assertSerializedInElement` uses when it detects
-// GXT mode, so it can defer to our `equalTokens` (which strips block
-// markers / merges adjacent text) instead of a raw byte-exact compare.
-__setAssertSerializedTokenCompare((a, b, m) => equalTokens(a, b, m ?? null));

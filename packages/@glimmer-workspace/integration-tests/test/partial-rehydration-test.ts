@@ -2,8 +2,6 @@ import { castToSimple } from '@glimmer/debug-util';
 import {
   CLOSE,
   content,
-  equalTokens,
-  isGxtModeActive,
   OPEN,
   PartialRehydrationDelegate,
   qunitFixture,
@@ -34,32 +32,29 @@ export class PartialRehydrationTest extends RenderTest {
     };
 
     const html = this.delegate.renderComponentServerSide('Root', args);
-    const expectedServerHtml = content([
-      OPEN,
-      OPEN,
-      '<div id="placeholder">',
-      OPEN,
-      OPEN,
-      'a',
-      CLOSE,
-      OPEN,
-      'b',
-      CLOSE,
-      OPEN,
-      'c',
-      CLOSE,
-      CLOSE,
-      '</div>',
-      CLOSE,
-      CLOSE,
-    ]);
-    if (isGxtModeActive()) {
-      // GXT doesn't emit `%+b:N%` block markers; compare structural
-      // tokens with markers stripped on both sides.
-      equalTokens(html, expectedServerHtml, 'Expect server output to match');
-    } else {
-      this.assert.strictEqual(html, expectedServerHtml, 'Expect server output to match');
-    }
+    this.assert.strictEqual(
+      html,
+      content([
+        OPEN,
+        OPEN,
+        '<div id="placeholder">',
+        OPEN,
+        OPEN,
+        'a',
+        CLOSE,
+        OPEN,
+        'b',
+        CLOSE,
+        OPEN,
+        'c',
+        CLOSE,
+        CLOSE,
+        '</div>',
+        CLOSE,
+        CLOSE,
+      ]),
+      'Expect server output to match'
+    );
 
     replaceHTML(qunitFixture(), html);
     this.element = qunitFixture();
@@ -106,34 +101,32 @@ export class PartialRehydrationTest extends RenderTest {
     };
 
     const html = this.delegate.renderComponentServerSide('Root', args);
-    const expectedMultiSiteHtml = content([
-      OPEN,
-      OPEN,
-      '<div class="nav-container">',
-      OPEN,
-      OPEN,
-      'Nav',
-      CLOSE,
-      CLOSE,
-      '</div>',
-      OPEN,
-      '<h1>I am a test</h1>',
-      CLOSE,
-      '<div class="carousel-container">',
-      OPEN,
-      OPEN,
-      'Carousel',
-      CLOSE,
-      CLOSE,
-      '</div>',
-      CLOSE,
-      CLOSE,
-    ]);
-    if (isGxtModeActive()) {
-      equalTokens(html, expectedMultiSiteHtml);
-    } else {
-      this.assert.strictEqual(html, expectedMultiSiteHtml);
-    }
+    this.assert.strictEqual(
+      html,
+      content([
+        OPEN,
+        OPEN,
+        '<div class="nav-container">',
+        OPEN,
+        OPEN,
+        'Nav',
+        CLOSE,
+        CLOSE,
+        '</div>',
+        OPEN,
+        '<h1>I am a test</h1>',
+        CLOSE,
+        '<div class="carousel-container">',
+        OPEN,
+        OPEN,
+        'Carousel',
+        CLOSE,
+        CLOSE,
+        '</div>',
+        CLOSE,
+        CLOSE,
+      ])
+    );
 
     replaceHTML(qunitFixture(), html);
     this.element = qunitFixture();

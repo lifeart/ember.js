@@ -62,10 +62,9 @@ import { TestJitRuntimeResolver } from './resolver';
  * Shape of the per-render template object returned by a GXT template
  * factory under `__GXT_MODE__`. The factory comes from
  * `@ember/-internals/gxt-backend/compile.ts#precompileTemplate` (also
- * exposed via `globalThis.__gxtCompileTemplate` and `getGxtRenderer`'s
- * `compilePipeline.compileTemplate`). We type it minimally here — only
- * the `render(ctx, parentEl)` method that the JIT delegate needs to
- * dispatch into.
+ * exposed as `getGxtRenderer`'s `compilePipeline.compileTemplate`). We type
+ * it minimally here — only the `render(ctx, parentEl)` method that the JIT
+ * delegate needs to dispatch into.
  */
 interface GxtRenderableTemplate {
   render(ctx: Record<string, unknown> | null, parentElement: Element | null): unknown;
@@ -251,7 +250,7 @@ export class JitRenderDelegate implements RenderDelegate {
     // Detect a GXT template and dispatch through the GXT renderer
     // (`factory(owner).render(ctx, element)`) instead. This is the
     // same shape the rehydration GXT delegate uses (see
-    // `gxt-delegate.ts#compileAndRender`), reduced to the minimum we
+    // `gxt-delegate.ts#render`), reduced to the minimum we
     // need for `jitSuite` keyword-helper tests where the component is
     // a `templateOnly()` with a GXT template already attached.
     if (__GXT_MODE__) {

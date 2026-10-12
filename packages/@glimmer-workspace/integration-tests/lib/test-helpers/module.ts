@@ -9,48 +9,32 @@ import type { DeclaredComponentKind } from '../test-decorator';
 
 import { JitRenderDelegate } from '../modes/jit/delegate';
 import { NodeJitRenderDelegate } from '../modes/node/env';
-import {
-  GxtPartialRehydrationDelegate,
-  GxtRehydrationDelegate,
-} from '../modes/rehydration/gxt-delegate';
+import { GxtRehydrationDelegate, gxtUnsupportedReason } from '../modes/rehydration/gxt-delegate';
 import { JitSerializationDelegate } from '../suites/custom-dom-helper';
 
 /**
- * Phase 4.2 — delegate override for rehydration modules under GXT_MODE.
- *
- * The classic `RehydrationDelegate` constructor loads `@simple-dom/document`
- * plus the Glimmer-VM opcode runtime, both of which are aliased to GXT
- * shims under GXT_MODE and crash on instantiation. The result is that
- * module registration throws before any QUnit tests are declared, and
- * the runner reports "No tests matched the module".
- *
- * In GXT builds (`__GXT_MODE__`), when the caller is trying to
- * register a delegate whose `style === 'rehydration'`, we transparently
- * swap in `GxtRehydrationDelegate`. This keeps the tests declarative
- * and lets the module at least RUN under GXT — individual test bodies
- * may still fail on assertion details, but the module is no longer
- * silently skipped.
- *
- * For partial-rehydration modules (which declare extra methods like
- * `registerTemplateOnlyComponent` and `renderComponentServerSide` on
- * top of the base rehydration delegate), we swap in the
- * `GxtPartialRehydrationDelegate` subclass so those methods exist.
- * Detection is via the constructor's prototype having a
- * `registerTemplateOnlyComponent` method.
+ * Under GXT (`__GXT_MODE__`) the rehydration suites render through GXT, with
+ * `GxtRehydrationDelegate`, instead of through the Glimmer VM.
  */
 function overrideRehydrationDelegate<D extends RenderDelegate>(
   Delegate: RenderDelegateConstructor<D>
 ): RenderDelegateConstructor<D> {
   if (Delegate.style !== 'rehydration') return Delegate;
-  if ((Delegate as unknown) === GxtRehydrationDelegate) return Delegate;
-  if ((Delegate as unknown) === GxtPartialRehydrationDelegate) return Delegate;
-  // Detect partial-rehydration delegates by the extra `registerTemplateOnlyComponent`
-  // method on the prototype. The GXT equivalent ships `GxtPartialRehydrationDelegate`.
-  const proto = (Delegate as unknown as { prototype?: Record<string, unknown> }).prototype;
-  if (proto && typeof proto['registerTemplateOnlyComponent'] === 'function') {
-    return GxtPartialRehydrationDelegate as unknown as RenderDelegateConstructor<D>;
-  }
   return GxtRehydrationDelegate as unknown as RenderDelegateConstructor<D>;
+}
+
+// Tests the GXT rehydration delegate cannot run (see `gxtUnsupportedReason`)
+// are registered as `QUnit.skip`.
+function isUnsupportedUnderGxt(
+  Delegate: RenderDelegateConstructor<RenderDelegate>,
+  suiteName: string,
+  testName: string
+): boolean {
+  return (
+    __GXT_MODE__ &&
+    (Delegate as unknown) === GxtRehydrationDelegate &&
+    gxtUnsupportedReason(suiteName, testName) !== undefined
+  );
 }
 
 export interface RenderTestConstructor<D extends RenderDelegate, T extends IRenderTest> {
@@ -140,7 +124,9 @@ export function suite<D extends RenderDelegate>(
       const test = klass.prototype[prop];
 
       if (isTestFunction(test) && shouldRunTest<D>(Delegate)) {
-        if (isSkippedTest(test)) {
+        if (isUnsupportedUnderGxt(Delegate, suiteName, prop)) {
+          QUnit.skip(prop);
+        } else if (isSkippedTest(test)) {
           QUnit.skip(prop, (assert) => {
             test.call(instance!, assert, instance!.count);
             instance!.count.assert();
@@ -176,7 +162,9 @@ function componentModule<D extends RenderDelegate, T extends IRenderTest>(
     }
 
     return (type: ComponentKind, klass: RenderTestConstructor<D, T>) => {
-      if (!shouldSkip) {
+      if (isUnsupportedUnderGxt(Delegate, klass.suiteName, prop)) {
+        QUnit.skip(prop);
+      } else if (!shouldSkip) {
         QUnit.test(prop, (assert) => {
           let instance = new klass(new Delegate());
           instance.testType = type;
