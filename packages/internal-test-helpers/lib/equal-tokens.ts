@@ -1,5 +1,20 @@
 import { tokenize } from 'simple-html-tokenizer';
 
+/**
+ * Whether a comment with this text is one GXT renders for its own bookkeeping:
+ * the `/htmlRaw` end anchor of `{{{trusted}}}` output, the `curried-start` /
+ * `curried-end` boundaries of a curried component, or a placeholder. GXT-mode
+ * assertions ignore these, like the empty `<!---->` marker both renderers use.
+ */
+export function isGxtMarkerComment(text: string): boolean {
+  return (
+    text.includes('placeholder') ||
+    text.includes('curried-start') ||
+    text.includes('curried-end') ||
+    text === '/htmlRaw'
+  );
+}
+
 /** Strip GXT rendering artifacts from HTML string */
 function stripGxtArtifacts(html: string): string {
   if (!__GXT_MODE__) return html;

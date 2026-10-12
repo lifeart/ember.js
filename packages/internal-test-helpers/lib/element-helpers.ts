@@ -1,5 +1,5 @@
 import { getAssert } from './assert-helpers';
-import equalTokens from './equal-tokens';
+import equalTokens, { isGxtMarkerComment } from './equal-tokens';
 import { classes, equalsElement, regex } from './matchers';
 import { getContext } from './test-context';
 
@@ -26,8 +26,8 @@ export function isMarker(node: unknown): node is Comment | typeof TextNode {
     const text = node.textContent || '';
     // Empty comments are Glimmer VM markers
     if (text === '') return true;
-    // GXT internal placeholder comments
-    if (__GXT_MODE__ && (text.includes('placeholder') || text === '/htmlRaw')) {
+    // GXT's own marker comments
+    if (__GXT_MODE__ && isGxtMarkerComment(text)) {
       return true;
     }
   }

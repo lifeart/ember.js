@@ -3,7 +3,7 @@
 import NodeQuery from '../node-query';
 import equalInnerHTML from '../equal-inner-html';
 import equalTokens from '../equal-tokens';
-import { assertInvariants, getElement, takeSnapshot } from '../element-helpers';
+import { assertInvariants, getElement, isMarker, takeSnapshot } from '../element-helpers';
 import { equalsElement, regex, classes } from '../matchers';
 import { runDestroy, runLoopSettled, runTask } from '../run';
 import { assert } from '@ember/debug';
@@ -15,33 +15,7 @@ import {
   setAmbientOwner,
 } from '@ember/-internals/gxt-backend/gxt-bridge';
 
-const TextNode = window.Text;
 const HTMLElement = window.HTMLElement;
-const Comment = window.Comment;
-
-function isMarker(node: unknown): node is Comment | typeof TextNode {
-  if (node instanceof Comment) {
-    const text = node.textContent || '';
-    // Empty comments are Glimmer VM markers
-    if (text === '') return true;
-    // GXT internal placeholder comments
-    if (
-      __GXT_MODE__ &&
-      (text.includes('placeholder') ||
-        text.includes('curried-start') ||
-        text.includes('curried-end') ||
-        text === '/htmlRaw')
-    ) {
-      return true;
-    }
-  }
-
-  if (node instanceof TextNode && node.textContent === '') {
-    return true;
-  }
-
-  return false;
-}
 
 // GXT test-harness steps, `undefined` in classic builds. A module-level value
 // instead of bridge calls inside the test-case methods: rollup keeps every
