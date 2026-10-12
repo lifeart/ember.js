@@ -172,35 +172,24 @@ import {
   isDestroying as _isDestroying,
 } from './destroyable';
 
-// Diagnostic counter for in-flight gxt effects. Tooling (test runner /
-// browser console) reads `globalThis.__gxtActiveEffectCount` to detect
-// effect leaks across test boundaries — when a component is destroyed,
-// the count must net back down. Production builds compile this away
-// trivially since the counter is only read by diagnostics.
-(globalThis as any).__gxtActiveEffectCount = 0;
-
 /**
- * Wrap a `_gxtEffect(cb)` call so that:
- *   1. The active-effect counter is bumped on install and dropped on cleanup.
- *   2. The effect's cleanup runs when `owner` is destroyed (via Ember's
- *      destroyable plumbing in ./destroyable). This ties the effect's
- *      lifetime to the owning component instance, render-context, or
- *      element, preventing per-test formula leaks that otherwise cause a
- *      cumulative-state cascade across renders.
+ * Wrap a `_gxtEffect(cb)` call so that the effect's cleanup runs when `owner`
+ * is destroyed (via Ember's destroyable plumbing in ./destroyable). This ties
+ * the effect's lifetime to the owning component instance, render-context, or
+ * element, preventing per-test formula leaks that otherwise cause a
+ * cumulative-state cascade across renders.
  *
  * `owner` may be undefined / non-destroyable (e.g. a freshly-created HTML
- * element) — in that case we still bump the counter but the cleanup is
- * unreachable from the destroyable graph. Callers should pick the closest
- * destroyable in scope (component instance / render context).
+ * element) — in that case the cleanup is unreachable from the destroyable
+ * graph. Callers should pick the closest destroyable in scope (component
+ * instance / render context).
  */
 function _gxtEffectWithOwner(owner: object | null | undefined, cb: () => void): () => void {
   const cleanup = _gxtEffect(cb);
-  (globalThis as any).__gxtActiveEffectCount++;
   let cleaned = false;
   const wrapped = () => {
     if (cleaned) return;
     cleaned = true;
-    (globalThis as any).__gxtActiveEffectCount--;
     try {
       if (typeof cleanup === 'function') cleanup();
     } catch {
@@ -217,32 +206,16 @@ function _gxtEffectWithOwner(owner: object | null | undefined, cb: () => void): 
         wrapped();
       }
     } catch {
-      /* registration may fail for non-destroyable hosts; counter still works */
+      /* registration may fail for non-destroyable hosts */
     }
   }
   return wrapped;
 }
 
-// Stack-based instance capture for $_dc_ember lifecycle tracking.
-//
-// A flat "last created instance" slot breaks when nested components are
-// created during handle() — only the LAST instance survives, and
-// __dcCaptureInstance gets the wrong one. The stack scaffolding
-// (`_instanceCaptureStack`, `pushInstanceCapture`, `popInstanceCapture`) is
-// kept intact: `setInstanceCapture` updates the top of the stack when present,
-// leaving the option to re-enable the per-handle() push/pop pattern.
-const _instanceCaptureStack: Array<any> = [];
+// The most recently created Ember component instance, for $_dc_ember
+// lifecycle tracking.
 let _lastCreatedEmberInstance: any = null;
-function pushInstanceCapture() {
-  _instanceCaptureStack.push(null);
-}
-function popInstanceCapture(): any {
-  return _instanceCaptureStack.pop() ?? null;
-}
 function setInstanceCapture(inst: any) {
-  if (_instanceCaptureStack.length > 0) {
-    _instanceCaptureStack[_instanceCaptureStack.length - 1] = inst;
-  }
   _lastCreatedEmberInstance = inst;
 }
 /**
@@ -460,19 +433,6 @@ export function createCurriedComponent(
   return curried;
 }
 
-// Legacy class-based check — still support instanceof for existing code
-export class CurriedComponent {
-  // Marker class for instanceof checks
-  static isCurriedComponent(value: any): boolean {
-    return value && value.__isCurriedComponent === true;
-  }
-}
-
-// Make the check function globally accessible
-(globalThis as any).__EmberCurriedComponent = {
-  // Use a duck-type check instead of instanceof
-  __isCurriedComponentClass: true,
-};
 // Registered on the bridge (the retired `globalThis.__createCurriedComponent`
 // slot); ember-gxt-wrappers contributes the resolver-cache counting wrapper
 // via setCreateCurriedComponentWrapper, composed lazily at first use.
@@ -1216,9 +1176,9 @@ function getCurrentEachRowKey(): any | undefined {
 // Patch `globalThis.$_eachSync` so every iteration of a {{#each}} pushes/pops
 // the current row identity onto `_eachRowKeyStack`. Idempotent — runs once and
 // layers on top of compile.ts's own patch (order-independent: we wrap whatever
-// $_eachSync currently is). Each component instance created during the
-// iteration becomes tagged with `__gxtEachRowKey = item`, and the pool lookup
-// matches by that key instead of sequential position.
+// $_eachSync currently is). Each pool entry created during the iteration
+// records the row key (`eachRowKey`), and the pool lookup matches by that key
+// instead of sequential position.
 function _patchEachSyncForRowKeying(): boolean {
   const g = globalThis as any;
   if (!g.$_eachSync || g.$_eachSync.__emberRowKeyPatched) return false;
@@ -1550,11 +1510,6 @@ function getCachedOrCreateInstance(
   const newEntry: PoolEntry = { instance, claimed: true, updatedThisPass: false };
   if (insideEachRow) {
     newEntry.eachRowKey = currentRowKey;
-    try {
-      (instance as any).__gxtEachRowKey = currentRowKey;
-    } catch {
-      /* ignore */
-    }
   }
   pool.push(newEntry);
 
@@ -1761,11 +1716,6 @@ function createComponentInstance(
     props.elementId = props.id;
     props.__elementIdFromId = true; // Flag: elementId was mapped from id, not explicit
   }
-  // Also handle direct elementId arg
-  if ('elementId' in props && props.elementId !== undefined && !('id' in props)) {
-    // elementId is already set, just ensure it's preserved
-  }
-
   // Create the instance — let init errors propagate naturally so they
   // reach assert.throws in tests (GXT dist has no try-catch wrapper).
   const instance = factory.create(props);
@@ -2319,7 +2269,6 @@ function createComponentInstance(
       } catch {
         /* ignore */
       }
-      instance.__gxtCpDepToArgKey = cpDepToArgKey;
       // Cache the CP descriptors for each arg key so we can call their raw getter
       // directly (bypassing cell-cached getters installed on the instance).
       const argKeyToCpDesc: Record<string, any> = {};
@@ -2351,7 +2300,6 @@ function createComponentInstance(
       } catch {
         /* ignore */
       }
-      instance.__gxtArgKeyToCpDesc = argKeyToCpDesc;
 
       // Override PROPERTY_DID_CHANGE on the instance.
       // Capture the `triggerReRender` bridge method once here; it's optional, so
@@ -2873,33 +2821,6 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
               configurable: true,
               enumerable: true,
             });
-          }
-          // Install a gxt effect to dirty the classic tag when the upstream
-          // arg cell invalidates (same rationale as the createComponentInstance
-          // install site above).
-          try {
-            let lastEffectValue2: any = undefined;
-            let effectPrimed2 = false;
-            _gxtEffectWithOwner(instance, () => {
-              let v: any;
-              try {
-                v = getter();
-              } catch {
-                v = undefined;
-              }
-              if (effectPrimed2 && v !== lastEffectValue2) {
-                try {
-                  const dirty = classicDirtyTagForGuarded;
-                  if (dirty) dirty(instance, key);
-                } catch {
-                  /* noop */
-                }
-              }
-              lastEffectValue2 = v;
-              effectPrimed2 = true;
-            });
-          } catch {
-            /* ignore */
           }
         } catch {
           /* non-configurable */
@@ -4088,14 +4009,10 @@ const _UPDATE_HOOKS_FOR_MARK = new Set([
   'willRender',
 ]);
 
-// In-flight pass-id / cycle-id counters for the `_gxtSyncAllWrappers` wrap.
-// Set in the BEFORE step (after reading the renderer's current pass-id +
-// sync-cycle-id) and cleared to `0` in the AFTER step's `finally`. Read by
-// `_wrapInstanceTriggerForSyncAllMark` (to stamp fired-pass/cycle markers) and
-// by `_gxtSyncAllWrappersBody`. `0` means "no sync in flight", so the
-// truthy-checks at the read sites fall through. All readers/writers are
-// intra-file, so no bridge surface is exposed.
-let _gxtSyncAllInFlightPass = 0;
+// In-flight sync-cycle id for the `_gxtSyncAllWrappers` wrap. Set in the
+// BEFORE step from the renderer's sync-cycle id and cleared to `0` in the
+// AFTER step's `finally`. Read by `_wrapInstanceTriggerForSyncAllMark` to stamp
+// the fired-cycle markers; `0` means "no sync in flight".
 let _gxtSyncAllInFlightCycle = 0;
 
 // Detected-source-context slots for the two-way binding "arg source" detection
@@ -4121,13 +4038,7 @@ function _wrapInstanceTriggerForSyncAllMark(inst: any): void {
   if (!inst || typeof inst.trigger !== 'function' || inst.__gxtTriggerWrapped) return;
   const origTrigger = inst.trigger;
   const wrapped = function (this: any, name: string, ...args: any[]) {
-    // `0` (no sync in flight) falls through both guards below.
-    const __pass = _gxtSyncAllInFlightPass;
-    // Pass-id marker.
-    if (__pass && _UPDATE_HOOKS_FOR_MARK.has(name)) {
-      this.__gxtSyncAllFiredPassId = __pass;
-    }
-    // Cycle-id marker.
+    // `0` (no sync in flight) falls through the guard below.
     const __cycle = _gxtSyncAllInFlightCycle;
     if (__cycle && _UPDATE_HOOKS_FOR_MARK.has(name)) {
       this.__gxtSyncAllFiredCycleId = __cycle;
@@ -4183,12 +4094,7 @@ function _findCpWithSetterFor(inst: any, k: string): any {
 }
 
 function _gxtSyncAllWrappers(): void {
-  const g = globalThis as any;
-
-  // BEFORE: record the in-flight render-pass id and sync-cycle counter
-  // (read via the bridge) so the body can tell which pass/cycle is running.
-  const __curPass = getGxtRenderer()?.viewUtils.getRenderPassId?.() ?? 0;
-  _gxtSyncAllInFlightPass = __curPass;
+  // BEFORE: record the in-flight sync-cycle counter (read via the bridge).
   const __curCycle = getGxtRenderer()?.compilePipeline.getSyncCycleId?.() ?? 0;
   _gxtSyncAllInFlightCycle = __curCycle;
   // Proactively wrap `trigger` on all known-alive instances in all pool
@@ -4209,7 +4115,6 @@ function _gxtSyncAllWrappers(): void {
   } finally {
     // AFTER: clear in-flight state and dispatch dynamic-component change
     // listeners.
-    _gxtSyncAllInFlightPass = 0;
     _gxtSyncAllInFlightCycle = 0;
     for (const listener of _dcChangeListeners) {
       try {
@@ -4695,11 +4600,10 @@ function _gxtSyncAllWrappersBody(): void {
           // ref-swap-after-clear failure — #12444 string-positional,
           // GH#14508 dot-path rest positional, non-block-with-each).
           // Skipping arg keys keeps the restore scoped to genuine local state.
-          const skipArgKeys = true;
           const argKeysForEntry = entry.cells;
           for (const k of Object.keys(entry.instance)) {
             if (k.startsWith('_') || k.startsWith('__')) continue;
-            if (skipArgKeys && argKeysForEntry && k in argKeysForEntry) continue;
+            if (argKeysForEntry && k in argKeysForEntry) continue;
             snap[k] = entry.instance[k];
           }
           entry.instance.__gxtPreHookStateSnapshot = snap;
@@ -4794,7 +4698,6 @@ function _gxtPostRenderHooks(): void {
   // same hooks recursively.
   _updatedInstances.length = 0;
 
-  const g = globalThis as any;
   // Clear the pending flag before firing hooks so we can detect if a hook
   // (e.g. `this.set(...)` inside didUpdate) dirtied new state. The
   // pending-sync flags live in compile.ts; we save/read/clear them through the
@@ -6676,8 +6579,8 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
   // is fixed, install a `this.attrs` pass-through on the args object that
   // forwards property reads back to attrsProxy. This keeps Ember's
   // deprecated-but-supported `{{this.attrs.foo}}` rendering in classic
-  // curly components. Skip if the component template doesn't use this.attrs.
-  if (!attrsProxy.this && !(globalThis as any).__GXT_DISABLE_THIS_ATTRS_SHIM) {
+  // curly components.
+  if (!attrsProxy.this) {
     const attrsShim = new Proxy(
       {},
       {
@@ -7327,7 +7230,6 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
                 /* noop */
               }
             };
-            (rcSet as any).__gxtRenderCtxArgSetter = true;
             Object.defineProperty(renderContext, key, {
               get: rcGet,
               set: rcSet,
@@ -7919,7 +7821,7 @@ function renderTemplateWithParentView(
 // Simple Cell/Formula (for internal manager args)
 // =============================================================================
 
-const createCell = (initialValue: any, name?: string) => {
+const createCell = (initialValue: any) => {
   let value = initialValue;
   return {
     get value() {
@@ -7931,87 +7833,10 @@ const createCell = (initialValue: any, name?: string) => {
   };
 };
 
-const formula = <T>(fn: () => T, name?: string) => {
-  const c = createCell(fn(), name);
+const formula = <T>(fn: () => T) => {
+  const c = createCell(fn());
   return c;
 };
-
-function argsForInternalManager(args: any, fw: any) {
-  const named: Record<string, any> = {};
-  Object.keys(args).forEach((arg) => {
-    // Create a reactive ref that reads from the GXT args getter each time.
-    // Only add update() when a real setter exists or the value is a mut cell,
-    // so that isUpdatableRef returns false for plain args. This causes
-    // valueFrom() to create a ForkedValue, which properly handles local
-    // overrides (e.g., user typing in an input field) while still tracking
-    // upstream changes.
-    const desc = Object.getOwnPropertyDescriptor(args, arg);
-    const getter = desc?.get || (() => args[arg]);
-    // Check if this arg supports two-way binding (is a mut cell).
-    // Only mut cells should create updatable refs — plain args (even with
-    // GXT property descriptor setters) should use ForkedValue so that
-    // local overrides (e.g., user typing in an input/textarea) are preserved
-    // without writing back upstream (which GXT's sync would then overwrite).
-    const initialValue = (() => {
-      try {
-        return getter();
-      } catch {
-        return undefined;
-      }
-    })();
-    const hasMutCell = initialValue && initialValue.__isMutCell;
-    const isUpdatable = hasMutCell;
-
-    const ref: any = {
-      get value() {
-        const v = getter();
-        // If the getter returns a mut cell, unwrap it to get the plain value
-        if (v && v.__isMutCell) return v.value;
-        if (v && v.__isReadonly) return v.__readonlyValue;
-        return v;
-      },
-      set value(v: any) {
-        // Check if the getter returns a mut cell — use its update method
-        const current = getter();
-        if (current && current.__isMutCell) {
-          current.update(v);
-          return;
-        }
-        // Allow setting via .value = for internal use
-        if (desc?.set) {
-          desc.set(v);
-        }
-      },
-    };
-
-    // Only add update() for refs that support two-way binding.
-    // Without update(), isUpdatableRef returns false → valueFrom creates
-    // ForkedValue → local overrides work (user typing doesn't get clobbered).
-    if (isUpdatable) {
-      ref.update = function (v: any) {
-        const current = getter();
-        if (current && current.__isMutCell) {
-          current.update(v);
-          return;
-        }
-        if (desc?.set) {
-          desc.set(v);
-        }
-      };
-    }
-
-    named[arg] = ref;
-  });
-
-  return {
-    capture() {
-      return {
-        positional: [],
-        named,
-      };
-    },
-  };
-}
 
 // =============================================================================
 // Component Resolution
@@ -8395,11 +8220,6 @@ const $_MANAGERS = {
         return true;
       }
 
-      // Handle empty component marker (from $_dc_ember for falsy dynamic component names)
-      if (typeof komp === 'function' && (komp as any).__emptyComponent) {
-        return true;
-      }
-
       // Handle component classes/factories
       if (INTERNAL_MANAGERS.has(komp)) {
         return true;
@@ -8624,12 +8444,6 @@ const $_MANAGERS = {
             setAmbientOwner(prevOwner);
           }
         }
-      }
-
-      // Handle empty component marker (from $_dc_ember for falsy dynamic component names)
-      // Renders nothing — used when {{component this.foo}} and this.foo is undefined/null
-      if (typeof komp === 'function' && (komp as any).__emptyComponent) {
-        return () => document.createComment('empty dynamic component');
       }
 
       // Handle wrapped component functions from $_componentHelper
@@ -9179,9 +8993,6 @@ const $_MANAGERS = {
                 }
               };
               (curried as any).__isEmberCurriedHelper = true;
-              (curried as any).__helperBucket = bucket;
-              (curried as any).__helperDelegate = delegate;
-              (curried as any).__reactiveArgs = reactiveArgs;
               return curried;
             }
           }
@@ -9347,9 +9158,6 @@ const $_MANAGERS = {
                   }
                 };
                 (curried as any).__isEmberCurriedHelper = true;
-                (curried as any).__helperBucket = bucket;
-                (curried as any).__helperDelegate = delegate;
-                (curried as any).__reactiveArgs = reactiveArgs;
                 return curried;
               }
             }
@@ -9438,7 +9246,6 @@ const $_MANAGERS = {
     // The 'on' modifier from @glimmer/runtime is registered via
     // setInternalModifierManager and stored here for string-based resolution.
     _builtinModifiers: {} as Record<string, any>,
-    _builtinResolved: false,
 
     canHandle(modifier: any): boolean {
       if (typeof modifier === 'string') {
@@ -9493,25 +9300,6 @@ const $_MANAGERS = {
     },
 
     handle(modifier: any, element: HTMLElement, props: any[], hashArgs: any): any {
-      // During morph re-renders the template is rendered into a throwaway
-      // container.  Instead of installing modifiers on temp elements (which
-      // drifts add/remove counters), find the corresponding real DOM element
-      // and update its cached modifier with fresh args.
-      //
-      // The morph-render state lives in compile.ts; read it via the bridge.
-      // When the bridge isn't installed the optional-chain yields `undefined`,
-      // which the `if` gate treats as "not a morph render".
-      const _cp = getGxtRenderer()?.compilePipeline;
-      if (_cp?.isMorphRenderInProgress?.()) {
-        // During morph re-renders, collect modifier invocations so they can
-        // be replayed as updates on real DOM elements after morphing.
-        const pending = _cp.getMorphModifierInvocations?.();
-        if (pending) {
-          pending.push({ modifier, element, props, hashArgs });
-        }
-        return undefined;
-      }
-
       // In non-interactive (SSR-style) rendering, modifiers — which exist to
       // imperatively interact with DOM — must not install. Stock Ember uses
       // an `InertRenderer` that skips modifier installation wholesale; we
@@ -10031,7 +9819,6 @@ const $_MANAGERS = {
           ModifierClass,
           pendingDestroy: false,
           isInternal: true,
-          _buildCapturedArgs: buildCapturedArgs,
         };
         cache.set(modKey, cached);
 
@@ -10789,7 +10576,7 @@ function handleStringComponent(
 // Cache for custom-managed component instances, keyed by ComponentClass -> array of pool entries
 const _customManagedPool = new Map<
   any,
-  { instance: any; context: any; manager: any; claimed: boolean; lastPassId: number }[]
+  { instance: any; context: any; manager: any; claimed: boolean }[]
 >();
 
 // Properties added by createRenderContext that should be hidden from user code on
@@ -10981,7 +10768,6 @@ function handleCustomManagedComponent(
         context,
         manager: actualManager,
         claimed: true,
-        lastPassId: currentPassId,
       });
 
       // Call didCreateComponent if supported
@@ -11024,9 +10810,8 @@ function handleCustomManagedComponent(
     // `liveNamed`/`livePositional`. `_installCustomManagedArgEffect` dirties +
     // flushes this cell on a genuine arg change, re-firing the effect which
     // re-reads `this.salutation` fresh.
-    const _fgCustomManaged = true;
     let _argsRevCell: any = null;
-    if (_fgCustomManaged && renderContext) {
+    if (renderContext) {
       try {
         _argsRevCell = _gxtCellFor(renderContext, '__gxtArgsRev', /* skipDefine */ true);
         if (_argsRevCell) {
@@ -11110,7 +10895,6 @@ function handleCustomManagedComponent(
     // change. Initial-render only, and not when updateHook is false.
     const _yieldGetters: Array<() => any> = [];
     if (
-      _fgCustomManaged &&
       !isRerender &&
       !(asyncCaps && asyncCaps.updateHook === false) &&
       typeof actualManager.updateComponent === 'function'
@@ -11169,12 +10953,10 @@ function handleCustomManagedComponent(
     // that the pre-render hide couldn't see yet. A custom manager that pushes
     // the component for deep-equality needs the bare user shape, so strip them
     // now too.
-    if (_fgCustomManaged) {
-      hideGxtInternalPropsOn(renderContext);
-      if (instance && instance !== renderContext) hideGxtInternalPropsOn(instance);
-      if (context && context !== renderContext && context !== instance)
-        hideGxtInternalPropsOn(context);
-    }
+    hideGxtInternalPropsOn(renderContext);
+    if (instance && instance !== renderContext) hideGxtInternalPropsOn(instance);
+    if (context && context !== renderContext && context !== instance)
+      hideGxtInternalPropsOn(context);
 
     // Set up destructor on initial render only
     if (
@@ -11247,7 +11029,7 @@ function handleCustomManagedComponent(
       }
     }
 
-    return createGxtResult(container);
+    return container;
   };
 }
 
@@ -11415,7 +11197,8 @@ function _installCustomManagedArgEffect(o: {
     // recomputeDependents (step 2) only matches CP-declared dependents; a plain
     // native getter has none. The component's GXT element-child text effect
     // subscribed to the per-component args-revision cell (via the cell-backed
-    // `this.args.named`/`.positional` getters installed in createGxtResult).
+    // `this.args.named`/`.positional` getters that handleCustomManagedComponent
+    // installs).
     // Dirty + synchronously flush that cell here so the effect re-runs and
     // re-reads `this.salutation` with the new args this tick. Best-effort.
     try {
@@ -11528,9 +11311,6 @@ function _installCustomManagedYieldEffect(o: {
     for (let i = 0; i < yieldGetters.length; i++) {
       const v = _resolve(yieldGetters[i]!);
       next[i] = v;
-      if (!primed && i === 0) {
-        // first run just primes — fall through to record below
-      }
       if (primed && v !== last[i]) {
         changed = true;
       }
@@ -12413,26 +12193,6 @@ function handleManagedComponent(
       // primitive value equals (a new LocalValue may have been assigned
       // and the old effect is disconnected from it).
       if (inst && inst._value && typeof inst._value.__syncFromUpstream === 'function') {
-        // Leak-debug: this is the final clobber site for typed input
-        // values. A cache HIT here on the next test (after a leaked
-        // reactor triggered re-render) wipes user input.
-        if ((globalThis as any).__GXT_LEAK_DEBUG__) {
-          try {
-            const Q = (globalThis as any).QUnit;
-            const t = Q?.config?.current;
-            const liveVal =
-              cached.liveEl && cached.liveEl.isConnected
-                ? (cached.liveEl as HTMLInputElement).value
-                : '<no-live>';
-            const upstreamVal = inst.value;
-            // eslint-disable-next-line no-console
-            console.log(
-              `[leak-debug] cacheHIT __syncFromUpstream slot=${slotKey} test="${t?.module?.name || ''}::${t?.testName || ''}" live=${JSON.stringify(liveVal)} upstream=${JSON.stringify(upstreamVal)}`
-            );
-          } catch {
-            /* ignore */
-          }
-        }
         inst._value.__syncFromUpstream();
         if (cached.liveEl && cached.liveEl.isConnected) {
           try {
@@ -12464,7 +12224,7 @@ function handleManagedComponent(
     internalArgs,
     {},
     {},
-    formula(() => ctx, 'internalManager:caller')
+    formula(() => ctx)
   );
 
   // Slot reference captured by closure — allows renderFn to update liveEl
@@ -13222,12 +12982,11 @@ function renderClassicComponent(
       // wrapper element updates in place when the source changes (AngleBracket
       // `custom id` + `splattributes`). Without this, the eager one-time
       // evaluation below would capture a stale snapshot and never re-apply.
-      const reactiveFw = true;
       // Apply props (fw[0]) — class, id, etc.
       if (Array.isArray(fw[0])) {
         for (const [key, value] of fw[0]) {
           const attrKey = key === '' ? 'class' : key;
-          if (reactiveFw && typeof value === 'function') {
+          if (typeof value === 'function') {
             if (attrKey === 'class') {
               const baseClass = wrapperEl.className;
               _gxtEffect(() => {
@@ -13268,7 +13027,7 @@ function renderClassicComponent(
       // Apply attrs (fw[1]) — data-*, title, etc.
       if (Array.isArray(fw[1])) {
         for (const [key, value] of fw[1]) {
-          if (reactiveFw && typeof value === 'function') {
+          if (typeof value === 'function') {
             _gxtEffect(() => {
               const resolved = value();
               if (resolved != null && resolved !== false && resolved !== undefined) {
@@ -13475,7 +13234,7 @@ function renderClassicComponent(
     }
 
     // Return GXT-compatible result
-    return createGxtResult(wrapper);
+    return wrapper;
   };
 
   if (!suppressTrigger) {
@@ -13518,19 +13277,7 @@ function renderGlimmerComponent(instance: any, template: any, args: any, fw: any
 
   renderTemplateWithParentView(template, renderContext, container, instance);
 
-  return createGxtResult(container);
-}
-
-/**
- * Create a GXT-compatible result object.
- */
-function createGxtResult(content: Element | DocumentFragment): any {
-  if (content instanceof DocumentFragment) {
-    // Return fragment directly for tagless/fragment components.
-    return content;
-  }
-  // Single element (wrapped component) - return directly
-  return content;
+  return container;
 }
 
 // =============================================================================
@@ -13710,10 +13457,6 @@ export function setHelperManager(factory: any, helper: any) {
   assertManagerTarget(helper, 'helper');
   assertNoExistingHelperManager(helper);
   return setInternalHelperManager(new CustomHelperManager(factory), helper, true);
-}
-
-export function getHelperManager(helper: any) {
-  return getInternalHelperManager(helper);
 }
 
 // Caches wrapper CustomComponentManager / CustomModifierManager instances so
@@ -14004,7 +13747,7 @@ export function setInternalModifierManager(manager: any, modifier: any, _skipGua
 }
 
 // Flush pending builtin modifier registrations
-export function _flushPendingBuiltinModifiers() {
+function _flushPendingBuiltinModifiers() {
   if ($_MANAGERS?.modifier?._builtinModifiers && _pendingBuiltinModifiers.length > 0) {
     for (const { name, modifier } of _pendingBuiltinModifiers) {
       $_MANAGERS.modifier._builtinModifiers[name] = modifier;
@@ -14029,10 +13772,6 @@ export function setComponentManager(manager: any, component: any) {
   assertNoExistingComponentManager(component);
   COMPONENT_MANAGERS.set(component, manager);
   return component;
-}
-
-export function getComponentManager(component: any) {
-  return COMPONENT_MANAGERS.get(component);
 }
 
 export function setModifierManager(factory: any, modifier: any) {
@@ -14474,10 +14213,6 @@ export class CustomComponentManager {
   didRenderLayout(_state: CustomComponentState, _bounds?: any): void {}
   didUpdateLayout(_state: CustomComponentState, _bounds?: any): void {}
 
-  getStaticLayout(component: any) {
-    return this.delegate?.getStaticLayout?.(component);
-  }
-
   getDynamicLayout(instance: any) {
     return this.delegate?.getDynamicLayout?.(instance);
   }
@@ -14704,57 +14439,15 @@ function _createUpdatableTagForModifier(): any {
 // Export $_MANAGERS for GXT Integration
 // =============================================================================
 
-// Install our handlers onto GXT's $_MANAGERS table. Hook-capable dists expose
-// `registerHostManagers()` — a
-// function living in the same module instance the runtime call sites close
-// over, so the registration reaches the canonical table directly (no
-// object-identity hunting, no deferred retry). Legacy dists keep the original
-// contract: find the GXT-original object reference and MUTATE it in place
-// (replacing it wouldn't work — GXT's $_maybeModifier/$_maybeHelper close
-// over the original reference).
+// Install our handlers onto GXT's $_MANAGERS table via `registerHostManagers()`,
+// which lives in the same module instance the runtime call sites close over,
+// so the registration reaches the canonical table directly.
 {
   if (_gxtRegisterHostManagers) {
     _gxtRegisterHostManagers({
       component: $_MANAGERS.component,
       helper: $_MANAGERS.helper,
       modifier: $_MANAGERS.modifier,
-    });
-  } else {
-    // @ts-ignore - direct path import
-    let gxtOrigManagers: any = null;
-    try {
-      // Read the GXT module via the `runtime.getGxtModule()` bridge. The writer
-      // is `gxt-with-runtime-hbs.ts` (contributed via `installRuntimePart`).
-      // Optional chains guard against that entry not being in the import graph.
-      const gxtMod = getGxtRenderer()?.runtime.getGxtModule?.() as any;
-      if (gxtMod?.$_MANAGERS) {
-        gxtOrigManagers = gxtMod.$_MANAGERS;
-      }
-    } catch {
-      /* ignore */
-    }
-    if (gxtOrigManagers && gxtOrigManagers !== $_MANAGERS) {
-      gxtOrigManagers.component = $_MANAGERS.component;
-      gxtOrigManagers.helper = $_MANAGERS.helper;
-      gxtOrigManagers.modifier = $_MANAGERS.modifier;
-    }
-    // Deferred retry: contributors to `runtime` (compile.ts and/or
-    // gxt-with-runtime-hbs.ts) may install AFTER this module's synchronous init
-    // runs. Both publish the same GXT-original `$_MANAGERS` reference via
-    // `runtime.getOriginalManagers()`; the microtask gives them a turn to
-    // register before we look up the reference and mutate the original object in
-    // place.
-    queueMicrotask(() => {
-      try {
-        const gxtMgrs = getGxtRenderer()?.runtime.getOriginalManagers?.() as any;
-        if (gxtMgrs && gxtMgrs !== $_MANAGERS) {
-          gxtMgrs.component = $_MANAGERS.component;
-          gxtMgrs.helper = $_MANAGERS.helper;
-          gxtMgrs.modifier = $_MANAGERS.modifier;
-        }
-      } catch {
-        /* ignore — bridge may be uninstalled in non-GXT-mode builds */
-      }
     });
   }
 }
