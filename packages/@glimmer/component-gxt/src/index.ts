@@ -35,8 +35,6 @@
  * re-exporting its default here yields a `Component` already wired to the
  * GXT reactive core. When the real `ember-source-gxt` packaging exists
  * (RFC §5.5), this re-export targets the GXT-wired component bundled there
- * instead of the npm copy; the installer guard in `scripts/ember-cli-gxt.mjs`
- * refuses to enable GXT while a direct `@glimmer/component` import is still
- * reachable, which is what makes the swap safe.
+ * instead of the npm copy.
  */
 export { default } from '@glimmer/component';

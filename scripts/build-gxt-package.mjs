@@ -279,7 +279,6 @@ const copySpecs = [
   ['blueprints', 'blueprints'],
   ['docs/data.json', 'docs/data.json', { optional: true }],
   ['types/stable', 'types/stable'],
-  ['scripts/ember-cli-gxt.mjs', 'scripts/ember-cli-gxt.mjs'],
 ];
 for (const [from, to, opts] of copySpecs) {
   const src = join(repoRoot, from);
@@ -428,17 +427,10 @@ function buildGxtPackageJson() {
     fail(`@lifeart/gxt must be an EXACT pin, got "${pkg.dependencies['@lifeart/gxt']}"`);
   }
 
-  // bin target must be packed.
-  if (!pkg.files.includes('scripts/ember-cli-gxt.mjs')) {
-    pkg.files = [...pkg.files, 'scripts/ember-cli-gxt.mjs'].sort();
-  }
-
   pkg['ember-addon'] = {
     after: pkg['ember-addon']?.after ?? 'ember-cli-legacy-blueprints',
     type: 'addon',
     version: 2,
-    // Self-identification; harmless, read by scripts/ember-cli-gxt.mjs status.
-    backend: 'gxt',
     'renamed-modules': gxtRenamedModules,
   };
 

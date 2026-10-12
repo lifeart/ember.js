@@ -23,9 +23,6 @@
   },
   "license": "MIT",
   "main": "lib/index.cjs",
-  "bin": {
-    "ember-cli-gxt": "./scripts/ember-cli-gxt.mjs"
-  },
   "files": [
     "build-metadata.json",
     "blueprints",
