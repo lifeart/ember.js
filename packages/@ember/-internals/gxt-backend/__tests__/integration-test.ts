@@ -693,11 +693,6 @@ gxtSuiteModule('Validator System', function (hooks: any) {
   });
 });
 
-// Force register a simple test to verify QUnit is working
-QUnit.test('simple sanity check', function (assert: any) {
-  assert.ok(true, 'sanity check passed');
-});
-
 gxtSuiteModule('Outlet Integration', function (hooks: any) {
   let fixture: HTMLElement;
 
