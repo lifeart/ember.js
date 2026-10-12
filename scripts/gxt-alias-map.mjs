@@ -152,6 +152,13 @@ export const GXT_DIST_VM_STUBS = {
     // explicitly out of scope for the GXT preview (RFC §7).
     '@glimmer/node/lib/node-dom-helper',
     '@glimmer/node/lib/serialize-builder',
+    // The Glimmer wire-format template compiler behind `template()` from
+    // `@ember/template-compiler`: in GXT mode that function compiles through
+    // the gxt pipeline (compile.ts) and has no Glimmer-compiler fallback (a
+    // wire-format template cannot render without the VM), but the classic
+    // fallback's top-level import kept @glimmer/compiler + @glimmer/syntax +
+    // @handlebars/parser + simple-html-tokenizer (~190KB min) in the dist.
+    '@glimmer/compiler/lib/compiler',
   ]),
 };
 

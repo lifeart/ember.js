@@ -455,7 +455,10 @@ export function template(
   templateString: string,
   providedOptions?: BaseTemplateOptions | BaseClassTemplateOptions<any>
 ): object {
-  // In GXT mode, use the GXT runtime compiler instead of Glimmer compiler
+  // In GXT mode, use the GXT runtime compiler instead of Glimmer compiler.
+  // This branch always returns or throws: a wire-format template cannot render
+  // without the Glimmer VM, so GXT mode has no Glimmer-compiler fallback (and
+  // the GXT rollup dist stubs @glimmer/compiler out — GXT_DIST_VM_STUBS).
   if (__GXT_MODE__) {
     const gxtCompile = getGxtRenderer()?.compilePipeline.compileTemplate;
     if (gxtCompile) {
@@ -534,6 +537,9 @@ export function template(
       setComponentTemplate(gxtTemplate as Parameters<typeof setComponentTemplate>[0], gxtComponent);
       return gxtComponent;
     }
+    throw new Error(
+      'template(): the GXT template compile pipeline is not installed (@ember/-internals/gxt-backend/compile.ts has not loaded)'
+    );
   }
 
   const options = { strictMode: true, ...providedOptions };

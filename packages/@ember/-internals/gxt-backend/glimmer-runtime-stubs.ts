@@ -65,6 +65,11 @@ export const serializeBuilder = vmStub('serializeBuilder');
 const NodeDOMTreeConstruction = vmStub('NodeDOMTreeConstruction');
 export default NodeDOMTreeConstruction;
 
+// @glimmer/compiler/lib/compiler — the wire-format compiler behind the classic
+// branch of `template()` (@ember/template-compiler/lib/template.ts), which
+// returns before reaching it in GXT mode.
+export const precompile = vmStub('precompile');
+
 // Bare '@glimmer/runtime' index — only the wrappers' dynamic-import
 // UpdatingVM patch reaches it in the dist graph; `undefined` makes that
 // site's `if (UVM && ...)` guard a no-op (no VM runs in the GXT dist).
