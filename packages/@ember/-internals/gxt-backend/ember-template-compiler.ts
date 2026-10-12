@@ -32,6 +32,7 @@ import { compileTemplate } from './compile';
 import { templateCacheCounters } from '@glimmer/opcode-compiler';
 import { assert as _emberDebugAssert } from '@ember/debug';
 import { ENV } from '@ember/-internals/environment';
+import VERSION from 'ember/version';
 
 // GXT's `IS_GLIMMER_COMPAT_MODE` BlockStatement handler emits a raw
 // element tag (`<input>`, `<textarea>`) whenever the path name has no
@@ -421,16 +422,17 @@ export function compileOptions(options: Partial<EmberPrecompileOptions> = {}) {
   return options;
 }
 
-export function buildCompileOptions(options: any) {
+// The public ember-template-compiler API exports these two with a leading
+// underscore (packages/ember-template-compiler/lib/public-api.ts).
+export function _buildCompileOptions(options: any) {
   return options;
 }
 
-export function transformsFor() {
+export function _transformsFor() {
   return [];
 }
 
-// Export VERSION for compatibility
-export const VERSION = '5.0.0-gxt';
+export { VERSION };
 
 // Minimal GlimmerSyntax placeholder (no-op implementations)
 export const _GlimmerSyntax = {

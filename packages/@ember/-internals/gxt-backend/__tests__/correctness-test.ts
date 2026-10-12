@@ -3,6 +3,8 @@
  * classic Ember. The test page loads this file only in GXT builds
  * (`virtual:gxt-tests`).
  */
+import { VERSION } from '@ember/version';
+import * as templateCompiler from 'ember-template-compiler';
 import { CustomComponentManager, componentCapabilities } from '../manager';
 import { destroy } from '../destroyable';
 
@@ -54,4 +56,15 @@ QUnit.module('GXT correctness: CustomComponentManager', function () {
       assert.deepEqual(calls, ['destroyComponent']);
     }
   );
+});
+
+QUnit.module('GXT correctness: ember-template-compiler shim', function () {
+  QUnit.test('exports the public underscore-prefixed names', function (assert: any) {
+    assert.strictEqual(typeof (templateCompiler as any)._buildCompileOptions, 'function');
+    assert.strictEqual(typeof (templateCompiler as any)._transformsFor, 'function');
+  });
+
+  QUnit.test('VERSION is the Ember version', function (assert: any) {
+    assert.strictEqual((templateCompiler as any).VERSION, VERSION);
+  });
 });
