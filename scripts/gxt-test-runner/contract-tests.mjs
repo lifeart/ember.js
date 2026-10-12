@@ -23,8 +23,13 @@
 // time, so neither requires a runtime export.
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
+
+const require = createRequire(import.meta.url);
+const { parseAst } = require('rollup/parseAst');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..', '..');
@@ -49,38 +54,42 @@ function gxtBackendSourceFiles() {
 }
 
 /**
- * Scan every gxt-backend source file for `import { ... } from '@lifeart/gxt[/subpath]'`
- * statements AND `export { ... } from '@lifeart/gxt'` re-exports (a re-export
- * is just as much a static dependency on the published surface). Blocks are
- * multi-line with comments interspersed. Collects the ORIGINAL upstream names
- * per subpath: `orig as alias` contributes `orig`; `type X` specifiers are
- * skipped.
+ * Parse every gxt-backend source file (TypeScript AST) and collect, per
+ * `@lifeart/gxt[/subpath]`, the ORIGINAL upstream names of its named imports
+ * and named re-exports (a re-export is just as much a static dependency on the
+ * published surface): `orig as alias` contributes `orig`. `import type` /
+ * `export type` declarations and inline `type X` specifiers are erased at
+ * compile time and skipped; namespace and default imports name no export.
  */
 function deriveRequiredImports() {
   const bySubpath = new Map();
-  // `import type { ... }` statements deliberately do not match (the `type`
-  // keyword between `import` and `{` breaks the pattern) — they are erased.
-  // The body is restricted to brace-free text so the lazy match cannot span
-  // from an earlier `import {` of a DIFFERENT module across `} from '...'`
-  // boundaries into a later @lifeart/gxt import. Comments are stripped first
-  // (also brace-proofing: compile.ts's import block mentions `{{unbound}}`
-  // in a comment, and fully commented-out imports vanish with their line).
-  const importRe =
-    /(?:import|export)\s*\{([^{}]*?)\}\s*from\s*['"](@lifeart\/gxt(?:\/[\w-]+)*)['"]/g;
+  const GXT_SPECIFIER = /^@lifeart\/gxt(?:\/[\w-]+)*$/;
   const files = gxtBackendSourceFiles();
   for (const file of files) {
-    const source = readFileSync(file, 'utf-8')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\/\/[^\n]*/g, '');
-    let m;
-    while ((m = importRe.exec(source)) !== null) {
-      for (const piece of m[1].split(',')) {
-        const spec = piece.trim();
-        if (!spec || spec.startsWith('type ')) continue;
-        const orig = spec.split(/\s+as\s+/)[0].trim();
-        if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(orig)) continue;
-        if (!bySubpath.has(m[2])) bySubpath.set(m[2], new Set());
-        bySubpath.get(m[2]).add(orig);
+    const sf = ts.createSourceFile(file, readFileSync(file, 'utf-8'), ts.ScriptTarget.Latest);
+    for (const stmt of sf.statements) {
+      let elements;
+      if (ts.isImportDeclaration(stmt)) {
+        const clause = stmt.importClause;
+        if (!clause || clause.isTypeOnly) continue;
+        if (!clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue;
+        elements = clause.namedBindings.elements;
+      } else if (ts.isExportDeclaration(stmt)) {
+        if (stmt.isTypeOnly || !stmt.exportClause || !ts.isNamedExports(stmt.exportClause))
+          continue;
+        elements = stmt.exportClause.elements;
+      } else {
+        continue;
+      }
+      const subpath =
+        stmt.moduleSpecifier && ts.isStringLiteral(stmt.moduleSpecifier)
+          ? stmt.moduleSpecifier.text
+          : null;
+      if (!subpath || !GXT_SPECIFIER.test(subpath)) continue;
+      for (const el of elements) {
+        if (el.isTypeOnly) continue;
+        if (!bySubpath.has(subpath)) bySubpath.set(subpath, new Set());
+        bySubpath.get(subpath).add((el.propertyName ?? el.name).text);
       }
     }
   }
@@ -133,36 +142,23 @@ function resolveSubpath(subpath) {
 }
 
 /**
- * Scan the bundle text for bindings exposed via `export { a, b as c }` and
- * `export { ... } from '...'` declarations. We only care that each required
- * *public name* appears as an export binding — the internal source does not
- * need to be walked.
+ * The public names a bundle exports (`export { a, b as c }`, `export … from`,
+ * `export const|function|class …`), read from its ESTree.
  */
 function collectExports(source) {
   const exports = new Set();
-
-  // export { a, b as c, d as default }
-  const reExportBlock = /export\s*\{([^}]*)\}/g;
-  let m;
-  while ((m = reExportBlock.exec(source)) !== null) {
-    const inside = m[1];
-    for (const piece of inside.split(',')) {
-      const trimmed = piece.trim();
-      if (!trimmed) continue;
-      // `x as y` -> public name is `y`; bare `x` -> public name is `x`
-      const asMatch = trimmed.match(/\bas\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*$/);
-      const name = asMatch ? asMatch[1] : trimmed.match(/^([A-Za-z_$][A-Za-z0-9_$]*)/)?.[1];
-      if (name) exports.add(name);
+  const nameOf = (node) => node.name ?? node.value;
+  for (const node of parseAst(source).body) {
+    if (node.type === 'ExportNamedDeclaration') {
+      for (const spec of node.specifiers) exports.add(nameOf(spec.exported));
+      const decl = node.declaration;
+      if (decl?.id) exports.add(decl.id.name);
+      for (const d of decl?.declarations ?? [])
+        if (d.id.type === 'Identifier') exports.add(d.id.name);
+    } else if (node.type === 'ExportDefaultDeclaration') {
+      exports.add('default');
     }
   }
-
-  // export function foo / export class Foo / export const foo / export let foo / export var foo
-  const reDirect =
-    /export\s+(?:async\s+)?(?:function\*?|class|const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g;
-  while ((m = reDirect.exec(source)) !== null) {
-    exports.add(m[1]);
-  }
-
   return exports;
 }
 

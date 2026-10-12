@@ -50,6 +50,7 @@ import { GXT_DROPPED_ENTRIES } from './gxt-alias-map.mjs';
 
 // eslint-disable-next-line no-redeclare
 const require = createRequire(import.meta.url);
+const { parseAst } = require('rollup/parseAst');
 // eslint-disable-next-line no-redeclare
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
@@ -457,20 +458,67 @@ function walkFiles(dir, predicate, acc = []) {
 }
 
 // Static `import … from` / `export … from` / side-effect `import` specifiers of
-// one dist module (block comments stripped; dynamic import() is not followed).
-// Rollup's output may put several statements on one line, so no line anchors.
-function staticSpecifiers(raw) {
-  const code = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+// one dist module, read from its ESTree (dynamic import() is not followed).
+function staticSpecifiers(code) {
   const specs = [];
-  const patterns = [
-    /\b(?:import|export)\b[^'";]*?\bfrom\s*['"]([^'"]+)['"]/g,
-    /\bimport\s*['"]([^'"]+)['"]/g,
-  ];
-  for (const re of patterns) {
-    let m;
-    while ((m = re.exec(code)) !== null) specs.push(m[1]);
+  for (const node of parseAst(code).body) {
+    if (
+      (node.type === 'ImportDeclaration' ||
+        node.type === 'ExportNamedDeclaration' ||
+        node.type === 'ExportAllDeclaration') &&
+      node.source
+    ) {
+      specs.push(node.source.value);
+    }
   }
   return specs;
+}
+
+// The string arguments of CommonJS `require('…')` calls anywhere in a module
+// (the generated stub is CJS).
+function requireSpecifiers(code) {
+  const specs = [];
+  const walk = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const child of node) walk(child);
+      return;
+    }
+    if (
+      node.type === 'CallExpression' &&
+      node.callee.type === 'Identifier' &&
+      node.callee.name === 'require' &&
+      node.arguments[0]?.type === 'Literal' &&
+      typeof node.arguments[0].value === 'string'
+    ) {
+      specs.push(node.arguments[0].value);
+    }
+    for (const key in node) {
+      if (key !== 'start' && key !== 'end') walk(node[key]);
+    }
+  };
+  walk(parseAst(code));
+  return specs;
+}
+
+// The local and exported names of a module's own `export { … }` /
+// `export const|function|class …` declarations.
+function exportDeclarationNames(code) {
+  const names = new Set();
+  const nameOf = (node) => node.name ?? node.value;
+  for (const node of parseAst(code).body) {
+    if (node.type !== 'ExportNamedDeclaration') continue;
+    for (const spec of node.specifiers) {
+      names.add(nameOf(spec.local));
+      names.add(nameOf(spec.exported));
+    }
+    const decl = node.declaration;
+    if (decl?.id) names.add(decl.id.name);
+    for (const d of decl?.declarations ?? []) {
+      if (d.id.type === 'Identifier') names.add(d.id.name);
+    }
+  }
+  return names;
 }
 
 function importsSpecifier(code, specifier) {
@@ -560,14 +608,9 @@ function selfVerify() {
       !f.includes('shared-chunks')
   );
   for (const f of glimmerEntries) {
-    const code = readFileSync(f, 'utf8');
-    const clauses = [
-      ...(code.match(/export\s*\{[^}]*\}/g) || []),
-      ...(code.match(/export\s+(?:const|class|function|let|var)\s+[A-Za-z0-9_$]+/g) || []),
-    ];
+    const exported = exportDeclarationNames(readFileSync(f, 'utf8'));
     for (const sym of FORBIDDEN_VM_SYMBOLS) {
-      const wordRe = new RegExp(`\\b${sym}\\b`);
-      if (clauses.some((c) => wordRe.test(c))) {
+      if (exported.has(sym)) {
         fail(
           `self-verify: forbidden VM symbol "${sym}" is re-exported from shipped @glimmer entry ${relative(outDir, f)}`
         );
@@ -576,31 +619,13 @@ function selfVerify() {
   }
   log('  ok: no shipped @glimmer/* entry re-exports LowLevelVM/renderComponent/EnvironmentImpl');
 
-  // Extract REAL module specifiers from import/export-from/side-effect-import
-  // statements only (line-anchored, comments stripped). Block comments are
-  // removed first so JSDoc @example code (e.g. `import MyApp from 'my-app';`)
-  // and template-literal error strings (e.g. `... from '<scope>'`) are not
-  // mistaken for real imports.
-  const collectBareSpecifiers = (raw) => {
-    const code = raw.replace(/\/\*[\s\S]*?\*\//g, ''); // strip block comments
-    const specs = [];
-    const patterns = [
-      /^\s*import\b[^\n;]*?\bfrom\s*['"]([^'"]+)['"]/gm, // import x from '...'
-      /^\s*export\b[^\n;]*?\bfrom\s*['"]([^'"]+)['"]/gm, // export ... from '...'
-      /^\s*import\s*['"]([^'"]+)['"]/gm, // bare side-effect import '...'
-      /\brequire\(\s*['"]([^'"]+)['"]\s*\)/gm, // CJS require('...') (the stub)
-    ];
-    for (const re of patterns) {
-      let m;
-      while ((m = re.exec(code)) !== null) {
-        const spec = m[1];
-        if (!spec.startsWith('.') && !spec.startsWith('/')) {
-          specs.push(spec);
-        }
-      }
-    }
-    return specs;
-  };
+  // The bare (non-relative, non-absolute) module specifiers of a dist file:
+  // its import/export-from/side-effect imports and CJS require() calls, read
+  // from the AST (so JSDoc @example code and strings never count).
+  const collectBareSpecifiers = (code) =>
+    [...staticSpecifiers(code), ...requireSpecifiers(code)].filter(
+      (spec) => !spec.startsWith('.') && !spec.startsWith('/')
+    );
 
   // (d) Every bare specifier in the dist must be resolvable for a consumer:
   // either @lifeart/gxt(/*), a node builtin, a SELF-reference into ember-source's
