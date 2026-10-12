@@ -70,6 +70,13 @@ export default NodeDOMTreeConstruction;
 // returns before reaching it in GXT mode.
 export const precompile = vmStub('precompile');
 
+// @glimmer/opcode-compiler/lib/program-context + @glimmer/program/lib/{helpers,
+// opcode} — the classic renderer's VM evaluation context (`createContext` is a
+// thrower under `__GXT_MODE__`, so these are never constructed).
+export const EvaluationContextImpl = vmStub('EvaluationContextImpl');
+export const artifacts = vmStub('artifacts');
+export const RuntimeOpImpl = vmStub('RuntimeOpImpl');
+
 // Bare '@glimmer/runtime' index — only the wrappers' dynamic-import
 // UpdatingVM patch reaches it in the dist graph; `undefined` makes that
 // site's `if (UVM && ...)` guard a no-op (no VM runs in the GXT dist).

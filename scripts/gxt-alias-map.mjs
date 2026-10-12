@@ -159,6 +159,12 @@ export const GXT_DIST_VM_STUBS = {
     // fallback's top-level import kept @glimmer/compiler + @glimmer/syntax +
     // @handlebars/parser + simple-html-tokenizer (~190KB min) in the dist.
     '@glimmer/compiler/lib/compiler',
+    // The VM evaluation-context constructors the classic renderer imports at
+    // top level for `createContext` (renderer.ts), which is a thrower under
+    // `__GXT_MODE__`: the opcode compiler stdlib/encoder + program artifacts.
+    '@glimmer/opcode-compiler/lib/program-context',
+    '@glimmer/program/lib/helpers',
+    '@glimmer/program/lib/opcode',
   ]),
 };
 
