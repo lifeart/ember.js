@@ -16,6 +16,7 @@ import {
   constructStyleDeprecationMessage as _constructStyleDeprecationMessage,
   isAssertionLike as _isAssertionLike,
   protectGlobal,
+  isPlainHtmlTagFastPath,
 } from './utils';
 import {
   initChildViews as _emberInitChildViews,
@@ -8834,74 +8835,11 @@ if (g.$_c && !g.$_c.__emberWrapped) {
 // full slow path — so SafeString / null-strip / splat / namespace / reactive-attr
 // semantics are fully preserved for everything else.
 //
-// CONSERVATISM (proves each skipped scan is dead):
-//  - plain lowercase tag /^[a-z][a-z0-9]*$/ (NO hyphen — a kebab tag could be a
-//    registered component/helper handled by mightBeComponent) → never a
-//    component / dynamic (@/this.) / named-block (:) / EmberHtmlRaw tag.
-//  - no namespace (_gxtNamespace unset) → the SVG/MathML getter-wrapping +
-//    the (already namespace-gated) attr scans don't apply.
-//  - no splat (tagProps[3] not an array) → no ...attributes merge / fw reorder.
-//  - tagProps[1] (attrs): no function-valued entry (would need the eager
-//    nullish-getter scan + reactive-undefined cleanup) AND no STATIC
-//    null/undefined entry (would need the null-attr strip → "do not render").
-//  - tagProps[2] (events): no TEXT_CONTENT entry (key '1') → the SafeString
-//    text-getter scan finds nothing AND the modifier/text reorder (needs BOTH
-//    text + modifier present) can't apply. Plain DOM event listeners (key
-//    'click' …) and ON_CREATED modifiers (key '0') are applied natively by
-//    GXT's $ev exactly as the slow path would leave them.
-//  - tagProps[0] (props): every entry is the class slot (empty key) — GXT's
-//    addProperties applies class (incl. a reactive class getter) natively, and
-//    the position-0 post-apply scan explicitly skips the empty key. Any other
-//    position-0 key would risk the post-apply doing real setAttribute work, so
-//    we bail to the slow path.
-//
-// hasReactiveStyle is irrelevant here: a reactive `style` binding lands in
-// tagProps[0] under the 'style' key (not empty-key), which fails the props
-// check above → slow path. So the style getter-wrap is never skipped.
-const _PLAIN_HTML_TAG_RE = /^[a-z][a-z0-9]*$/;
+// `isPlainHtmlTagFastPath` (utils.ts) lists why each skipped scan is dead; this
+// wrapper also requires that no SVG/MathML namespace is active (the namespace
+// getter-wrapping and the namespace-gated attr scans would apply).
 function _gxtTagFastPathEligible(tag: unknown, tagProps: any): boolean {
-  if (typeof tag !== 'string' || !_PLAIN_HTML_TAG_RE.test(tag)) return false;
-  if (_gxtNamespace) return false;
-  if (tagProps === g.$_edp || tagProps == null) return false;
-  // No splat / forwarded attributes.
-  if (Array.isArray(tagProps[3])) return false;
-  // tagProps[1] (attrs): reject any reactive (function) value or static
-  // null/undefined (which the slow path would strip).
-  const attrs = tagProps[1];
-  if (Array.isArray(attrs)) {
-    for (let i = 0; i < attrs.length; i++) {
-      const entry = attrs[i];
-      if (!Array.isArray(entry) || entry.length < 2) return false;
-      const v = entry[1];
-      if (typeof v === 'function') return false;
-      if (v === null || v === undefined) return false;
-    }
-  } else if (attrs != null) {
-    return false;
-  }
-  // tagProps[2] (events): reject any TEXT_CONTENT entry (key '1') — that is the
-  // only thing the SafeString scan / modifier-text reorder care about.
-  const events = tagProps[2];
-  if (Array.isArray(events)) {
-    for (let i = 0; i < events.length; i++) {
-      const entry = events[i];
-      if (Array.isArray(entry) && entry[0] === '1') return false;
-    }
-  } else if (events != null) {
-    return false;
-  }
-  // tagProps[0] (props): only the class slot (empty key) is safe to leave to
-  // GXT (the post-apply scan skips it). Any other key → slow path.
-  const props = tagProps[0];
-  if (Array.isArray(props)) {
-    for (let i = 0; i < props.length; i++) {
-      const entry = props[i];
-      if (!Array.isArray(entry) || entry[0] !== '') return false;
-    }
-  } else if (props != null) {
-    return false;
-  }
-  return true;
+  return !_gxtNamespace && isPlainHtmlTagFastPath(tag, tagProps, g.$_edp);
 }
 
 // Override $_tag to check for Ember components before creating HTML elements

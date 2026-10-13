@@ -1,6 +1,5 @@
 /**
  * Shared utility functions for the GXT compat layer.
- * All functions are regex-free.
  */
 
 /** Convert PascalCase/camelCase to kebab-case without regex */
@@ -166,4 +165,62 @@ export function capabilitiesErrorPrefix(kind: keyof typeof CAPABILITIES_VERSIONS
     `calling the \`capabilities('${CAPABILITIES_VERSIONS[kind]}')\` ` +
     `(imported via \`import { capabilities } from '@ember/${kind}';\`). `
   );
+}
+
+const PLAIN_HTML_TAG_RE = /^[a-z][a-z0-9]*$/;
+
+/**
+ * Whether the Ember `$_tag` wrappers can hand an element straight to GXT's
+ * `$_tag` (`edp` is GXT's empty-props marker). True only when every scan the
+ * wrappers do would be a no-op:
+ * - a plain lowercase tag without a hyphen (a kebab tag could be a component
+ *   or helper), so never a component, `@`/`this.` dynamic, `:` named-block or
+ *   EmberHtmlRaw tag;
+ * - no splat (`tagProps[3]`), so no `...attributes` merge or fw reorder;
+ * - attrs (`tagProps[1]`): no function value (would need the nullish-getter
+ *   scan and reactive-undefined cleanup) and no static `null`/`undefined`
+ *   (stripped by the slow path);
+ * - events (`tagProps[2]`): no TEXT_CONTENT entry (`'1'`), the only thing the
+ *   SafeString text scan and the modifier/text reorder look at; listeners and
+ *   ON_CREATED modifiers are applied by GXT either way;
+ * - props (`tagProps[0]`): only the class slot (empty key), which GXT applies
+ *   and the post-apply scan skips. A reactive `style` lands here under
+ *   `'style'`, so it always takes the slow path.
+ * compile.ts's wrapper also requires that no SVG/MathML namespace is active.
+ */
+export function isPlainHtmlTagFastPath(tag: unknown, tagProps: any, edp: unknown): boolean {
+  if (typeof tag !== 'string' || !PLAIN_HTML_TAG_RE.test(tag)) return false;
+  if (tagProps === edp || tagProps == null) return false;
+  if (Array.isArray(tagProps[3])) return false;
+  const attrs = tagProps[1];
+  if (Array.isArray(attrs)) {
+    for (let i = 0; i < attrs.length; i++) {
+      const entry = attrs[i];
+      if (!Array.isArray(entry) || entry.length < 2) return false;
+      const v = entry[1];
+      if (typeof v === 'function') return false;
+      if (v === null || v === undefined) return false;
+    }
+  } else if (attrs != null) {
+    return false;
+  }
+  const events = tagProps[2];
+  if (Array.isArray(events)) {
+    for (let i = 0; i < events.length; i++) {
+      const entry = events[i];
+      if (Array.isArray(entry) && entry[0] === '1') return false;
+    }
+  } else if (events != null) {
+    return false;
+  }
+  const props = tagProps[0];
+  if (Array.isArray(props)) {
+    for (let i = 0; i < props.length; i++) {
+      const entry = props[i];
+      if (!Array.isArray(entry) || entry[0] !== '') return false;
+    }
+  } else if (props != null) {
+    return false;
+  }
+  return true;
 }

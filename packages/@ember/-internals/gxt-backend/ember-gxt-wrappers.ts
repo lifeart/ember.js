@@ -27,7 +27,7 @@ import {
   GXT_ARGS_SYMBOL,
 } from './gxt-bridge';
 import { createComputeRef, valueForRef } from '@glimmer/reference';
-import { capabilitiesErrorPrefix } from './utils';
+import { capabilitiesErrorPrefix, isPlainHtmlTagFastPath } from './utils';
 
 const g = globalThis as any;
 
@@ -1262,51 +1262,13 @@ function createEmberMaybeHelper(original: Function) {
 
 // $_tag wrapper
 
-// Fast-path eligibility for the ember-gxt-wrappers $_tag wrapper. Mirrors
-// compile.ts's predicate. A plain lowercase-HTML element with no Ember-special
-// features makes every scan this wrapper performs (the dynamic-component /
-// named-block / component / helper lookups, the modifier/text reorder, the
-// reactive-splat strip) a no-op, so we forward straight to `original` (GXT's
-// native $_tag — or, when both wrappers are active, the compile.ts wrapper,
-// which re-checks namespace/scan eligibility itself). No hyphen in the tag (a
-// kebab tag could be a component/helper). Namespace is intentionally not
-// checked here: this wrapper delegates namespace handling to `original`.
-const _EMBER_PLAIN_HTML_TAG_RE = /^[a-z][a-z0-9]*$/;
+// Fast-path eligibility for this $_tag wrapper: the predicate compile.ts's
+// wrapper uses (`isPlainHtmlTagFastPath`, which also lists why every scan is a
+// no-op then), minus the namespace check, since this wrapper leaves namespaces
+// to `original` (GXT's native $_tag, or compile.ts's wrapper when both are
+// active, which re-checks).
 function _emberTagFastPathEligible(tag: unknown, tagProps: any): boolean {
-  if (typeof tag !== 'string' || !_EMBER_PLAIN_HTML_TAG_RE.test(tag)) return false;
-  if (tagProps === gxtModule.$_edp || tagProps == null) return false;
-  if (Array.isArray(tagProps[3])) return false; // no splat / forwarded attrs
-  const attrs = tagProps[1];
-  if (Array.isArray(attrs)) {
-    for (let i = 0; i < attrs.length; i++) {
-      const entry = attrs[i];
-      if (!Array.isArray(entry) || entry.length < 2) return false;
-      const v = entry[1];
-      if (typeof v === 'function') return false;
-      if (v === null || v === undefined) return false;
-    }
-  } else if (attrs != null) {
-    return false;
-  }
-  const events = tagProps[2];
-  if (Array.isArray(events)) {
-    for (let i = 0; i < events.length; i++) {
-      const entry = events[i];
-      if (Array.isArray(entry) && entry[0] === '1') return false; // TEXT_CONTENT
-    }
-  } else if (events != null) {
-    return false;
-  }
-  const props = tagProps[0];
-  if (Array.isArray(props)) {
-    for (let i = 0; i < props.length; i++) {
-      const entry = props[i];
-      if (!Array.isArray(entry) || entry[0] !== '') return false; // only class slot
-    }
-  } else if (props != null) {
-    return false;
-  }
-  return true;
+  return isPlainHtmlTagFastPath(tag, tagProps, gxtModule.$_edp);
 }
 
 /**
