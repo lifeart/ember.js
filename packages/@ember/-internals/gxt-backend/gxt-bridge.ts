@@ -796,13 +796,31 @@ export interface GxtRenderer {
 
 let _renderer: GxtRenderer | null = null;
 
+// The namespaces other modules add members to with `install*Part`, in the
+// order `setGxtRenderer` merges buffered parts.
+type GxtPartNamespace =
+  | 'compilePipeline'
+  | 'renderPass'
+  | 'rootComponent'
+  | 'backtracking'
+  | 'viewUtils';
+const PART_NAMESPACES: readonly GxtPartNamespace[] = [
+  'compilePipeline',
+  'renderPass',
+  'rootComponent',
+  'backtracking',
+  'viewUtils',
+];
+
 // Parts installed before `setGxtRenderer` runs (module load order depends on
 // the entry point). `setGxtRenderer` merges them into the renderer.
-let _pendingCompilePipelineParts: Partial<GxtCompilePipelineCapabilities>[] = [];
-let _pendingRenderPassParts: Partial<GxtRenderPassCapabilities>[] = [];
-let _pendingRootComponentParts: Partial<GxtRootComponentCapabilities>[] = [];
-let _pendingBacktrackingParts: Partial<GxtBacktrackingCapabilities>[] = [];
-let _pendingViewUtilsParts: Partial<GxtViewUtilsCapabilities>[] = [];
+const _pendingParts: { [K in GxtPartNamespace]: Partial<GxtRenderer[K]>[] } = {
+  compilePipeline: [],
+  renderPass: [],
+  rootComponent: [],
+  backtracking: [],
+  viewUtils: [],
+};
 
 /**
  * Install the renderer. Called once, by manager.ts at module init. Parts
@@ -810,49 +828,33 @@ let _pendingViewUtilsParts: Partial<GxtViewUtilsCapabilities>[] = [];
  */
 export function setGxtRenderer(renderer: GxtRenderer): void {
   _renderer = renderer;
-  if (_pendingCompilePipelineParts.length > 0) {
-    for (const part of _pendingCompilePipelineParts) {
-      Object.assign(_renderer.compilePipeline, part);
+  for (const ns of PART_NAMESPACES) {
+    const pending = _pendingParts[ns];
+    if (pending.length > 0) {
+      for (const part of pending) {
+        Object.assign(renderer[ns], part);
+      }
+      _pendingParts[ns] = [];
     }
-    _pendingCompilePipelineParts = [];
-  }
-  if (_pendingRenderPassParts.length > 0) {
-    for (const part of _pendingRenderPassParts) {
-      Object.assign(_renderer.renderPass, part);
-    }
-    _pendingRenderPassParts = [];
-  }
-  if (_pendingRootComponentParts.length > 0) {
-    for (const part of _pendingRootComponentParts) {
-      Object.assign(_renderer.rootComponent, part);
-    }
-    _pendingRootComponentParts = [];
-  }
-  if (_pendingBacktrackingParts.length > 0) {
-    for (const part of _pendingBacktrackingParts) {
-      Object.assign(_renderer.backtracking, part);
-    }
-    _pendingBacktrackingParts = [];
-  }
-  if (_pendingViewUtilsParts.length > 0) {
-    for (const part of _pendingViewUtilsParts) {
-      Object.assign(_renderer.viewUtils, part);
-    }
-    _pendingViewUtilsParts = [];
   }
 }
 
 /**
- * Add members to the `compilePipeline` namespace. If the renderer is installed
- * they are assigned onto the existing object (so held references see them);
- * otherwise they are buffered until `setGxtRenderer`.
+ * Add members to a renderer namespace. If the renderer is installed they are
+ * assigned onto the existing object (so held references see them); otherwise
+ * they are buffered until `setGxtRenderer`.
  */
-export function installCompilePipelinePart(part: Partial<GxtCompilePipelineCapabilities>): void {
+function installPart<K extends GxtPartNamespace>(ns: K, part: Partial<GxtRenderer[K]>): void {
   if (_renderer === null) {
-    _pendingCompilePipelineParts.push(part);
+    (_pendingParts[ns] as Partial<GxtRenderer[K]>[]).push(part);
     return;
   }
-  Object.assign(_renderer.compilePipeline, part);
+  Object.assign(_renderer[ns], part);
+}
+
+/** Add members to the `compilePipeline` namespace (see `installPart`). */
+export function installCompilePipelinePart(part: Partial<GxtCompilePipelineCapabilities>): void {
+  installPart('compilePipeline', part);
 }
 
 /**
@@ -866,47 +868,31 @@ export function assertCompilePipelineInstalled(
   for (const name of names) {
     const installed =
       (_renderer !== null && typeof _renderer.compilePipeline[name] === 'function') ||
-      _pendingCompilePipelineParts.some((part) => typeof part[name] === 'function');
+      _pendingParts.compilePipeline.some((part) => typeof part[name] === 'function');
     if (!installed) {
       throw new Error(`[gxt] compile pipeline member \`${name}\` is not installed`);
     }
   }
 }
 
-/** Add members to the `renderPass` namespace, buffering until `setGxtRenderer`. */
+/** Add members to the `renderPass` namespace (see `installPart`). */
 export function installRenderPassPart(part: Partial<GxtRenderPassCapabilities>): void {
-  if (_renderer === null) {
-    _pendingRenderPassParts.push(part);
-    return;
-  }
-  Object.assign(_renderer.renderPass, part);
+  installPart('renderPass', part);
 }
 
-/** Add members to the `rootComponent` namespace, buffering until `setGxtRenderer`. */
+/** Add members to the `rootComponent` namespace (see `installPart`). */
 export function installRootComponentPart(part: Partial<GxtRootComponentCapabilities>): void {
-  if (_renderer === null) {
-    _pendingRootComponentParts.push(part);
-    return;
-  }
-  Object.assign(_renderer.rootComponent, part);
+  installPart('rootComponent', part);
 }
 
-/** Add members to the `backtracking` namespace, buffering until `setGxtRenderer`. */
+/** Add members to the `backtracking` namespace (see `installPart`). */
 export function installBacktrackingPart(part: Partial<GxtBacktrackingCapabilities>): void {
-  if (_renderer === null) {
-    _pendingBacktrackingParts.push(part);
-    return;
-  }
-  Object.assign(_renderer.backtracking, part);
+  installPart('backtracking', part);
 }
 
-/** Add members to the `viewUtils` namespace, buffering until `setGxtRenderer`. */
+/** Add members to the `viewUtils` namespace (see `installPart`). */
 export function installViewUtilsPart(part: Partial<GxtViewUtilsCapabilities>): void {
-  if (_renderer === null) {
-    _pendingViewUtilsParts.push(part);
-    return;
-  }
-  Object.assign(_renderer.viewUtils, part);
+  installPart('viewUtils', part);
 }
 
 // The current outlet state and the set of connected `<ember-outlet>` elements,
