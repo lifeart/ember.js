@@ -1,24 +1,11 @@
-function normalizeInnerHTML(actualHTML: string) {
-  // Strip GXT rendering artifacts
-  if (__GXT_MODE__) {
-    actualHTML = actualHTML
-      // Remove GXT placeholder and curried-component boundary comments
-      .replace(/<!--(?:placeholder|curried-start|curried-end)[^>]*-->/g, '')
-      // Remove empty comments (GXT doesn't produce these like Glimmer VM)
-      .replace(/<!---->/g, '')
-      .replace(/\s*data-node-id="[^"]*"/g, '')
-      .replace(/<\/?ember-outlet[^>]*>/g, '');
-  }
-
-  return actualHTML;
-}
+import { stripGxtArtifacts } from './equal-tokens';
 
 export default function equalInnerHTML(
   assert: QUnit['assert'],
   fragment: HTMLElement,
   html: string
 ) {
-  let actualHTML = normalizeInnerHTML(fragment.innerHTML);
+  let actualHTML = stripGxtArtifacts(fragment.innerHTML);
   let expectedHTML = html;
   // In GXT mode, strip empty comments from expected too
   if (__GXT_MODE__) {

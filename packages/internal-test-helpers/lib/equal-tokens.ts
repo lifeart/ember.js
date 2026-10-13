@@ -15,23 +15,19 @@ export function isGxtMarkerComment(text: string): boolean {
   );
 }
 
-/** Strip GXT rendering artifacts from HTML string */
-function stripGxtArtifacts(html: string): string {
+/**
+ * GXT mode: `html` without GXT's rendering artifacts: its marker comments (see
+ * `isGxtMarkerComment`) and the empty `<!---->` comments, its `data-node-id`
+ * attributes and the `<ember-outlet>` wrapper tags.
+ */
+export function stripGxtArtifacts(html: string): string {
   if (!__GXT_MODE__) return html;
-  return (
-    html
-      // Remove GXT placeholder, raw-HTML and curried-component boundary comments
-      .replace(/<!--(?:placeholder|\/htmlRaw|curried-start|curried-end)[^>]*-->/g, '')
-      // Remove empty comments left by Glimmer VM (<!---->)
-      .replace(/<!---->/g, '')
-      // Remove data-node-id attributes
-      .replace(/\s*data-node-id="[^"]*"/g, '')
-      // Unwrap <ember-outlet> wrappers
-      .replace(/<\/?ember-outlet[^>]*>/g, '')
-      // Collapse multiple spaces/newlines caused by removals
-      .replace(/>\s+</g, '><')
-      .trim()
-  );
+  return html
+    .replace(/<!--([\s\S]*?)-->/g, (comment, text: string) =>
+      text === '' || isGxtMarkerComment(text) ? '' : comment
+    )
+    .replace(/\s*data-node-id="[^"]*"/g, '')
+    .replace(/<\/?ember-outlet[^>]*>/g, '');
 }
 
 function generateTokens(containerOrHTML: string | Element) {
@@ -53,8 +49,11 @@ function generateTokens(containerOrHTML: string | Element) {
       html,
     };
   } else {
-    let html = containerOrHTML.innerHTML;
-    html = stripGxtArtifacts(html);
+    let html = stripGxtArtifacts(containerOrHTML.innerHTML);
+    if (__GXT_MODE__) {
+      // Collapse the whitespace the removals leave between tags.
+      html = html.replace(/>\s+</g, '><').trim();
+    }
     return {
       tokens: tokenize(html),
       html,
