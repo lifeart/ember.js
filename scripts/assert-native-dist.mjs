@@ -324,9 +324,10 @@ function checkMode(mode) {
   if (absentEntries.length) errors.push(`app entries missing from the dist: ${absentEntries}`);
   // @glimmer/component publishes its own package dist; its bare imports
   // resolve into the ember dist like an app's.
+  // It builds a dev and a prod dist (packages/@glimmer/component/dist/<mode>/).
   const glimmerComponentDist = [
-    join(DIST, 'glimmer-component/index.js'), // a harness snapshot
-    join(ROOT, 'packages/@glimmer/component/dist/index.js'), // the rollup build output
+    join(DIST, 'glimmer-component', mode, 'index.js'), // a harness snapshot
+    join(ROOT, 'packages/@glimmer/component/dist', mode, 'index.js'), // the rollup build output
   ].find((p) => existsSync(p));
   if (glimmerComponentDist) {
     const gc = analyze(readFileSync(glimmerComponentDist, 'utf8'), glimmerComponentDist);
@@ -337,7 +338,7 @@ function checkMode(mode) {
       else errors.push(`@glimmer/component imports ${spec}, which the dist does not publish`);
     }
   } else {
-    errors.push('packages/@glimmer/component/dist/index.js missing');
+    errors.push(`packages/@glimmer/component/dist/${mode}/index.js missing`);
   }
   const app = closure(roots);
   const appForbidden = forbiddenIn(app);

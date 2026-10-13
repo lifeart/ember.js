@@ -36,7 +36,8 @@ const CONTRACT = JSON.parse(
   readFileSync(join(PKG_ROOT, 'dist', 'gxt-native-contract.json'), 'utf8')
 );
 const LABEL = `${PKG.name}@${PKG.version}`;
-const GLIMMER_COMPONENT = join(PKG_ROOT, CONTRACT.glimmerComponent);
+// @glimmer/component, per dist mode (`{ dev, prod }`).
+const glimmerComponentFile = (mode) => join(PKG_ROOT, CONTRACT.glimmerComponent[mode]);
 
 // Plugins that would compile / resolve Ember templates the CLASSIC way in the
 // same build (@embroider/vite). Mixing them with the gxt compiler cannot work:
@@ -234,7 +235,9 @@ export function emberGxtNative(options = {}) {
           return resolved;
         }
         const file =
-          source === '@glimmer/component' ? GLIMMER_COMPONENT : (published.get(source) ?? null);
+          source === '@glimmer/component'
+            ? glimmerComponentFile(distMode)
+            : (published.get(source) ?? null);
         if (file === null) {
           const why = refusal(source);
           if (why) fail(why);

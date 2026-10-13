@@ -63,7 +63,7 @@ function emberDistResolver(distDir, mode) {
     resolveId(source) {
       // @glimmer/component is its own published package (its dist imports
       // `@ember/component`, `@ember/destroyable`, … which land back here).
-      if (source === '@glimmer/component') return join(distDir, 'glimmer-component/index.js');
+      if (source === '@glimmer/component') return join(distDir, 'glimmer-component/prod/index.js');
       const inNamespace =
         EMBER_NAMESPACE_PREFIXES.some((p) => source.startsWith(p)) ||
         EMBER_NAMESPACE_PACKAGES.has(source);

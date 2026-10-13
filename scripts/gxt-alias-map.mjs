@@ -386,6 +386,22 @@ export const GXT_NATIVE_ALIASES = [
     target: nativeTarget('stubs/outlet-component'),
     match: 'exact',
   },
+  // Upstream's route-manager registry asserts through `@glimmer/global-context`
+  // (a Glimmer VM package, kept out of the native app); the native twin asserts
+  // through `@ember/debug`.
+  {
+    find: '@ember/-internals/routing/route-managers/registry',
+    target: nativeTarget('route-manager-registry'),
+    match: 'exact',
+  },
+  // The classic route manager wraps each route template in a `RouteTemplate`, a
+  // Glimmer VM internal component; native renders classic routes from their
+  // template directly (native/root-outlet.ts), so the wrapper is a plain record.
+  {
+    find: '@ember/-internals/glimmer/lib/component-managers/route-template',
+    target: nativeTarget('stubs/route-template'),
+    match: 'exact',
+  },
   {
     find: '@ember/-internals/glimmer/lib/component',
     target: nativeTarget('stubs/component'),

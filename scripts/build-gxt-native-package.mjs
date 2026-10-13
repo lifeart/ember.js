@@ -230,7 +230,10 @@ const { default: configs } = await import(pathToFileURL(join(ROOT, 'rollup.confi
 const targets = [
   ['dist/dev', join(DIST, 'dev')],
   ['dist/prod', join(DIST, 'prod')],
-  ['packages/@glimmer/component/dist', join(DIST, 'glimmer-component')],
+  // @glimmer/component builds a dev and a prod dist of its own (its package.json
+  // `exports` pick one by the `development` / `production` condition).
+  ['packages/@glimmer/component/dist/dev', join(DIST, 'glimmer-component', 'dev')],
+  ['packages/@glimmer/component/dist/prod', join(DIST, 'glimmer-component', 'prod')],
 ];
 const t0 = Date.now();
 for (const [configDir, outDir] of targets) {
@@ -436,7 +439,10 @@ const contract = {
   ember: { version: rootPkg.version, sha: emberSha, uncommittedSource: emberDirty },
   gxt: { version: gxtVersion, gitHash: gxtMeta?.gitHash ?? null, requiredExports },
   nativeFlags: NATIVE_FLAGS,
-  glimmerComponent: 'dist/glimmer-component/index.js',
+  glimmerComponent: {
+    dev: 'dist/glimmer-component/dev/index.js',
+    prod: 'dist/glimmer-component/prod/index.js',
+  },
   entries,
   droppedEntries: [...GXT_NATIVE_DIST_DROPPED_ENTRIES].sort(),
   prunedEntries: PRUNABLE.filter((p) => prunedSpecifiers.some((s) => p.match.test(s))).map(
@@ -574,7 +580,7 @@ for (const [mode, dir] of [
     '@glimmer/tracking',
     join(DIST, dir, 'packages', '@glimmer', 'tracking', 'index.js')
   );
-  await expect('@glimmer/component', join(DIST, 'glimmer-component', 'index.js'));
+  await expect('@glimmer/component', join(DIST, 'glimmer-component', dir, 'index.js'));
   await expect('@ember/test-waiters', null);
   for (const refused of [
     '@glimmer/opcode-compiler',

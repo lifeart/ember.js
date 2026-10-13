@@ -542,21 +542,22 @@ function descriptorForField(
   }
 
   function set(this: object, newValue: unknown): void {
-    if (
-      equals !== undefined &&
-      equals(
-        untrack(() =>
-          __GXT_MODE__
-            ? _gxtTrackedCellGet(this, key, initializer as () => unknown, getter, false)
-            : getter(this)
-        ),
-        newValue
-      )
-    ) {
-      return;
-    }
-
+    // GXT: a whole-statement gate, so that classic dists fold it away (rollup
+    // does not fold a `__GXT_MODE__ ? … : …` inside an `untrack` callback, which
+    // kept `_gxtTrackedCellGet` and its gxt-bridge read alive in classic dists).
+    // The classic path below is main's.
     if (__GXT_MODE__) {
+      // `equals` peeks at the property's gxt cell without recording a read.
+      if (
+        equals !== undefined &&
+        equals(
+          untrack(() => _gxtTrackedCellGet(this, key, initializer as () => unknown, getter, false)),
+          newValue
+        )
+      ) {
+        return;
+      }
+
       // GXT backtracking detection for @tracked properties (render-pass based:
       // "modified X after it was rendered").
       if (DEBUG) {
@@ -582,6 +583,16 @@ function descriptorForField(
       // computed properties and triggers the GXT re-render. `newValue` is
       // forwarded so the trigger does not re-read the getter.
       notifyPropertyChange(this, key, null, newValue);
+      return;
+    }
+
+    if (
+      equals !== undefined &&
+      equals(
+        untrack(() => getter(this)),
+        newValue
+      )
+    ) {
       return;
     }
 
