@@ -7172,6 +7172,91 @@ function resolveComponent(
 // Helper resolution for (helper) keyword
 // =============================================================================
 
+// Forwarded props (`...attributes`, `fw[0]`) on an internal component's
+// element (LinkTo, Input/Textarea), each kept current by an effect: `class`
+// (key `''`) is appended to the component's own `class`; any other prop is
+// set as an attribute, or removed when it is nullish or `false`.
+function _forwardPropsToElement(el: HTMLElement, props: any[], instance: any): void {
+  for (const [key, value] of props) {
+    const attrKey = key === '' ? 'class' : key;
+    if (attrKey === 'class') {
+      _gxtEffect(() => {
+        const resolved = typeof value === 'function' ? value() : value;
+        const baseClass = instance.class || '';
+        el.className = resolved ? baseClass + ' ' + resolved : baseClass;
+      });
+    } else {
+      _gxtEffect(() => {
+        const resolved = typeof value === 'function' ? value() : value;
+        if (resolved !== undefined && resolved !== null && resolved !== false) {
+          el.setAttribute(attrKey, String(resolved));
+        } else {
+          el.removeAttribute(attrKey);
+        }
+      });
+    }
+  }
+}
+
+// Forwarded events (`fw[2]`): an ON_CREATED entry (event name `'0'`) is a
+// modifier, run in an effect owned by `owner` so its dependencies are tracked
+// and it re-runs reactively (as gxt's `$ev` does); the rest are listeners.
+function _forwardEventsToElement(el: HTMLElement, events: any[], owner: object): void {
+  for (const [eventName, handler] of events) {
+    if (typeof handler === 'function') {
+      if (eventName === '0') {
+        _gxtEffectWithOwner(owner, () => (handler as any)(el));
+      } else {
+        el.addEventListener(eventName, handler);
+      }
+    }
+  }
+}
+
+// Append a function slot item to `parent`. A node thunk (the compiler marks
+// every component-child DOM producer with `$_isNode`) is called and its node,
+// or a fragment's children, appended. Any other function is a reactive text
+// getter: a text node kept current by an effect. A node thunk that throws or
+// returns no node is treated as a text getter too.
+function _appendSlotFunctionItem(parent: Node, item: Function): void {
+  if ((item as any).$_isNode === true) {
+    let evaluated: any;
+    try {
+      evaluated = item();
+    } catch {
+      evaluated = null;
+    }
+    if (evaluated instanceof Node) {
+      // A fragment's children move on append: snapshot them first.
+      if (evaluated.nodeType === 11 /* DocumentFragment */) {
+        const kids = Array.from(evaluated.childNodes);
+        for (const k of kids) parent.appendChild(k);
+      } else {
+        parent.appendChild(evaluated);
+      }
+      return;
+    }
+  }
+  const textNode = document.createTextNode('');
+  _gxtEffect(() => {
+    const val = item();
+    textNode.textContent = val == null ? '' : String(val);
+  });
+  parent.appendChild(textNode);
+}
+
+// `fn()` outside any tracking frame, so its reads add no dependency to the
+// formula being evaluated.
+function _untracked<T>(fn: () => T): T {
+  const saved = _gxtGetTracker();
+  _gxtSetTracker(null);
+  try {
+    return fn();
+  } finally {
+    _gxtSetTracker(saved);
+  }
+}
+
 // A helper argument as GXT passes it: a getter thunk (no prototype) is read;
 // helper and class values (with a prototype) pass through.
 function _unwrapHelperArg(v: any): any {
@@ -8392,29 +8477,11 @@ const $_MANAGERS = {
       // key so positional arg changes trigger the update path, not fresh installs.
       let firstArg = '';
       if (modifier === 'on') {
-        const _setT = _gxtSetTracker;
-        const _getT = _gxtGetTracker;
-        if (_setT && _getT) {
-          const savedTracker = _getT();
-          _setT(null);
-          try {
-            firstArg =
-              props && props.length > 0
-                ? String(
-                    typeof props[0] === 'function' && !props[0].prototype ? props[0]() : props[0]
-                  )
-                : '';
-          } finally {
-            _setT(savedTracker);
-          }
-        } else {
-          firstArg =
-            props && props.length > 0
-              ? String(
-                  typeof props[0] === 'function' && !props[0].prototype ? props[0]() : props[0]
-                )
-              : '';
-        }
+        firstArg = _untracked(() =>
+          props && props.length > 0
+            ? String(typeof props[0] === 'function' && !props[0].prototype ? props[0]() : props[0])
+            : ''
+        );
       }
       const modKey = firstArg ? `${baseName}:${firstArg}` : baseName;
       let elCache = self._cache.get(element);
@@ -8512,22 +8579,7 @@ const $_MANAGERS = {
             // Per-arg tracking: only call updateModifier when consumed args changed
             // OR when external tracked values changed (autotracking).
             // We eagerly read ALL args UNTRACKED to get fresh values for comparison.
-            let freshArgs: any;
-            {
-              const _setT = _gxtSetTracker;
-              const _getT = _gxtGetTracker;
-              if (_setT && _getT) {
-                const saved = _getT();
-                _setT(null);
-                try {
-                  freshArgs = buildArgs();
-                } finally {
-                  _setT(saved);
-                }
-              } else {
-                freshArgs = buildArgs();
-              }
-            }
+            const freshArgs: any = _untracked(buildArgs);
             let shouldUpdate = false;
             if (cached._consumedPositional && cached._lastPositional) {
               // Check if any consumed positional args changed
@@ -8957,22 +9009,7 @@ const $_MANAGERS = {
 
       // Snapshot initial arg values for change detection.
       // Read UNTRACKED to avoid establishing cell dependencies outside the formula.
-      let initialArgs: any;
-      {
-        const _setT = _gxtSetTracker;
-        const _getT = _gxtGetTracker;
-        if (_setT && _getT) {
-          const savedTracker = _getT();
-          _setT(null);
-          try {
-            initialArgs = buildArgs();
-          } finally {
-            _setT(savedTracker);
-          }
-        } else {
-          initialArgs = buildArgs();
-        }
-      }
+      const initialArgs: any = _untracked(buildArgs);
 
       // Cache the instance for subsequent update calls
       let cache = self._cache.get(element);
@@ -9392,7 +9429,6 @@ function handleStringComponent(
         // the block content (classic Ember's default component layout is just
         // `{{yield}}`). Handle the full shape of slot results: Nodes,
         // DocumentFragments, reactive node thunks, and reactive text getters.
-        const gxtEffectFn = _gxtEffect;
         resolvedTemplate = {
           __gxtCompiled: true,
           render(ctx: any, container: Element) {
@@ -9414,33 +9450,7 @@ function handleStringComponent(
                   container.appendChild(item);
                 }
               } else if (typeof item === 'function') {
-                // Node-producing thunks carry the `$_isNode` marker (set by the
-                // compiler via `$_nt` on every component-child DOM producer).
-                // Unmarked functions are reactive text getters.
-                const isNodeThunk = (item as any).$_isNode === true;
-                if (isNodeThunk) {
-                  let evaluated: any;
-                  try {
-                    evaluated = (item as Function)();
-                  } catch {
-                    evaluated = null;
-                  }
-                  if (evaluated instanceof Node) {
-                    if (evaluated.nodeType === 11) {
-                      const kids = Array.from(evaluated.childNodes);
-                      for (const k of kids) container.appendChild(k);
-                    } else {
-                      container.appendChild(evaluated);
-                    }
-                    continue;
-                  }
-                }
-                const textNode = document.createTextNode('');
-                gxtEffectFn(() => {
-                  const val = (item as Function)();
-                  textNode.textContent = val == null ? '' : String(val);
-                });
-                container.appendChild(textNode);
+                _appendSlotFunctionItem(container, item);
               } else if (item != null) {
                 container.appendChild(document.createTextNode(String(item)));
               }
@@ -10407,19 +10417,9 @@ function renderCustomElement(tagName: string, args: any, fw: any, ctx: any): () 
       }
       const fwEvents = fw[2];
       if (Array.isArray(fwEvents)) {
-        for (const [eventName, handler] of fwEvents) {
-          if (typeof handler === 'function') {
-            if (eventName === '0') {
-              // ON_CREATED: modifier forwarding
-              // No component instance owner here (renderCustomElement is for
-              // unknown HTML tag names); use the element itself as owner so the
-              // effect cleanup is at least registered in the destroyable graph.
-              _gxtEffectWithOwner(el, () => (handler as any)(el));
-            } else {
-              el.addEventListener(eventName, handler);
-            }
-          }
-        }
+        // No component instance here (an unknown HTML tag name): the element
+        // owns the modifier effects, so their cleanup is still registered.
+        _forwardEventsToElement(el, fwEvents, el);
       }
     }
 
@@ -10641,25 +10641,7 @@ function renderLinkToElement(instance: any, args: any, fw: any): HTMLAnchorEleme
   // Apply forwarded attributes (...attributes) from fw
   if (fw && Array.isArray(fw)) {
     if (Array.isArray(fw[0])) {
-      for (const [key, value] of fw[0]) {
-        const attrKey = key === '' ? 'class' : key;
-        if (attrKey === 'class') {
-          gxtEffect(() => {
-            const resolved = typeof value === 'function' ? value() : value;
-            const baseClass = instance.class || '';
-            el.className = resolved ? baseClass + ' ' + resolved : baseClass;
-          });
-        } else {
-          gxtEffect(() => {
-            const resolved = typeof value === 'function' ? value() : value;
-            if (resolved !== undefined && resolved !== null && resolved !== false) {
-              el.setAttribute(attrKey, String(resolved));
-            } else {
-              el.removeAttribute(attrKey);
-            }
-          });
-        }
-      }
+      _forwardPropsToElement(el, fw[0], instance);
     }
     if (Array.isArray(fw[1])) {
       for (const [key, value] of fw[1]) {
@@ -10675,18 +10657,7 @@ function renderLinkToElement(instance: any, args: any, fw: any): HTMLAnchorEleme
       }
     }
     if (Array.isArray(fw[2])) {
-      for (const [eventName, handler] of fw[2]) {
-        if (typeof handler === 'function') {
-          if (eventName === '0') {
-            // ON_CREATED event type: this is a modifier, not a regular event listener.
-            // Use GXT's effect() to wrap the modifier invocation so dependencies are
-            // tracked and the modifier re-runs reactively (matching GXT's $ev behavior).
-            _gxtEffectWithOwner(instance || el, () => (handler as any)(el));
-          } else {
-            el.addEventListener(eventName, handler);
-          }
-        }
-      }
+      _forwardEventsToElement(el, fw[2], instance || el);
     }
   }
 
@@ -10700,37 +10671,7 @@ function renderLinkToElement(instance: any, args: any, fw: any): HTMLAnchorEleme
   if (rawChildren && rawChildren.length > 0) {
     for (const child of rawChildren) {
       if (typeof child === 'function') {
-        // Function child: a component thunk ($_tag/$_c/$_dc/$_eachSync,
-        // marked by the compiler with `$_isNode`) returns a DOM Node or
-        // DocumentFragment; anything else is a reactive text getter that is
-        // wrapped in gxtEffect below for live updates.
-        const isNodeThunk = (child as any).$_isNode === true;
-        if (isNodeThunk) {
-          let evaluated: any;
-          try {
-            evaluated = child();
-          } catch {
-            evaluated = null;
-          }
-          if (evaluated instanceof Node) {
-            // DocumentFragments move their children on append — snapshot first.
-            if (evaluated.nodeType === 11 /* DocumentFragment */) {
-              const kids = Array.from(evaluated.childNodes);
-              for (const k of kids) el.appendChild(k);
-            } else {
-              el.appendChild(evaluated);
-            }
-            continue;
-          }
-          // Unexpected non-Node from a component thunk — fall through to text.
-        }
-        // Reactive text getter: mirror changes to a text node via gxtEffect.
-        const textNode = document.createTextNode('');
-        gxtEffect(() => {
-          const val = child();
-          textNode.textContent = val == null ? '' : String(val);
-        });
-        el.appendChild(textNode);
+        _appendSlotFunctionItem(el, child);
       } else if (child instanceof Node) {
         el.appendChild(child);
       } else if (child != null) {
@@ -10747,34 +10688,9 @@ function renderLinkToElement(instance: any, args: any, fw: any): HTMLAnchorEleme
         if (item instanceof Node) {
           el.appendChild(item);
         } else if (typeof item === 'function') {
-          // Reactive text getter (e.g., {{this.title}} inside {{#link-to}}).
-          // Stringifying the function directly would surface "() => this.title"
-          // in the DOM; wrap in gxtEffect to render the evaluated value and
-          // update on reactive changes. Node thunks carry the `$_isNode` marker.
-          const isNodeThunk = (item as any).$_isNode === true;
-          if (isNodeThunk) {
-            let evaluated: any;
-            try {
-              evaluated = item();
-            } catch {
-              evaluated = null;
-            }
-            if (evaluated instanceof Node) {
-              if (evaluated.nodeType === 11) {
-                const kids = Array.from(evaluated.childNodes);
-                for (const k of kids) el.appendChild(k);
-              } else {
-                el.appendChild(evaluated);
-              }
-              continue;
-            }
-          }
-          const textNode = document.createTextNode('');
-          gxtEffect(() => {
-            const val = item();
-            textNode.textContent = val == null ? '' : String(val);
-          });
-          el.appendChild(textNode);
+          // e.g. {{this.title}} inside {{#link-to}}: rendered as live text,
+          // not as the stringified function.
+          _appendSlotFunctionItem(el, item);
         } else if (item != null) {
           el.appendChild(document.createTextNode(String(item)));
         }
@@ -11419,26 +11335,7 @@ function handleManagedComponent(
     if (fw && Array.isArray(fw)) {
       const fwAttrs = fw[0]; // DOM properties [key, value][]
       if (Array.isArray(fwAttrs)) {
-        for (const [key, value] of fwAttrs) {
-          const attrKey = key === '' ? 'class' : key;
-          if (attrKey === 'class') {
-            // Class is special - append to existing
-            gxtEffect(() => {
-              const resolved = typeof value === 'function' ? value() : value;
-              const baseClass = instance.class || '';
-              el.className = resolved ? baseClass + ' ' + resolved : baseClass;
-            });
-          } else {
-            gxtEffect(() => {
-              const resolved = typeof value === 'function' ? value() : value;
-              if (resolved !== undefined && resolved !== null && resolved !== false) {
-                el.setAttribute(attrKey, String(resolved));
-              } else {
-                el.removeAttribute(attrKey);
-              }
-            });
-          }
-        }
+        _forwardPropsToElement(el, fwAttrs, instance);
       }
       // Apply forwarded DOM attrs from fw[1] (attrs with key=value) reactively
       const fwDomAttrs = fw[1];
@@ -11467,16 +11364,7 @@ function handleManagedComponent(
       // Apply forwarded events from fw[2]
       const fwEvents = fw[2];
       if (Array.isArray(fwEvents)) {
-        for (const [eventName, handler] of fwEvents) {
-          if (typeof handler === 'function') {
-            if (eventName === '0') {
-              // ON_CREATED: modifier forwarding
-              _gxtEffectWithOwner(instance || el, () => (handler as any)(el));
-            } else {
-              el.addEventListener(eventName, handler);
-            }
-          }
-        }
+        _forwardEventsToElement(el, fwEvents, instance || el);
       }
     }
 
@@ -11935,16 +11823,7 @@ function renderClassicComponent(
 
     // Apply forwarded events from fw[2] to the wrapper
     if (wrapper instanceof HTMLElement && fw && Array.isArray(fw[2])) {
-      for (const [eventName, handler] of fw[2]) {
-        if (typeof handler === 'function') {
-          if (eventName === '0') {
-            // ON_CREATED: modifier forwarding
-            _gxtEffectWithOwner(instance || wrapper, () => (handler as any)(wrapper));
-          } else {
-            wrapper.addEventListener(eventName, handler);
-          }
-        }
-      }
+      _forwardEventsToElement(wrapper, fw[2], instance || wrapper);
     }
 
     // Install reactive attribute/class binding interceptors on the instance
