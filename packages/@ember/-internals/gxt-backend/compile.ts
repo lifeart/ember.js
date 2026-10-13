@@ -54,30 +54,19 @@ function _normalizeStringValue(value: unknown): string {
   }
 }
 
-// Quoted attribute values with interpolation (e.g. `src='{{this.src}}'`)
-// follow Ember semantics — all-nullish parts mean the attribute is absent
-// (null return → the attr writer's remove branch activates), Symbols and
-// no-toString objects coerce safely. Since gxt 0.0.72 this is a first-class
-// emission: the EMBER_ATTR_CONCAT compile flag makes the serializer emit
-// `$_qStr([...])` (a gxt runtime helper with exactly these semantics) instead
-// of a bare `[...].join("")` — retiring the bracket-surgery post-processor and
-// the injected __gxtQuotedAttr/__qaNorm helpers that used to live here.
+// Quoted attribute values with interpolation (`src='{{this.src}}'`) get Ember
+// semantics from gxt itself: under the EMBER_ATTR_CONCAT flag its serializer
+// emits `$_qStr([...])` (all-nullish parts mean the attribute is absent;
+// Symbols and objects without toString coerce safely).
 
-// NOTE: the `{{#in-element}}` insertBefore/appendMode signalling channel
-// (`_gxtIeSet` module flags + the `__ieSet(...)` injection bound into every
-// legacy Function body + the `parseInElementInsertBefore` source pre-parse)
-// is retired: gxt >=0.0.76 emits the insertBefore semantics as a compile-time
-// 4th MODE argument to `$_inElement` under the EMBER_IN_ELEMENT flag
-// (glimmer-next #254) — the shim reads the mode directly.
+// `{{#in-element}}`'s insertBefore semantics arrive as the 4th MODE argument of
+// `$_inElement` (gxt's EMBER_IN_ELEMENT flag).
 
-// Module-local pointer to the in-element deferred-render drain function.
-// Assigned inside the `_inElementDeferQueue` setup block (which also captures
-// `_origFlush` and wraps `__gxtFlushAfterInsertQueue`); read by two intra-file
-// consumers — the render-pass-end gate in `_gxtSetIsRendering` and the
-// post-rebuild finalization in `__gxtFlushAfterInsertQueue`'s wrap. Readers
-// keep a `typeof === 'function'` guard: this slot is `undefined` until the
-// setup block runs at module load, and a reader could in principle fire before
-// then if a render triggers from another module's eager init.
+// The in-element deferred-render drain, assigned by the `_inElementDeferQueue`
+// setup block below and called by `_gxtSetIsRendering`'s end-of-pass gate and
+// the `afterFlushAfterInsertQueue` host hook. Readers keep a
+// `typeof === 'function'` guard: the slot is `undefined` until that block runs
+// at module load.
 let _drainInElementDeferQueue: (() => void) | undefined;
 
 /** Replace all hyphens with underscores without regex */
@@ -86,13 +75,9 @@ function hyphenToUnderscore(str: string): string {
 }
 
 /**
- * Module-local monotonic counter for fallback render-context IDs.
- *
- * Used at two sites in this file (managers.component.handle ctx-id fallback and
- * the template.render() renderContext fallback) when no `gxtRoot` id is
- * available. Starts at 100 to mirror the historical `(g.__gxtContextId || 100) + 1`
- * truthy-coerce semantics — first allocation mints `101`, then monotonically
- * increases.
+ * Module-local counter for fallback render-context IDs, used by
+ * managers.component.handle and template.render() when no `gxtRoot` id is
+ * available. The first id is 101.
  */
 let _contextId = 100;
 
@@ -198,11 +183,6 @@ function doubleDashToSlash(str: string): string {
   return str.split('--').join('/');
 }
 
-// The `<TextArea>` typo check is now the `gxtTextAreaTypoAssert` AST visitor
-// (ElementNode.tag === 'TextArea'; assert fires post-compile from
-// precompileTemplate) — see `buildGxtDialectTransforms`. The former
-// `hasTextAreaTag` source scanner was deleted here.
-
 /** Check if a string contains a word (surrounded by non-word-char boundaries) without regex */
 function containsWord(text: string, word: string): boolean {
   let idx = 0;
@@ -226,10 +206,6 @@ function containsWord(text: string, word: string): boolean {
   }
   return false;
 }
-
-// (countWord/replaceWord retired — their only caller was the {{unique-id}}
-// positional _uid[N] rewrite, deleted when gxt 0.0.76's $_uid made unique-id a
-// first-class stable emission.)
 
 /** Generate a UUID string (starts with letter, valid CSS selector / HTML ID) without regex */
 function generateUUID(): string {
@@ -479,11 +455,6 @@ function findThisAttrsPatterns(str: string): Array<{ propName: string; index: nu
   return results;
 }
 
-// Dotted mustache expressions `{{foo.bar}}` (free lowercase head) are now
-// DETECTED by the `gxtDottedMustacheAssert` AST visitor (the throw fires
-// post-compile from precompileTemplate) — see `buildGxtDialectTransforms`. The
-// former `findDottedMustaches` source scanner was deleted here.
-
 /**
  * Check if 'as |...|' block contains the word 'attrs'.
  * Replaces regex /as\s*\|[^|]*\battrs\b[^|]*\|/
@@ -516,12 +487,6 @@ function hasAttrsInBlockParams(str: string): boolean {
   return false;
 }
 
-// Dynamic `(helper)` / `(modifier)` keyword usage (`{{helper this.x}}` /
-// `(modifier this.x)`) is now DETECTED by the `gxtDynamicHelperAssert` /
-// `gxtDynamicModifierAssert` AST visitors (the assert fires post-compile from
-// precompileTemplate) — see `buildGxtDialectTransforms`. The former
-// `hasDynamicHelper` / `hasDynamicModifier` source scanners were deleted here.
-
 import { buildUntouchableThis } from '@glimmer/debug-util';
 import { isProxy } from '@ember/-internals/utils';
 // The key of a classic `Helper` instance's recompute tag.
@@ -536,9 +501,9 @@ import {
   isGlobalScopeReady,
   GXT_RUNTIME_SYMBOLS,
 } from '@lifeart/gxt/runtime-compiler';
-// The GXT Ember-dialect AST transforms were extracted to ./ast-transforms
-// (Phase 3). `precompileTemplate` calls `buildGxtDialectTransforms` and annotates
-// its findings object with `GxtAssertFindings`; the `__gxtCommentLookup` resolver
+// The GXT Ember-dialect AST transforms live in ./ast-transforms.
+// `precompileTemplate` calls `buildGxtDialectTransforms` and annotates its
+// findings object with `GxtAssertFindings`; the `__gxtCommentLookup` resolver
 // reads the HTML-comment registry (owned there) via `lookupGxtComment`.
 import {
   buildGxtDialectTransforms,
@@ -547,9 +512,7 @@ import {
   type GxtAssertFindings,
 } from './ast-transforms';
 
-// We need access to GXT's reactive tracker (setTracker/getTracker) for {{unbound}}.
-// These are not exported from GXT's public API, so we extract them at runtime
-// by exploiting the MergedCell evaluation behavior. See __gxtUnboundCached below.
+// GXT's reactive tracker (setTracker/getTracker) is needed for {{unbound}}.
 
 // Use direct path to avoid GXT Babel plugin processing (which injects duplicate declarations)
 // @ts-ignore - direct path import
@@ -581,13 +544,10 @@ import {
   // @ts-ignore
   getTracker as _gxtGetTracker,
   resolveRenderable as _gxtResolveRenderable,
-  // Phase 4.1 SSR per-render-root state primitives (RFC §7.1.1 step 2).
-  // `createRenderRootState` mints a fresh, fully-isolated RenderRootState and
-  // `withRenderRoot` is the synchronous save/swap/restore runner that scopes the
-  // upstream node-counter / parent-context / rendering-context module-globals to
-  // one render root. Both are published by `@lifeart/gxt` (runtime + types) as of
-  // 0.0.65 — the version this repo pins — so they bind via a plain named import.
-  // Sole consumer is `_gxtWithRootContext` below (additive, SSR-only).
+  // Per-render-root state: `createRenderRootState` mints an isolated
+  // RenderRootState and `withRenderRoot` runs a callback with gxt's
+  // node-counter / parent-context / rendering-context globals swapped to it
+  // (and restored after). Only `_gxtWithRootContext` (SSR) uses them.
   withRenderRoot as _gxtWithRenderRoot,
   createRenderRootState as _gxtCreateRenderRootState,
   $SLOTS_SYMBOL,
@@ -596,10 +556,10 @@ import {
   // root-id re-stamp skips contexts that carry it (see the guard's use site).
   $BLOCK_WRAPPER_SYMBOL,
 } from '@lifeart/gxt';
-// Host hooks: the gxt runtime calls the hooks registered here instead of
-// reading `globalThis.__gxt*` slots. `registerHostHooks`, the named-block
-// marker predicate and the each-in key-set signals are named exports of the
-// pinned gxt; a dist without them fails at import time.
+// Host hooks: the gxt runtime calls the hooks registered here.
+// `registerHostHooks`, the named-block marker predicate and the each-in
+// key-set signals are named exports of the pinned gxt; a dist without them
+// fails at import time.
 import {
   registerHostHooks as _gxtRegisterHostHooks,
   getNamedBlockName as _gxtGetNamedBlockName,
@@ -612,17 +572,15 @@ import {
 // defined inside the wrapper-installer scope below; this ref lets other
 // compile.ts scopes (the {{#if}}-helper cleanup paths) reach it.
 let _emberToBoolRef: ((predicate: unknown) => boolean) | null = null;
-// §2e symbol-table parameter injection: runtime-compiled template Function()
-// bodies reference `$_tag` / `$_maybeHelper` / … as free identifiers. They are
-// now bound as Function PARAMETERS (snapshot of the ember-wrapped globals at
-// compile time — module init runs setupGlobalScope + installEmberWrappers
-// before any compile, so the snapshot is deterministic) instead of resolving
-// through globalThis on every render. Build-time-compiled (.gjs) template
-// bodies still resolve via globalThis, so the global publication itself stays.
+// Runtime-compiled template Function() bodies reference `$_tag` /
+// `$_maybeHelper` / … as free identifiers. They are bound as Function
+// parameters (a snapshot of the ember-wrapped globals at compile time; module
+// init runs setupGlobalScope + installEmberWrappers before any compile, so the
+// snapshot is deterministic) instead of resolving through globalThis on every
+// render. Build-time-compiled (.gjs) template bodies still resolve via
+// globalThis, so the globals stay published.
 const _GXT_SYMBOL_PARAM_NAMES = Object.keys(GXT_RUNTIME_SYMBOLS);
 
-// Use direct imports for cellFor/effect/syncDom — the manualChunks consolidation
-// ensures all GXT internals share a single module instance (gxt.core.es.js).
 const cellFor = _cellForFromDirectImport;
 const gxtEffect = _effectFromDirectImport;
 const gxtSyncDom = _syncDomFromDirectImport;
@@ -654,9 +612,7 @@ const gxtFormula = _formulaFromDirectImport;
 //   - its RENDERING_CONTEXT.roots list is empty / points at a detached element.
 //
 // On detection, we create a fresh root via `gxtCreateRoot(document)` and
-// publish it. This keeps repeated
-// calls from GxtRehydrationDelegate working without breaking the outlet/manager
-// render chain.
+// publish it.
 //
 // TODO: replace the ambient root with an explicit per-app root lifetime once
 // all consumers read the root through an explicit API (e.g. a second argument
@@ -683,10 +639,8 @@ function _gxtRootIsStale(root: any): boolean {
   return false;
 }
 
-// Canonical state for the ambient GXT root context, owned by this file.
-// Cross-file lazy-init writers/readers (glimmer/lib/renderer.ts,
-// glimmer/lib/templates/root.ts, gxt-backend/mount-element.ts) route through
-// `compilePipeline.getRootContext?.()` / `compilePipeline.setRootContext?.(v)`.
+// The ambient GXT root context. Other modules read and replace it through
+// `compilePipeline.getRootContext` / `setRootContext`.
 let _gxtRootContext: any = null;
 function _getGxtRootContext(): any {
   return _gxtRootContext;
@@ -713,16 +667,9 @@ function _getOrCreateGxtRoot(_parentElement: Element): any {
 // GXT cells installed during the initial render) and dirty the matching cell
 // so `gxtEffect` re-runs and the DOM updates.
 //
-// Cross-file lazy-init writers/readers (glimmer/lib/templates/root.ts,
-// @ember/routing/route.ts) and intra-file readers all route through this
-// single WeakMap reference; the bridge surface
-// `compilePipeline.getComponentContextsMap?.()` returns the always-stable map
-// handle so every reader sees the same instance.
-//
-// Test-teardown reset: `_resetGxtComponentContexts` re-allocates a fresh
-// WeakMap. Cross-file readers re-fetch the map through the bridge on every
-// access (no long-lived caching), so the new WeakMap propagates immediately on
-// the next call.
+// Other modules fetch the map through `compilePipeline.getComponentContextsMap()`
+// on every access, so the fresh WeakMap `_resetGxtComponentContexts` allocates
+// at test teardown takes effect immediately.
 let _gxtComponentContexts: WeakMap<object, Set<object>> | null = null;
 function _getOrCreateGxtComponentContexts(): WeakMap<object, Set<object>> {
   let map = _gxtComponentContexts;
@@ -769,8 +716,7 @@ import { peekInstanceCapture, getOwnerWithFallback } from './manager';
 
 // JS reserved words cannot be used as JS variable names, so scope-binding
 // injection (strict-mode templates with scopeValues) prefixes any binding
-// whose normalized name collides with one of these. Hoisted module const;
-// previously inlined verbatim at the two scope-injection sites.
+// whose normalized name collides with one of these.
 const JS_RESERVED_WORDS = new Set([
   'break',
   'case',
@@ -1238,15 +1184,13 @@ installEmberWrappers();
 // inside the original delegate.
 //
 // The strict shadow is inlined directly into the emitted Function() body. It
-// closes over `globalThis.$_maybeHelper` (the ember-wrapped delegate published
-// by `installEmberWrappers()` at module-init) as the delegate, an inline
-// object-literal allow-list as the allowed-names set, and
-// `globalThis.__EMBER_BUILTIN_HELPERS__` for the built-in-keyword bypass. The
-// Function() body is cached (see `_functionCodeCache`), so per-template
-// overhead is paid once.
+// closes over the `$_maybeHelper` symbol parameter (the ember-wrapped
+// delegate) and an inline object-literal allow-list, and uses the
+// `__gxtBuiltinHelpers` parameter (`_emberBuiltinHelpers`) for the
+// built-in-keyword bypass. The Function() body is cached (see
+// `_functionCodeCache`), so per-template overhead is paid once.
 //
-// The names list is kept as a module-local Set so the JSON-stringified
-// allow-list payload below is generated once.
+// The allow-list's JS literal is built once, below.
 const _GXT_STRICT_ALLOWED_NAMES = new Set<string>([
   ...EMBER_KEYWORD_HELPER_NAMES,
   'unique_id',
@@ -1269,23 +1213,11 @@ const _GXT_STRICT_ALLOWED_NAMES_JS_LITERAL: string =
 // NOTE: Curried component reactive rendering is handled by itemToNode's
 // __isCurriedComponent check (see below in the compile function), not by $_TO_VALUE.
 
-// Install a render-pass flag so $_inElement below can distinguish
-// "inside an active GXT template.render() pass" from "top-level
-// synchronous render entry (e.g. this.render in expectAssertion
-// tests)". The renderer (packages/@ember/-internals/glimmer/lib/renderer.ts)
-// wraps `template.render()` with the bridge `compilePipeline.withRendering(fn)`
-// helper so this depth counter is bumped on entry and decremented on exit.
-// Compile.ts's own templateFactory.render() body also bumps it via the
-// intra-file `_gxtSetIsRendering` writer.
-//
-// The read-side predicate `_gxtIsRendering` is contributed to the bridge as
-// `compilePipeline.isRendering()` (see `installCompilePipelinePart` at the
-// bottom of this file). The writer `_gxtSetIsRendering` is contributed as
-// `compilePipeline.withRendering(fn): T` (save-restore wrapper around the
-// depth-counter increment/decrement, including the depth-1→0
-// in-element-deferred-render drain). Cross-package readers
-// (`@ember/object/core.ts` proxy trap and `glimmer/lib/renderer.ts`
-// renderComponent wraps) route through the bridge predicate / helper.
+// Render-pass depth counter, so $_inElement below can tell "inside an active
+// GXT template.render() pass" from a top-level synchronous render entry (e.g.
+// this.render in expectAssertion tests). templateFactory.render() and the
+// renderer's renderComponent wraps (through `compilePipeline.withRendering`)
+// bump it; `compilePipeline.isRendering()` reads it.
 let _renderPassDepth = 0;
 function _gxtIsRendering(): boolean {
   return _renderPassDepth > 0;
@@ -1299,8 +1231,8 @@ function _gxtSetIsRendering(on: boolean): void {
     // in-element deferred renders that were queued during this pass —
     // by now their compile-time literal id targets are resolvable via
     // document.getElementById. This is the synchronous drain point for
-    // the renderComponent strict-mode path, which does NOT go through
-    // __gxtRebuildViewTreeFromDom or __gxtFlushAfterInsertQueue.
+    // the renderComponent strict-mode path, which does not go through
+    // the after-insert flush.
     if (_renderPassDepth === 0) {
       try {
         // The guard handles the pointer being undefined until module-load runs
@@ -1323,16 +1255,10 @@ function _gxtSetIsRendering(on: boolean): void {
 // `_gxtSetIsRendering(false)`, so a nested renderComponent exit (2→1) never
 // drains mid-parent-render — only the outermost frame's exit does.
 //
-// History: this used to be a conditional restore that SKIPPED the decrement
-// for nested calls (entered with depth > 0) to keep nested exits from
-// draining. But the outer frame only ever decrements its own increment, so
-// each nested call inflated the counter PERMANENTLY — after the first
-// "modifier calls renderComponent" test the realm was stuck at depth 1
-// forever, keeping isRendering() true for every later test: the DEBUG
-// ObjectProxy trap stopped asserting (it treats render passes as internal
-// access) and app.reset() re-boot broke. The depth-gated drain makes the
-// skip unnecessary — balanced accounting preserves the drain timing the
-// conditional restore was protecting.
+// The decrement is unconditional: skipping it for nested calls (to keep
+// nested exits from draining) inflated the counter permanently, leaving
+// isRendering() true for every later test; the depth-gated drain already
+// protects the drain timing.
 function _gxtWithRendering<T>(fn: () => T): T {
   _gxtSetIsRendering(true);
   try {
@@ -1346,19 +1272,11 @@ function _gxtWithRendering<T>(fn: () => T): T {
 // destination during an active render pass — which happens when a nested
 // component's template evaluates `{{#in-element (getElement "id")}}`
 // before the outer parent's DocumentFragment has been committed to the
-// live document — the block body render is queued here and executed
-// after the parent commit. We hook into the manager's
-// __gxtRebuildViewTreeFromDom callback (invoked at the tail of
-// gxt-backend/manager.ts's flushAfterInsertQueue) to drain the queue,
-// since that is the earliest synchronous point at which the parent's
-// DOM is guaranteed to be in the live document.
-//
-// The enqueue side is this module-local queue, pushed into by the $_inElement
-// override below. The drain side is the module-local `_drainInElementDeferQueue`
-// pointer (declared near the top of the module); its two consumers are the
-// `_gxtSetIsRendering` depth-1→0 gate and the `__gxtFlushAfterInsertQueue`
-// wrap, both in this file. The setup block below assigns the drain arrow into
-// that pointer.
+// live document — the block body render is queued here and run after the
+// parent commit: at the end of the outermost render pass (`_gxtSetIsRendering`)
+// or by the `afterFlushAfterInsertQueue` host hook that manager.ts runs after
+// its after-insert flush, the earliest synchronous points at which the
+// parent's DOM is in the live document.
 const _inElementDeferQueue: Array<() => void> = [];
 {
   const _drainImpl = () => {
@@ -1372,33 +1290,6 @@ const _inElementDeferQueue: Array<() => void> = [];
     }
   };
   _drainInElementDeferQueue = _drainImpl;
-
-  // The in-element deferred queue is drained via the `afterFlushAfterInsertQueue`
-  // host hook, contributed by compile.ts through `installViewUtilsPart` at file
-  // EOF (using the module-local `_drainInElementDeferQueue` pointer assigned
-  // just above). The bridge adapter `_gxtBridgeFlushAfterInsertQueue` in
-  // manager.ts dispatches the after-hook AFTER the main `flushAfterInsertQueue`
-  // body runs.
-
-  // NOTE: deliberately do NOT install an Object.defineProperty getter/setter
-  // wrap on globalThis.__gxtRebuildViewTreeFromDom here to drain the in-element
-  // deferred queue at rebuild time. Such a wrap conflicts with the legitimate
-  // `_wrapGxtRebuildViewTree` wrap below: that wrap reads
-  // `orig = g.__gxtRebuildViewTreeFromDom` (which would get our wrapper, not
-  // the manager.ts function), then ASSIGNS the resulting `wrapped` back via
-  // `g.__gxtRebuildViewTreeFromDom = wrapped`, which the property setter
-  // intercepts and stores in the inner slot — overwriting the manager.ts
-  // implementation that the in-element wrapper is supposed to call. The
-  // setInterval retry then re-applies the wrap on top of itself each tick
-  // because `__emberIfRebuildPatched` lives on the assigned `wrapped` (in the
-  // inner slot) but reads always see our wrapper (which lacks the flag),
-  // producing compounding re-wraps and corrupting the view-registry reset for
-  // `_wrapperIfUserFalse` — surfacing as a `getChildViews` regression where
-  // x-toggle siblings see each other's child cells (cell aliasing).
-  //
-  // The in-element deferred queue is instead drained via the
-  // `afterFlushAfterInsertQueue` host hook (installed at file EOF via
-  // `installViewUtilsPart`), which covers the ember-gxt-wrappers code path.
 }
 
 // Host hook contributed via `installViewUtilsPart` (see module bottom). Runs
@@ -1452,12 +1343,9 @@ function _afterFlushAfterInsertQueue(): void {
     // insertBefore=null means "append" (don't clear existing content)
     // insertBefore=undefined/omitted means "replace" (clear existing first)
     //
-    // gxt >=0.0.76 (the EMBER_IN_ELEMENT compile flag, glimmer-next #254)
-    // emits the insertBefore semantics as a compile-time 4th MODE argument —
-    // 1 = CLEAR (default/undefined), 0 = APPEND (insertBefore=null), any
-    // other literal = the Ember dev assert. This replaced the out-of-band
-    // `__ieSet(...)` signalling channel (module-local flag pair written by an
-    // injection in every legacy Function body).
+    // gxt passes these semantics as `$_inElement`'s 4th MODE argument
+    // (EMBER_IN_ELEMENT): 1 = CLEAR (default/undefined), 0 = APPEND
+    // (insertBefore=null), any other literal = the Ember dev assert.
     let insertBefore: any = undefined; // undefined = replace (default)
     if (insertBeforeRef === 0) {
       insertBefore = null; // append mode
@@ -1710,12 +1598,12 @@ function _afterFlushAfterInsertQueue(): void {
     // `{{#in-element}}` block (e.g. `{{modal-display}}`) must pool under a
     // parent identity that is STABLE across re-renders. Without this, the
     // initial render pools the block's components under the ambient parent
-    // (often ROOT) while subsequent SELF_TAG morph re-renders push a fresh
-    // re-render context, so the pool lookup misses, a brand-new instance is
-    // created, and the prior one is swept as unclaimed — firing
-    // willDestroyElement on every reactive change and never firing
-    // didInsertElement. The target element (`appendRef`) is stable across
-    // renders, so use it as the block's pool-parent key.
+    // (often ROOT) while later re-renders push a fresh re-render context, so
+    // the pool lookup misses, a brand-new instance is created, and the prior
+    // one is swept as unclaimed — firing willDestroyElement on every reactive
+    // change and never firing didInsertElement. The target element
+    // (`appendRef`) is stable across renders, so use it as the block's
+    // pool-parent key.
     const _ieRenderRoots = () => {
       const _push = getGxtRenderer()?.viewUtils?.pushParentView;
       const _pop = getGxtRenderer()?.viewUtils?.popParentView;
@@ -1862,18 +1750,18 @@ function _afterFlushAfterInsertQueue(): void {
 }
 
 // The SafeString.toString() patch below writes the last converted SafeString
-// result here; the style-binding warn site in __gxtAttrInterpolate reads +
-// clears it to distinguish SafeString-derived strings from plain strings.
+// result here; the style warn decision in `_styleEmptyGuard` (the `$_tag_ember`
+// style getter) reads and clears it to tell SafeString-derived strings from
+// plain strings.
 let _gxtLastSafeStringResult: string | undefined;
 
 // Patch SafeString.toString() to track when a SafeString is being converted to
-// a string during GXT's quoted attribute concatenation. This lets the style prop
-// patch distinguish between a plain string (warn) and a SafeString-derived string
-// (no warn). We track the last SafeString result so the prop patch can compare.
+// a string during GXT's quoted attribute concatenation, so the style warning
+// can tell a plain string (warn) from a SafeString-derived one (no warn).
 // Deferred to avoid circular deps — patches after modules are loaded.
-// DEBUG-only: the sole consumer is the style-XSS warn decision in
-// __gxtAttrInterpolate (a getDebugFunction('warn') channel, stripped in prod) —
-// gate the whole prototype patch out of production bundles.
+// DEBUG-only: the sole consumer is that warning (a getDebugFunction('warn')
+// channel, stripped in prod), so the prototype patch stays out of production
+// bundles.
 if (DEBUG) {
   setTimeout(() => {
     try {
@@ -2016,16 +1904,13 @@ const _HTML_BOOLEAN_ATTRS = new Set([
   'reversed',
   'selected',
 ]);
-// Ember attribute WRITE-TIME semantics, registered as gxt's `normalizeAttrValue`
-// host hook (gxt >=0.0.71, glimmer-next #240) instead of the former
-// HTMLBrowserDOMApi.prototype.attr monkey-patch. The hook fires inside gxt's
-// $attr/$prop choke points — the initial write AND every reactive re-apply —
-// across ALL namespace apis (HTML/SVG/MathML; the old patch covered HTML only),
-// and exists only in WITH_EMBER_INTEGRATION builds (standalone gxt folds the
-// seam away). On the attr side, returning `undefined` removes the attribute.
-// (The style warning is emitted from _styleEmptyGuard in the $_tag_ember
-// wrapper — earlier in the pipeline — to avoid double warnings. The prop side
-// needs no ember normalization: the old prop patch was a passthrough.)
+// Ember attribute write-time semantics, registered as gxt's
+// `normalizeAttrValue` host hook. It runs at gxt's $attr/$prop choke points
+// (the first write and every reactive re-apply) for all namespace APIs
+// (HTML/SVG/MathML), in WITH_EMBER_INTEGRATION builds. On the attr side,
+// returning `undefined` removes the attribute. The style warning comes from
+// `_styleEmptyGuard` in the `$_tag_ember` wrapper instead (earlier in the
+// pipeline, so it is not emitted twice); props need no Ember normalization.
 _gxtRegisterHostHooks({
   normalizeAttrValue: (name: string, value: any, element: any, isProp: boolean) => {
     if (isProp) return value;
@@ -2207,10 +2092,9 @@ function _resolveCurriedArgs(curried: any): {
   return { name: curried.__name, args: resolved, positionals: resolvedPos };
 }
 
-// Module-local registry of curried-component render infos.
-// The reader, the test-cleanup `length = 0` reset, and the push site are all
-// intra-file. Entries are object literals typed as `any` at construction (see
-// push site for shape).
+// Render infos of the curried-component marker regions that `_gxtSyncDomNow`
+// re-renders (pushed by itemToNode's getter-based curried renderer, cleared at
+// test cleanup).
 const _curriedRenderInfos: any[] = [];
 
 // Helper: snapshot curried args on a render info for later comparison.
@@ -2986,12 +2870,9 @@ function _gxtWalkHashGetterPaths(getter: any, ctx: any): void {
 // boolean (defaults to `false` at module init).
 const _gxtExternalScheduleHook = function () {
   _gxtSetPendingSync(true);
-  // Note: this is from cell/effect scheduling, NOT from a property change.
-  // The property-change flag is set separately by _notifyPropertiesChanged via
-  // `_gxtSetPendingSyncFromPropertyChange` (module-local in this file) or via
-  // `compilePipeline.setPendingSyncFromPropertyChange?.(true)` for cross-package
-  // writers (templates/root.ts outlet rerender + routing/router.ts transition
-  // LinkTo path).
+  // Note: this is from cell/effect scheduling, NOT from a property change; the
+  // property-change flag is set separately (`_gxtSetPendingSyncFromPropertyChange`,
+  // or `compilePipeline.setPendingSyncFromPropertyChange` from other modules).
 };
 _gxtRegisterHostHooks({ scheduleRevalidate: _gxtExternalScheduleHook });
 
@@ -3040,7 +2921,7 @@ function registerArrayOwner(array: any, ownerObj: object, ownerKey: string) {
 // over `_arrayOwnerMap` is read below — relocation would fragment the map's
 // call sites. See `installCompilePipelinePart` call at module bottom.
 
-// Pending if-watcher notifications accumulated during __gxtTriggerReRender.
+// Pending if-watcher notifications accumulated during `_gxtTriggerReRender`.
 // Flushed in _gxtSyncDomNow after all cells have been updated atomically.
 // This prevents IfCondition branch switching during batched property changes
 // (e.g., set(cond2, true); set(cond1, false) in a single runTask), which
@@ -3111,27 +2992,15 @@ function _pushIfWatcherNotification(obj: object, keyName: string): void {
   _pendingIfWatcherNotifications.push({ obj, keyName });
 }
 
-// GXT re-render trigger hook - called by Ember's notifyPropertyChange.
-// Since GXT's own cell updates are captured by __gxtExternalSchedule,
-// this hook only needs to mark that a sync is pending.
-//
-// The canonical body is exposed via the gxt-bridge as
-// `compilePipeline.triggerReRender`; the globalThis writer is also retained so
-// the save-restore sites in `validator.ts` and `manager.ts` can keep the global
-// slot. Two host-hook chains let cross-file contributors run code before/after
-// the canonical body without wrap-by-reassignment:
-//   - `_beforeTriggerReRender` — populated by manager.ts (dirtied-objects
-//     Set) and ember-gxt-wrappers.ts (tracked-set-since-rerender flag).
-//   - `_afterTriggerReRender` — populated by glimmer/lib/renderer.ts
-//     (ArrayProxy content-array owner dirtying).
-// Chain dispatch is gated on a `length > 0` check so empty chains add zero
-// per-call overhead.
-//
-// The `__gxtInTriggerReRender` flag toggle is folded into the canonical body's
-// try/finally below. The flag is also set by `metal/property_events.ts`
-// (caller-side) for the canonical notify path; setting it again here is
-// idempotent (the save/restore pattern uses `wasInside` so nested calls are
-// safe).
+// Host-hook chains around the canonical re-render trigger
+// (`_gxtTriggerReRender`, reached as `compilePipeline.triggerReRender` from
+// Ember's notifyPropertyChange), so other modules can run code before or after
+// it without wrapping it:
+//   - `_beforeTriggerReRender`: manager.ts (dirtied-objects set) and
+//     ember-gxt-wrappers.ts (tracked-set-since-rerender flag);
+//   - `_afterTriggerReRender`: glimmer/lib/renderer.ts (ArrayProxy
+//     content-array owner dirtying).
+// An empty chain costs one length check per call.
 type _TriggerReRenderHook = (obj: object, keyName: string) => void;
 const _beforeTriggerReRender: _TriggerReRenderHook[] = [];
 const _afterTriggerReRender: _TriggerReRenderHook[] = [];
@@ -3331,24 +3200,9 @@ function _gxtConsumeTrackedSetSinceRerender(): boolean {
   return prev;
 }
 
-// Monotonic sync-cycle counter.
-//
-//   Writer (intra-file only): `_gxtSyncDomNow` bumps the cycle ID once per
-//   sync flush via `_gxtIncrementSyncCycleId()`. This is the only canonical
-//   writer; the counter increases monotonically across the renderer's lifetime.
-//
-//   Readers: intra-file compile.ts sites call `_gxtGetSyncCycleId()` directly;
-//   cross-file (gxt-backend/manager.ts) and cross-package
-//   (glimmer/lib/renderer.ts) readers route through the bridge
-//   `compilePipeline.getSyncCycleId?.() ?? 0`.
-//
-// Only a read method is exposed on the bridge (`getSyncCycleId?(): number`);
-// no increment helper, since the writer is intra-file only.
-//
-// Bridge-not-yet-installed edge: the readers run on every sync flush
-// (manager.ts hot paths) and during initial render. All readers default to `0`
-// if the bridge is not yet installed. The writer is intra-file only, so it
-// always sees the canonical counter regardless of bridge install state.
+// Monotonic sync-cycle counter. `_gxtSyncDomNow` bumps it once per sync (the
+// only writer); other modules read it through `compilePipeline.getSyncCycleId()`
+// and treat a missing bridge as cycle 0.
 let _gxtSyncCycleId = 0;
 function _gxtIncrementSyncCycleId(): number {
   _gxtSyncCycleId = _gxtSyncCycleId + 1;
@@ -3454,19 +3308,12 @@ function _gxtSetSkipTextEffects(value: boolean): void {
   _gxtFlags.skipTextEffects = value;
 }
 
-// Root outlet-rerender dispatcher, exposed via the bridge. The writer in
-// `glimmer/lib/templates/root.ts` registers a `(outletRef) => void` dispatcher
-// closure via `setRootOutletRerender`; `gxt-backend/manager.ts` registers a
-// `render.outlet` instrumentation wrap via `setRootOutletRerenderWrap` (once at
-// IIFE time); three readers (renderer.ts, views/outlet.ts, root.ts) fetch it via
-// `getRootOutletRerender?.() ?? null` with a `typeof === 'function'` guard.
-//
-// `_gxtRootOutletRerenderRaw` holds the already-wrapped dispatcher;
-// `_gxtRootOutletRerenderWrap` holds the instrumentation wrap (defaults to
-// identity so a not-yet-registered wrap is a no-op). The wrap is applied at
-// SET-TIME inside `_gxtSetRootOutletRerender`. Manager.ts's wrap closure has its
-// own `__gxtInstrumented` idempotency check, so re-applying it to an
-// already-wrapped function is a no-op.
+// Root outlet-rerender dispatcher. root.ts registers the `(outletRef) => void`
+// dispatcher (`setRootOutletRerender`) and manager.ts a `render.outlet`
+// instrumentation wrap (`setRootOutletRerenderWrap`), applied when the
+// dispatcher is set; readers fetch it with `getRootOutletRerender()`. The wrap
+// defaults to identity, and manager.ts's wrap is idempotent
+// (`__gxtInstrumented`), so re-wrapping is harmless.
 let _gxtRootOutletRerenderRaw: ((ref: any) => void) | null = null;
 let _gxtRootOutletRerenderWrap: (fn: any) => any = (fn) => fn;
 function _gxtSetRootOutletRerender(fn: ((ref: any) => void) | null): void {
@@ -3491,25 +3338,17 @@ function _gxtSetRootOutletRerenderWrap(wrap: (fn: any) => any): void {
   }
 }
 
-// Holds an error captured during `_gxtSyncDomNow`'s morph-fallback try/catch
-// (the `forceEmberRerender` rerender error and the `destroyUnclaimedPoolEntries`
-// destroy error) so that the error can be re-thrown AFTER the `finally`-block
-// sync-state cleanup runs (`_gxtSetSyncing(false)` +
-// `_gxtSetSyncIsPropertyDriven(false)`). Without the defer, the throw would skip
-// the finally's flag-reset and leave `_gxtFlags.syncing === true`, causing every
-// subsequent `_gxtSyncDomNow` call to short-circuit on the re-entrancy guard and
-// become a permanent no-op.
+// Holds an error captured during `_gxtSyncDomNow`'s force-rerender phase (the
+// rerender error and the `destroyUnclaimedPoolEntries` destroy error) so that it
+// is re-thrown AFTER the `finally`-block sync-state cleanup
+// (`_gxtSetSyncing(false)` + `_gxtSetSyncIsPropertyDriven(false)`). Throwing
+// earlier would skip that reset and leave `_gxtFlags.syncing` true, turning
+// every later `_gxtSyncDomNow` into a no-op through its re-entrancy guard.
 //
-// All read/write/clear/throw sites live in the same `_gxtSyncDomNow` body. The
-// two writers use first-error-wins coalescing (`existing || newErr`) so the
-// rerender throw isn't shadowed by a later destroy throw. The reader captures
-// the error AFTER the function-body `finally` ran, clears the slot, then
-// re-throws to propagate the error to `runTask`'s caller (typically
-// `assert.throws` in tests).
-//
-// Type is `unknown` (not `Error | null`): the throws can be any thrown value
-// (`throw 'string'`, `throw 42`, etc.), and a bare `throw deferredSyncErr;` is
-// permitted for `unknown`.
+// The two writers keep the first error (`existing || newErr`), so the rerender
+// throw isn't shadowed by a later destroy throw; after the `finally` the slot
+// is cleared and the error re-thrown to `runTask`'s caller (typically
+// `assert.throws` in tests). `unknown`, because any value can be thrown.
 let _gxtDeferredSyncError: unknown = null;
 
 function _gxtGetPendingSync(): boolean {
@@ -3547,51 +3386,32 @@ function _gxtSetDestroyReattachInProgress(on: boolean): void {
   _gxtFlags.destroyReattachInProgress = on;
 }
 
-// Engine-instance cache, exposed via a single-method `getEngineInstances`
-// getter bridge. Holds one engine instance per `{{mount "engine-name"}}`
-// invocation — reused across re-renders of the parent template so that
-// `<ember-mount>` elements recreated by a force-rerender don't double-
-// instantiate the engine. Engines are inserted on first `<ember-mount>`
-// connection (mount-element.ts `renderEngine`) and destroyed in the between-test
-// teardown (`_gxtClearOnSetup`), which destroys both the inner
-// `__gxtOriginalEngine` (which `init`-ed itself into the `Namespace.NAMESPACES`
-// table) and the cached instance so the "Should not have any NAMESPACES"
-// assertion passes.
-//
-// The cross-file writer (`mount-element.ts`) routes through
-// `compilePipeline.getEngineInstances()`; the intra-file readers in
-// `_gxtClearOnSetup` use `_gxtEngineInstances` directly. Only a getter is
-// exposed because the Map identity never changes — consumers mutate its
-// contents via `Map.get` / `Map.set` / `Map.clear` on the returned reference.
+// Engine-instance cache: one engine instance per `{{mount "engine-name"}}`
+// invocation, reused across re-renders of the parent template so that
+// `<ember-mount>` elements recreated by a force-rerender don't instantiate the
+// engine again. mount-element.ts adds engines on first connection (through
+// `compilePipeline.getEngineInstances()`), and `_gxtClearOnSetup` destroys them
+// between tests — both the inner `__gxtOriginalEngine` (which `init`-ed itself
+// into `Namespace.NAMESPACES`) and the cached instance, so the "Should not have
+// any NAMESPACES" assertion passes. Only a getter is exposed: the Map identity
+// never changes.
 const _gxtEngineInstances: Map<string, any> = new Map<string, any>();
 function _gxtGetEngineInstances(): Map<string, any> {
   return _gxtEngineInstances;
 }
 
-// Phase 4.1 SSR consumer plumbing (RFC §7.1.1 step 2). `withRootContext(ctx, fn)`
-// runs `fn` against an ISOLATED render root: it snapshots the three (a)-class
-// ember-side root-scoped singletons enumerated in the RFC — `_gxtRootContext`
-// (the ambient GXT `Root`), `_gxtTopOutletRef` (the captured top outlet), and the
-// `_gxtEngineInstances` map (engine mount-point registry) — installs the per-root
-// state carried by `ctx` (defaulting to a fresh/empty root), wraps the body in
-// glimmer-next's `withRenderRoot(createRenderRootState(), …)` so the UPSTREAM
-// module-globals (node counter, parent-context stack, rendering context) are
-// likewise swapped to a fresh isolated set, and restores the outer ambient state
-// on exit — including on throw — while checkpointing the (possibly mutated) per-root
-// state back into `ctx` (mirroring `withRenderRoot`'s own save/checkpoint/restore
-// idiom for `RenderRootState`).
+// `withRootContext(ctx, fn)` runs `fn` against an isolated render root (the SSR
+// entry point; nothing in the browser render path calls it). It snapshots the
+// ember-side root-scoped singletons (`_gxtRootContext`, `_gxtTopOutletRef`,
+// `_gxtEngineInstances`), installs the per-root state carried by `ctx` (a fresh
+// root by default), wraps the body in gxt's
+// `withRenderRoot(createRenderRootState(), …)` so gxt's own module globals are
+// swapped as well, and restores the outer state on exit (also on throw),
+// writing the per-root state back into `ctx`.
 //
-// CRITICAL: this is ADDITIVE. Nothing in the existing browser/render path calls it;
-// the default ambient module-globals remain untouched and single-root behavior is
-// byte-identical unless a caller explicitly invokes `withRootContext`. There is no
-// consumer until a FastBoot/SSR driver exists — each SSR request would become
-// `withRootContext(freshCtx, () => render(...))`. It is SYNCHRONOUS ONLY: `fn` must
-// mint all DOM synchronously before returning (matching `withRenderRoot`'s non-goal —
-// no `await` inside the swapped window), or the swapped globals leak across requests.
-//
-// `_gxtEngineInstances` is a `const` whose identity must stay stable (cross-package
-// consumers hold the reference), so it is swapped by clearing + repopulating its
-// CONTENTS rather than reassigning the binding.
+// It is synchronous only: `fn` must create all DOM before returning, or the
+// swapped globals leak across requests. `_gxtEngineInstances` keeps its
+// identity (other modules hold the reference), so its contents are swapped.
 interface GxtRootContextState {
   rootContext?: any;
   topOutletRef?: any;
@@ -3651,18 +3471,13 @@ let _innerSiblingRescanDepth = 0;
 const _INNER_SIBLING_RESCAN_MAX_DEPTH = 3;
 
 const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unknown) {
-  // The optional `value` parameter is plumbed through
-  // `notifyPropertyChange(obj, keyName, _meta, value)` via the bridge so
-  // `_gxtTriggerReRenderSyncCore`'s primary `cellFor(obj, keyName).update(value)`
-  // can skip the `obj[keyName]` getter read for the ~85% of write traffic that
-  // already passes a value (set() + the @tracked setter). SyncCore is the single
-  // source of truth for the cell.update.
+  // The optional `value` (passed through `notifyPropertyChange(obj, keyName,
+  // _meta, value)`) lets SyncCore's `cellFor(obj, keyName).update(value)` skip
+  // reading `obj[keyName]`.
   //
-  // Honor the suppression flag at this single entry point: when
-  // `_gxtWithTriggerSuppressed(fn)` is in flight the flag is `true` and we
-  // short-circuit. The bridge readers (`metal/tracked.ts`, `glimmer-tracking.ts`)
-  // reach this via `compilePipeline.triggerReRender(...)`, so the flag-gate is
-  // the only surface that preserves their suppression.
+  // Suppression (`_gxtWithTriggerSuppressed`) is checked here, at the single
+  // entry point every caller, including `compilePipeline.triggerReRender`,
+  // goes through.
   if (_gxtFlags.triggerSuppressed) return;
   // Detect whether the caller passed a value so SyncCore can skip the
   // `(obj as any)[keyName]` getter read on the value-passing paths.
@@ -3679,12 +3494,9 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
       }
     }
   }
-  // Run SyncCore under the in-trigger-rerender flag via the typed
-  // `_gxtWithInTriggerReRender` helper (also published on the bridge as
-  // `compilePipeline.withInTriggerReRender`). The flag is restored before the
-  // AFTER-hook chain dispatches (AFTER hooks run with the flag already
-  // restored). The save/restore is re-entrancy-safe (`wasInside` preserves an
-  // enclosing toggle if any).
+  // Run SyncCore with the in-trigger-rerender flag set
+  // (`_gxtWithInTriggerReRender`); the flag is restored before the AFTER-hook
+  // chain runs.
   //
   // The body is split into SyncCore (synchronous-mandatory cell/flag work, run
   // immediately) and Deferred (deferrable cascade work, enqueued into
@@ -3728,33 +3540,24 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
 
     // Controller-set outlet rerender bridge.
     // When `obj` is a Controller (marker `isController === true`) AND the
-    // changed key is `model`, look up its registered outlet via
-    // `__gxtControllerOutletRerender` (installed by root.ts at module
-    // load) and invoke the outlet's `rerenderForThisRoot` closure with
-    // forceFull=true. This closes the cell→DOM propagation gap for
-    // `set(controller, 'model', x)`: SyncCore + _walkRenderContexts
-    // updates the cells on the renderContext (Object.create(controller)),
-    // but the outlet template's text-binding effects don't always
-    // auto-flush — driving through the outlet rerender path with a full
-    // re-render forces the template formulas to re-evaluate.
+    // changed key is `model`, run the outlet rerender registered for it
+    // (`getControllerOutletRerender()`, installed by root.ts). This closes the
+    // cell→DOM propagation gap for `set(controller, 'model', x)`: SyncCore +
+    // _walkRenderContexts update the cells on the renderContext
+    // (Object.create(controller)), but the outlet template's text-binding
+    // effects don't always flush on their own.
     //
-    // The hook is intentionally narrowed to `keyName === 'model'`. Firing
-    // for ALL controller properties (e.g. `@tracked isExpanded`) destroys
-    // the view tree on every tracked write (the View tree test regressed
-    // when this was unguarded) — the cell-based cascade for tracked props
-    // works correctly without a forceFull rerender; only `model` writes
-    // need the outlet-template re-evaluation because outletState's model
-    // reference is unchanged so the natural setOutletState rerender path
-    // doesn't fire.
+    // The hook is narrowed to `keyName === 'model'`: firing it for ALL
+    // controller properties (e.g. `@tracked isExpanded`) destroys the view tree
+    // on every tracked write (the View tree test) — the cell-based cascade
+    // handles tracked props; only `model` writes need the outlet re-evaluation,
+    // because outletState's model reference is unchanged so the natural
+    // setOutletState rerender path doesn't fire.
     //
-    // The bridge is ALSO fired for QP-tracked properties (keys present in the
-    // controller's `queryParams` configuration). When a controller's QP-tracked
-    // property is mutated
-    // followed by `route.refresh()`, the outletState model reference is
-    // unchanged so the natural rerender path doesn't fire — analogous to
-    // the `model` case. QP keys are explicitly declared (a closed,
-    // user-authored set), so this widening doesn't accidentally include
-    // generic `@tracked` properties that broke the View tree test.
+    // It also fires for QP-tracked properties (keys in the controller's
+    // `queryParams` configuration): after such a write and `route.refresh()`
+    // the outletState model reference is unchanged too. QP keys are an
+    // explicitly declared set, so generic `@tracked` properties stay out.
     //
     // The hook itself contains the re-entrancy guard (toggled in root.ts),
     // so nested `set()` calls inside the rerender body don't re-trigger.
@@ -3792,11 +3595,10 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
       const _ctrlHook = getControllerOutletRerender();
       if (typeof _ctrlHook === 'function') {
         try {
-          // Pass the changed key so the outlet-rerender hook can choose the
-          // cell-only fast path for a route
-          // MODEL identity swap (preserving route-template component identity
-          // — `didInsertElement` fires once — while still re-evaluating
-          // `{{@model.…}}` bindings). QP keys keep the legacy full re-render.
+          // Pass the changed key: the outlet-rerender hook takes the cell-only
+          // fast path for it (a route MODEL identity swap keeps the route
+          // template's components, so `didInsertElement` fires once, while
+          // `{{@model.…}}` bindings still re-evaluate).
           _ctrlHook(obj, keyName);
         } catch (e) {
           // Match the existing post-trigger error handling shape — warn but
@@ -3808,11 +3610,11 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
       // Interior model mutation bridge: if `obj` is registered as the VALUE
       // of `(*, 'model')` via _objectValueCellMap and the owner traces
       // back to a controller, fire the outlet rerender hook for that
-      // controller. Same forceFull rationale as the direct controller-
-      // model branch above. Guard against firing during an active render
-      // pass (component init `this.set(...)` writes go through this path —
-      // those should hit the classic backtracking-re-render assertion,
-      // not get force-rerendered into a green test).
+      // controller, as the direct controller-model branch above does. Guard
+      // against firing during an active render pass (component init
+      // `this.set(...)` writes go through this path — those should hit the
+      // classic backtracking-re-render assertion, not get re-rendered into a
+      // green test).
       try {
         const owners = _objectValueCellMap.get(obj);
         if (owners) {
@@ -3854,9 +3656,8 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
         }
       } catch (e) {
         // _objectValueCellMap.get on an arbitrary object should never throw,
-        // but if WeakMap rejects (non-object key), fall through quietly —
-        // the trigger-body already protected this path with try/catch in the
-        // sibling SyncCore reverse-lookup at L5337-5352.
+        // but if WeakMap rejects (non-object key), fall through quietly, as
+        // SyncCore's reverse lookup does.
         console.warn('[gxt] interior-mutation bridge owner walk failed', e);
       }
     }
@@ -3991,9 +3792,9 @@ function _gxtTriggerReRenderSyncCore(
       /* ignore */
     }
   }
-  // Group D (gated): if a NEW key was added to an object an each-in source has
-  // iterated, bump its key-SET revision so the source re-iterates. No-op when
-  // the key was already observed (value-only change) or no each-in tracks `obj`.
+  // If a NEW key was added to an object an each-in source has iterated, bump
+  // its key-SET revision so the source re-iterates. No-op when the key was
+  // already observed (value-only change) or no each-in tracks `obj`.
   _gxtNotifyObjectKeyAdded(obj, keyName);
   // Collect owners that need their Ember tag dirtied for force-rerender.
   // The actual dirtying is deferred to AFTER gxtSyncDom + updateRootTagValues.
@@ -4297,12 +4098,12 @@ function _gxtTriggerReRenderSyncCore(
   if (_gxtGetInAfterRender()) {
     _gxtSetAfterRenderPropertyChange(true);
   }
-  // Signal to __gxtForceEmberRerender that nested object changes occurred.
-  // When a property changes on a nested object (e.g., set(m, 'message', ...)
-  // or foo.set('text', ...)), the component's SELF_TAG is NOT dirtied by
-  // Ember (only the object's tag is). Setting __gxtHadNestedObjectChange
-  // allows the force-rerender to fall back to force-rendering all roots so
-  // computed properties like {{this.m.formattedMessage}} re-evaluate.
+  // Tell the force-rerender (`_gxtForceEmberRerender`) that nested object
+  // changes occurred. When a property changes on a nested object (e.g.,
+  // set(m, 'message', ...) or foo.set('text', ...)), the component's SELF_TAG
+  // is NOT dirtied by Ember (only the object's tag is). The hadNestedObjectChange
+  // flag lets the force-rerender fall back to rendering all roots so computed
+  // properties like {{this.m.formattedMessage}} re-evaluate.
   //
   // Case 1: tag dirtying was reverse-looked-up via _objectValueCellMap
   // (explicit cell registration) — use the pre-computed _deferredTagDirties.
@@ -4320,8 +4121,8 @@ function _gxtTriggerReRenderSyncCore(
     // Custom-managed components (those registered via setComponentManager
     // → COMPONENT_MANAGERS) use their own dependency-tracking semantics
     // (args proxy + explicit @tracked), and their @tracked state changes
-    // are handled by the cell-based sync pipeline (Phase 1) without needing
-    // the force-all morph.
+    // are handled by the cell-based sync pipeline without the force-all
+    // rerender.
     //
     // We deliberately do NOT treat classic Ember Components (registered via
     // setInternalComponentManager → INTERNAL_MANAGERS) the same way —
@@ -4370,20 +4171,16 @@ function _gxtTriggerReRenderDeferred(obj: object, keyName: string): void {
   }
 }
 
-// ---- Cross-module-instance $_if fix ----
+// $_if watchers. $_if is patched to capture IfCondition instances and register
+// callbacks keyed by (object, property); `_gxtTriggerReRender` calls them to
+// sync the IfCondition directly. This keeps `{{#if}}` conditions current when
+// Vite serves gxt's internal chunks (vm-*.js, dom-*.js) with different ?v=
+// query strings, which creates two instances of the reactive core whose cells
+// and opcodes do not see each other.
 //
-// Problem: Vite serves GXT's internal chunks (vm-*.js, dom-*.js) with inconsistent
-// ?v= query strings, creating TWO module instances of the reactive core. Cells/opcodes
-// from one instance don't trigger re-evaluation in the other. This breaks $_if
-// condition tracking when properties change via Ember's set().
-//
-// Additional: IfCondition's internal placeholder gets disconnected when Ember's
-// compat layer moves rendered nodes into wrapper divs. Fix: include placeholder
-// and target in the extracted RENDERED_NODES so itemToNode preserves them.
-//
-// Solution: Patch $_if to capture IfCondition instances. Register manual callbacks
-// keyed by (object, property). When __gxtTriggerReRender fires, call syncState
-// on the IfCondition directly.
+// IfCondition's internal placeholder also gets disconnected when the compat
+// layer moves rendered nodes into wrapper divs, so the placeholder and target
+// are included in the extracted RENDERED_NODES and itemToNode keeps them.
 
 // Watcher callbacks may optionally carry a `__getNextBool` reader and a
 // `__ifCondition` ref so the flush phase can evaluate them in a parent-first
@@ -4414,39 +4211,36 @@ let _gxtCurrentParentIfRef: any = undefined;
 // HTML-comment registry: the `gxtHtmlCommentTransform` AST visitor registers each
 // `<!-- ... -->` body under a stable plain-ASCII token and emits
 // `(__gxtCommentLookup "<token>")`; the `__gxtCommentLookup` resolver (below) reads
-// it back at render time. The registry + writer now live in `ast-transforms.ts`
-// (Phase 3 extraction); this file only reads, via the imported `lookupGxtComment`.
+// it back at render time. The registry and its writer live in `ast-transforms.ts`;
+// this file only reads it, via `lookupGxtComment`.
 
-// In-element literal-id fallback STACK, pushed by the GXT render-template
+// In-element literal-id fallback stack, pushed by the GXT render-template
 // wrapper before invoking the template body and consumed by `$_inElement` when
-// the destination ref resolves to null/undefined during a render pass:
-// `_inElementFallbackIds` then peeks the top id (a compile-time literal element
-// id captured from the `#in-element` destination expression) and shifts it off,
-// allowing the renderer to defer the body insertion and re-resolve against the
-// now-attached parent fragment. All functional sites (the peek reader and shift
-// reader in `$_inElement`, and the push-side reader-writer in the render-template
-// wrapper) are intra-file. The stack is preserved across nested render passes
-// via the `_inElemStackStart` index snapshot at the push site (NOT via array
+// the destination ref resolves to null/undefined during a render pass: it
+// then takes an id (a compile-time literal element id captured from the
+// `#in-element` destination expression) off the stack, so the renderer can
+// defer the body insertion and re-resolve against the now-attached parent
+// fragment. The stack is preserved across nested render passes via the
+// `_inElemStackStart` index snapshot at the push site (NOT via array
 // replacement), so the shared module-local array is safe under reentrancy.
 const _inElementFallbackIds: string[] = [];
 
 // Persistent set of classic-component wrapper DOM ids that the user has
 // directly toggled to `false` via a click handler calling set()/toggleProperty.
-// Used by the __gxtRebuildViewTreeFromDom wrap below to reset the view-
-// registry's CHILD_VIEW_IDS for those wrappers so getChildViews returns
-// empty (matching the collapsed {{#if}} branch) even if GXT's own
-// destroyBranchSync was a no-op for the yield-only true branch.
+// `_afterRebuildViewTreeFromDom` resets the view-registry's CHILD_VIEW_IDS for
+// those wrappers so getChildViews returns empty (matching the collapsed
+// {{#if}} branch) even if GXT's own destroyBranchSync was a no-op for the
+// yield-only true branch.
 //
-// Exposed via the typed bridge `viewUtils.getWrapperUserFalseSet()` (contributed
-// below via `installViewUtilsPart`). The sole cross-file reader in manager.ts
-// (restoring `isExpanded = false` on freshly-constructed component instances
-// whose wrapper id was user-toggled false — load-bearing for the View tree
-// x-toggle/visit() cycle assertions) routes through the bridge.
+// manager.ts reads it through `viewUtils.getWrapperUserFalseSet()` to restore
+// `isExpanded = false` on freshly-constructed component instances whose
+// wrapper id was user-toggled false (load-bearing for the View tree
+// x-toggle/visit() cycle assertions).
 const _wrapperIfUserFalse = new Set<string>();
 // Map of wrapperId -> Set of {condFn, placeholder} entries. Populated by the
-// ifWatcher when the user toggles to false. Used by _wrapGxtRebuildViewTree
-// to verify at read time that a LIVE-DOM-connected IfCondition for this
-// wrapper still reports false. Needed because pool-reuse creates multiple
+// ifWatcher when the user toggles to false. `_afterRebuildViewTreeFromDom`
+// uses it to verify at read time that a LIVE-DOM-connected IfCondition for
+// this wrapper still reports false. Needed because pool-reuse creates multiple
 // stale IfCondition instances sharing the same wrapperId — only the one
 // whose placeholder is currently inside the live #wrapperId element
 // represents the user-visible state.
