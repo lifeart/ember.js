@@ -87,13 +87,7 @@ export function cached(_target: object, key: string, desc: PropertyDescriptor): 
   };
 }
 
-// Re-export cache primitives for @glimmer/tracking/primitives/cache
+// The cache primitives of `@glimmer/tracking/primitives/cache` are the
+// validator's, as upstream's `primitives/cache` re-exports them.
 import { createCache, getValue } from '@glimmer/validator';
-export { createCache, getValue };
-
-/**
- * isConst — checks if a cache is constant (never changes).
- */
-export function isConst(cache: any): boolean {
-  return cache?.tag?.isConst ?? false;
-}
+export { createCache, getValue, isConst } from '@glimmer/validator';

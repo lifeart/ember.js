@@ -12,6 +12,7 @@ import * as templateCompiler from 'ember-template-compiler';
 import { CustomComponentManager, componentCapabilities } from '../manager';
 import { destroy } from '../destroyable';
 import { getGxtRenderer } from '../gxt-bridge';
+import { createCache, getValue, isConst } from '@glimmer/tracking/primitives/cache';
 
 declare const QUnit: any;
 
@@ -88,6 +89,18 @@ QUnit.module('GXT correctness: ember-template-compiler shim', function () {
     const element = document.createElement('div');
     factory().render({}, element);
     assert.strictEqual(element.innerHTML, '<p class="y">z</p>');
+  });
+});
+
+QUnit.module('GXT correctness: @glimmer/tracking/primitives/cache', function () {
+  QUnit.test('isConst is the validator one (as upstream re-exports it)', function (assert: any) {
+    const constCache = createCache(() => 123);
+    assert.throws(
+      () => isConst(constCache),
+      /isConst\(\) can only be used on a cache once getValue\(\) has been called at least once/
+    );
+    getValue(constCache);
+    assert.true(isConst(constCache), 'a cache that consumed no tags is constant');
   });
 });
 
