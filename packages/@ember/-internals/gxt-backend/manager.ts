@@ -1719,24 +1719,7 @@ function createComponentInstance(
     // so that the expected assert fires before any other errors.
     const instanceTagName = instance?.tagName;
     if (instanceTagName === '') {
-      const cnBindings =
-        instance?.classNameBindings || factory?.class?.prototype?.classNameBindings;
-      assert(
-        'You cannot use `classNameBindings` on a tag-less component',
-        !cnBindings || !Array.isArray(cnBindings) || cnBindings.length === 0
-      );
-      const atBindings =
-        instance?.attributeBindings || factory?.class?.prototype?.attributeBindings;
-      assert(
-        'You cannot use `attributeBindings` on a tag-less component',
-        !atBindings || !Array.isArray(atBindings) || atBindings.length === 0
-      );
-      const argElementId = args && 'elementId' in args && args.elementId !== undefined;
-      const instanceElementId = instance?.elementId && !instance.__elementIdFromId;
-      assert(
-        'You cannot use `elementId` on a tag-less component',
-        !argElementId && !instanceElementId
-      );
+      _assertTaglessComponent(instance, factory?.class?.prototype, args);
     }
   }
 
@@ -3169,6 +3152,116 @@ function resolveClassNameBinding(instance: any, binding: string): string | null 
   return null;
 }
 
+// A tag-less component cannot have `classNameBindings`, `attributeBindings` or
+// an explicit `elementId` (`id` is allowed: an `elementId` mapped from `id` is
+// marked `__elementIdFromId`). `proto` is the definition's prototype.
+function _assertTaglessComponent(instance: any, proto: any, args: any): void {
+  const cnBindings = instance?.classNameBindings || proto?.classNameBindings;
+  assert(
+    'You cannot use `classNameBindings` on a tag-less component',
+    !cnBindings || !Array.isArray(cnBindings) || cnBindings.length === 0
+  );
+  const atBindings = instance?.attributeBindings || proto?.attributeBindings;
+  assert(
+    'You cannot use `attributeBindings` on a tag-less component',
+    !atBindings || !Array.isArray(atBindings) || atBindings.length === 0
+  );
+  const argElementId = args && 'elementId' in args && args.elementId !== undefined;
+  const instanceElementId = instance?.elementId && !instance.__elementIdFromId;
+  assert('You cannot use `elementId` on a tag-less component', !argElementId && !instanceElementId);
+}
+
+// A wrapper element's classes: the invocation's `class` and `classNames`, the
+// definition's (else the instance's) static `classNames`, the resolved
+// `classNameBindings`, and `ember-view` last. `validateBindings` asserts each
+// binding's shape (done when the element is first built).
+function _wrapperClassList(
+  instance: any,
+  componentDef: any,
+  argsClass: unknown,
+  argsClassNames: unknown,
+  validateBindings: boolean
+): string[] {
+  const classList: string[] = [];
+  if (argsClass && typeof argsClass === 'string') {
+    classList.push(...argsClass.split(' ').filter(Boolean));
+  }
+  if (argsClassNames && typeof argsClassNames === 'string') {
+    classList.push(...argsClassNames.split(' ').filter(Boolean));
+  }
+  const protoClassNames = componentDef?.prototype?.classNames;
+  if (protoClassNames && Array.isArray(protoClassNames) && protoClassNames.length > 0) {
+    classList.push(...protoClassNames);
+  } else if (instance?.classNames && Array.isArray(instance.classNames)) {
+    classList.push(...instance.classNames);
+  }
+  const classNameBindings =
+    instance?.classNameBindings || componentDef?.prototype?.classNameBindings;
+  if (classNameBindings && Array.isArray(classNameBindings)) {
+    for (const binding of classNameBindings) {
+      if (validateBindings) {
+        assert(
+          'classNameBindings must be non-empty strings',
+          typeof binding === 'string' && binding.length > 0
+        );
+        assert(
+          "classNameBindings must not have spaces in them. Multiple class name bindings can be provided as elements of an array, e.g. `classNameBindings: ['foo', ':bar']`",
+          typeof binding === 'string' && !binding.includes(' ')
+        );
+      }
+      const className = resolveClassNameBinding(instance, binding);
+      if (className) classList.push(className);
+    }
+  }
+  classList.push('ember-view');
+  return classList;
+}
+
+// The value of an `attributeBindings` property (a dotted path is walked).
+function _attributeBindingValue(instance: any, propName: string): any {
+  return propName.includes('.') ? getNestedValue(instance, propName) : instance?.[propName];
+}
+
+// Ember's style-XSS warning for a `style` binding whose value is not an
+// htmlSafe string (once per render pass and value, see `_shouldWarnStyle`).
+function _warnUnsafeStyleBinding(wrapper: HTMLElement, attrName: string, value: any): void {
+  if (attrName === 'style' && value !== null && value !== undefined && value !== false) {
+    const isHTMLSafe = value && typeof value === 'object' && typeof value.toHTML === 'function';
+    if (!isHTMLSafe && _shouldWarnStyle(wrapper, String(value))) {
+      const warnFn = getDebugFunction('warn');
+      if (warnFn)
+        warnFn(constructStyleDeprecationMessage(String(value)), false, {
+          id: 'ember-htmlbars.style-xss-warning',
+        });
+    }
+  }
+}
+
+// `unsafe:<value>` for a `javascript:` / `vbscript:` URL bound to `href`,
+// `src`, `cite` or `action`; `null` when the value is fine as it is.
+function _unsafeUrlBindingValue(attrName: string, value: any): string | null {
+  if (
+    (attrName === 'href' || attrName === 'src' || attrName === 'cite' || attrName === 'action') &&
+    typeof value === 'string'
+  ) {
+    const protocol = value.split(':')[0]?.toLowerCase();
+    if (protocol === 'javascript' || protocol === 'vbscript') {
+      return `unsafe:${value}`;
+    }
+  }
+  return null;
+}
+
+// `value` on an <input>, <textarea> or <select> is bound as the DOM property:
+// the HTML attribute only sets the default value, and Glimmer sets the
+// property, so the attribute does not appear in `outerHTML`.
+function _isValuePropertyAttr(wrapper: HTMLElement, attrName: string): boolean {
+  return (
+    attrName === 'value' &&
+    (wrapper.tagName === 'INPUT' || wrapper.tagName === 'TEXTAREA' || wrapper.tagName === 'SELECT')
+  );
+}
+
 /**
  * Sync wrapper element attributes and classes after property changes.
  * Called when a pooled instance is reused and args have changed.
@@ -3182,48 +3275,25 @@ function syncWrapperElement(
   if (!wrapper || !(wrapper instanceof HTMLElement)) return;
 
   // --- Rebuild class list ---
-  const classList: string[] = [];
-
   // Classes from invocation args (try arg getters first, then args object)
   const argGetters = instance?.__argGetters;
-  let argsClass = argGetters?.class
+  const argsClass = argGetters?.class
     ? argGetters.class()
     : typeof args?.class === 'function'
       ? args.class()
       : args?.class;
-  let argsClassNames = argGetters?.classNames
+  const argsClassNames = argGetters?.classNames
     ? argGetters.classNames()
     : typeof args?.classNames === 'function'
       ? args.classNames()
       : args?.classNames;
-
-  if (argsClass && typeof argsClass === 'string') {
-    classList.push(...argsClass.split(' ').filter(Boolean));
-  }
-  if (argsClassNames && typeof argsClassNames === 'string') {
-    classList.push(...argsClassNames.split(' ').filter(Boolean));
-  }
-
-  // Static classNames from component definition
-  const protoClassNames = componentDef?.prototype?.classNames;
-  if (protoClassNames && Array.isArray(protoClassNames) && protoClassNames.length > 0) {
-    classList.push(...protoClassNames);
-  } else if (instance?.classNames && Array.isArray(instance.classNames)) {
-    classList.push(...instance.classNames);
-  }
-
-  // Dynamic classNameBindings
-  const classNameBindings =
-    instance?.classNameBindings || componentDef?.prototype?.classNameBindings;
-  if (classNameBindings && Array.isArray(classNameBindings)) {
-    for (const binding of classNameBindings) {
-      const className = resolveClassNameBinding(instance, binding);
-      if (className) classList.push(className);
-    }
-  }
-
-  classList.push('ember-view');
-  wrapper.className = classList.join(' ');
+  wrapper.className = _wrapperClassList(
+    instance,
+    componentDef,
+    argsClass,
+    argsClassNames,
+    false
+  ).join(' ');
 
   // --- Sync id from HTML id prop (not @id named arg) ---
   // When 'id' is passed as an HTML prop (e.g., <FooBar id={{this.customId}} />),
@@ -3247,45 +3317,14 @@ function syncWrapperElement(
       // Never update id — it's frozen after first render
       if (attrName === 'id') continue;
 
-      const value = propName.includes('.')
-        ? getNestedValue(instance, propName)
-        : instance?.[propName];
-      // Warn for style attribute bindings with non-safe strings (once per render pass per value)
-      if (attrName === 'style' && value !== null && value !== undefined && value !== false) {
-        const isHTMLSafe = value && typeof value === 'object' && typeof value.toHTML === 'function';
-        if (!isHTMLSafe && _shouldWarnStyle(wrapper, String(value))) {
-          const warnFn = getDebugFunction('warn');
-          if (warnFn)
-            warnFn(constructStyleDeprecationMessage(String(value)), false, {
-              id: 'ember-htmlbars.style-xss-warning',
-            });
-        }
+      const value = _attributeBindingValue(instance, propName);
+      _warnUnsafeStyleBinding(wrapper, attrName, value);
+      const unsafeUrl = _unsafeUrlBindingValue(attrName, value);
+      if (unsafeUrl !== null) {
+        wrapper.setAttribute(attrName, unsafeUrl);
+        continue;
       }
-      // Sanitize dangerous href/src/cite/action attribute values
-      if (
-        (attrName === 'href' ||
-          attrName === 'src' ||
-          attrName === 'cite' ||
-          attrName === 'action') &&
-        typeof value === 'string'
-      ) {
-        const protocol = value.split(':')[0]?.toLowerCase();
-        if (protocol === 'javascript' || protocol === 'vbscript') {
-          wrapper.setAttribute(attrName, `unsafe:${value}`);
-          continue;
-        }
-      }
-      // For 'value' on input/textarea/select elements, set as a DOM property
-      // instead of an HTML attribute. The HTML 'value' attribute only sets the
-      // default value; the DOM property sets the current value. Ember's Glimmer VM
-      // uses property-based setting for these, so the attribute doesn't appear in outerHTML.
-      const isPropertyOnlyAttr =
-        attrName === 'value' &&
-        (wrapper.tagName === 'INPUT' ||
-          wrapper.tagName === 'TEXTAREA' ||
-          wrapper.tagName === 'SELECT');
-
-      if (isPropertyOnlyAttr) {
+      if (_isValuePropertyAttr(wrapper, attrName)) {
         (wrapper as any)[attrName] = value != null && value !== false ? String(value) : '';
         // Remove the HTML attribute if it was previously set
         if (wrapper.hasAttribute(attrName)) {
@@ -5239,74 +5278,24 @@ function buildWrapperElement(instance: any, args: any, componentDef: any): HTMLE
   const tagName = instanceTagName === '' ? null : instanceTagName || 'div';
 
   if (!tagName) {
-    // Validate tagless component constraints
-    const cnBindings = instance?.classNameBindings || componentDef?.prototype?.classNameBindings;
-    assert(
-      'You cannot use `classNameBindings` on a tag-less component',
-      !cnBindings || !Array.isArray(cnBindings) || cnBindings.length === 0
-    );
-    const atBindings = instance?.attributeBindings || componentDef?.prototype?.attributeBindings;
-    assert(
-      'You cannot use `attributeBindings` on a tag-less component',
-      !atBindings || !Array.isArray(atBindings) || atBindings.length === 0
-    );
-    // Only error on explicit `elementId` usage — `id` is allowed on tagless components.
-    // Check: (a) elementId arg passed directly, or (b) elementId on instance that
-    //   wasn't mapped from `id` arg.
-    const argElementId = args && 'elementId' in args && args.elementId !== undefined;
-    const instanceElementId = instance?.elementId && !instance.__elementIdFromId;
-    assert(
-      'You cannot use `elementId` on a tag-less component',
-      !argElementId && !instanceElementId
-    );
+    _assertTaglessComponent(instance, componentDef?.prototype, args);
     // Tagless component - return a fragment marker
     return document.createDocumentFragment() as any;
   }
 
   const wrapper = document.createElement(tagName);
 
-  const classList: string[] = [];
-
   // Add classes from invocation
   const argsClass = typeof args?.class === 'function' ? args.class() : args?.class;
   const argsClassNames =
     typeof args?.classNames === 'function' ? args.classNames() : args?.classNames;
-
-  if (argsClass && typeof argsClass === 'string') {
-    classList.push(...argsClass.split(' ').filter(Boolean));
-  }
-  if (argsClassNames && typeof argsClassNames === 'string') {
-    classList.push(...argsClassNames.split(' ').filter(Boolean));
-  }
-
-  // Add classNames from component definition (prototype or instance)
-  const protoClassNames = componentDef?.prototype?.classNames;
-  if (protoClassNames && Array.isArray(protoClassNames) && protoClassNames.length > 0) {
-    classList.push(...protoClassNames);
-  } else if (instance?.classNames && Array.isArray(instance.classNames)) {
-    classList.push(...instance.classNames);
-  }
-
-  const classNameBindings =
-    instance?.classNameBindings || componentDef?.prototype?.classNameBindings;
-  if (classNameBindings && Array.isArray(classNameBindings)) {
-    for (const binding of classNameBindings) {
-      assert(
-        'classNameBindings must be non-empty strings',
-        typeof binding === 'string' && binding.length > 0
-      );
-      assert(
-        "classNameBindings must not have spaces in them. Multiple class name bindings can be provided as elements of an array, e.g. `classNameBindings: ['foo', ':bar']`",
-        typeof binding === 'string' && !binding.includes(' ')
-      );
-      const className = resolveClassNameBinding(instance, binding);
-      if (className) classList.push(className);
-    }
-  }
-
-  // 'ember-view' always comes last
-  classList.push('ember-view');
-  wrapper.className = classList.join(' ');
+  wrapper.className = _wrapperClassList(
+    instance,
+    componentDef,
+    argsClass,
+    argsClassNames,
+    true
+  ).join(' ');
 
   // Set ID - check attributeBindings for id mapping first, then use frozen elementId or auto-generate.
   // Once elementId is frozen after first render, always use the frozen value.
@@ -5318,9 +5307,7 @@ function buildWrapperElement(instance: any, args: any, componentDef: any): HTMLE
       for (const binding of attrBindingsForId) {
         const { propName, attrName } = parseAttributeBinding(binding);
         if (attrName === 'id') {
-          const val = propName.includes('.')
-            ? getNestedValue(instance, propName)
-            : instance?.[propName];
+          const val = _attributeBindingValue(instance, propName);
           if (val !== undefined && val !== null && val !== false) {
             customIdFromBinding = String(val);
           }
@@ -5396,42 +5383,14 @@ function buildWrapperElement(instance: any, args: any, componentDef: any): HTMLE
         assert(`Illegal attributeBinding: '${propName}' is not a valid attribute name.`, false);
       }
 
-      const value = propName.includes('.')
-        ? getNestedValue(instance, propName)
-        : instance?.[propName];
-      // Warn for style attribute bindings with non-safe strings (once per render pass per value)
-      if (attrName === 'style' && value !== null && value !== undefined && value !== false) {
-        const isHTMLSafe = value && typeof value === 'object' && typeof value.toHTML === 'function';
-        if (!isHTMLSafe && _shouldWarnStyle(wrapper, String(value))) {
-          const warnFn = getDebugFunction('warn');
-          if (warnFn)
-            warnFn(constructStyleDeprecationMessage(String(value)), false, {
-              id: 'ember-htmlbars.style-xss-warning',
-            });
-        }
+      const value = _attributeBindingValue(instance, propName);
+      _warnUnsafeStyleBinding(wrapper, attrName, value);
+      const unsafeUrl = _unsafeUrlBindingValue(attrName, value);
+      if (unsafeUrl !== null) {
+        wrapper.setAttribute(attrName, unsafeUrl);
+        continue;
       }
-      // Sanitize dangerous href/src/cite/action attribute values
-      if (
-        (attrName === 'href' ||
-          attrName === 'src' ||
-          attrName === 'cite' ||
-          attrName === 'action') &&
-        typeof value === 'string'
-      ) {
-        const protocol = value.split(':')[0]?.toLowerCase();
-        if (protocol === 'javascript' || protocol === 'vbscript') {
-          wrapper.setAttribute(attrName, `unsafe:${value}`);
-          continue;
-        }
-      }
-      // For 'value' on input/textarea/select, set as DOM property (not HTML attribute)
-      const isPropertyOnlyAttr =
-        attrName === 'value' &&
-        (wrapper.tagName === 'INPUT' ||
-          wrapper.tagName === 'TEXTAREA' ||
-          wrapper.tagName === 'SELECT');
-
-      if (isPropertyOnlyAttr) {
+      if (_isValuePropertyAttr(wrapper, attrName)) {
         if (value !== undefined && value !== null && value !== false) {
           (wrapper as any)[attrName] = String(value);
         }
