@@ -1785,9 +1785,9 @@ function createComponentInstance(
           key
         );
         const argValue = getter();
-        let localValue = _plainNativeCollision ? argValue : instance[key]; // current value (from factory.create or init)
+        const localValue = _plainNativeCollision ? argValue : instance[key]; // current value (from factory.create or init)
         // If instance value differs from arg value, the component overrode it in init()
-        let useLocal = localValue !== argValue;
+        const useLocal = localValue !== argValue;
         // Detect @computed CP with a setter on the prototype chain so the
         // shadow setter below can still invoke the CP's `_setter` body for
         // its side effects (e.g. {mut, set}-triggered writes into other deps).
@@ -1809,73 +1809,7 @@ function createComponentInstance(
         } catch {
           /* ignore if effect can't be installed */
         }
-        Object.defineProperty(instance, key, {
-          get() {
-            // Route through the classic @glimmer/validator tag system so that
-            // Ember's createCache (used by @ember/helper invokeHelper) tracks
-            // this property as a dependency. Without this, reading a component
-            // arg from inside a createCache callback bypasses the tag tracker
-            // entirely because the arg getter reads the parent's cell directly.
-            try {
-              _classicConsumeTagHook(_classicTagForHook(instance, key));
-            } catch {
-              /* noop */
-            }
-            if (useLocal) return localValue;
-            try {
-              return getter();
-            } catch {
-              return localValue;
-            }
-          },
-          set(v: any) {
-            // When __gxtDispatchingArgs is set, this is an arg update from parent.
-            // Switch to arg-driven mode so the getter returns the arg value.
-            if ((instance as any).__gxtDispatchingArgs) {
-              localValue = v;
-              useLocal = false;
-              // Clear local override when arg update comes from parent
-              if (instance.__gxtLocalOverrides) instance.__gxtLocalOverrides.delete(key);
-            } else {
-              localValue = v;
-              useLocal = true;
-              // Track local override so `_gxtSyncAllWrappers` skips this key
-              if (!instance.__gxtLocalOverrides) instance.__gxtLocalOverrides = new Set();
-              instance.__gxtLocalOverrides.add(key);
-            }
-            // If this arg is backed by a classic @computed property with an
-            // independent setter, invoke the CP's setter for its side effects
-            // (e.g. `set width(w) { this.set('height', w/2) }`). Without this
-            // call, our shadow descriptor silently eats the write and the CP
-            // setter never runs — breaking mutable bindings of CP-with-setter.
-            if (cpWithSetter && !(instance as any).__gxtInvokingCpSetter) {
-              // Record the dispatched value so PDC can detect stale re-reads
-              // from deferred observer flushes (see PDC override guard).
-              if ((instance as any).__gxtDispatchingArgs) {
-                if (!(instance as any).__gxtCpArgDispatched)
-                  (instance as any).__gxtCpArgDispatched = {};
-                (instance as any).__gxtCpArgDispatched[key] = v;
-              }
-              try {
-                (instance as any).__gxtInvokingCpSetter = true;
-                cpWithSetter.set(instance, key, v);
-              } catch {
-                /* ignore CP setter failures */
-              } finally {
-                (instance as any).__gxtInvokingCpSetter = false;
-              }
-            }
-            // Dirty the classic tag so any createCache (invokeHelper) or
-            // observer watching `key` on this instance is invalidated.
-            try {
-              classicDirtyTagForGuarded(instance, key);
-            } catch {
-              /* noop */
-            }
-          },
-          configurable: true,
-          enumerable: true,
-        });
+        _installArgDescriptor(instance, key, getter, localValue, useLocal, cpWithSetter);
       } catch {
         /* some properties may not be configurable */
       }
@@ -2448,66 +2382,14 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
           if (hasPreservedDesc) {
             // Render-context descriptor already holds local-override state; leave it untouched.
           } else {
-            let localValue = newValue;
-            const getter = newGetter;
-            let useLocal = false;
-            // Detect classic @computed CP with a setter on the prototype chain.
-            // See `_findCpWithSetterFor` for rationale —
-            // without invoking the CP's `_setter`, the shadow descriptor below
-            // swallows arg-dispatch writes and breaks CP-with-setter semantics.
-            const cpWithSetter_u = _findCpWithSetterFor(instance, key);
-            Object.defineProperty(instance, key, {
-              get() {
-                // Route through classic @glimmer/validator tag system so
-                // createCache / invokeHelper consumers track this property.
-                try {
-                  _classicConsumeTagHook(_classicTagForHook(instance, key));
-                } catch {
-                  /* noop */
-                }
-                if (useLocal) return localValue;
-                try {
-                  return getter();
-                } catch {
-                  return localValue;
-                }
-              },
-              set(v: any) {
-                if ((instance as any).__gxtDispatchingArgs) {
-                  localValue = v;
-                  useLocal = false;
-                  if (instance.__gxtLocalOverrides) instance.__gxtLocalOverrides.delete(key);
-                } else {
-                  localValue = v;
-                  useLocal = true;
-                  if (!instance.__gxtLocalOverrides) instance.__gxtLocalOverrides = new Set();
-                  instance.__gxtLocalOverrides.add(key);
-                }
-                // Invoke CP setter for its side effects (see createComponentInstance).
-                if (cpWithSetter_u && !(instance as any).__gxtInvokingCpSetter) {
-                  if ((instance as any).__gxtDispatchingArgs) {
-                    if (!(instance as any).__gxtCpArgDispatched)
-                      (instance as any).__gxtCpArgDispatched = {};
-                    (instance as any).__gxtCpArgDispatched[key] = v;
-                  }
-                  try {
-                    (instance as any).__gxtInvokingCpSetter = true;
-                    cpWithSetter_u.set(instance, key, v);
-                  } catch {
-                    /* ignore CP setter failures */
-                  } finally {
-                    (instance as any).__gxtInvokingCpSetter = false;
-                  }
-                }
-                try {
-                  classicDirtyTagForGuarded(instance, key);
-                } catch {
-                  /* noop */
-                }
-              },
-              configurable: true,
-              enumerable: true,
-            });
+            _installArgDescriptor(
+              instance,
+              key,
+              newGetter,
+              newValue,
+              false,
+              _findCpWithSetterFor(instance, key)
+            );
           }
         } catch {
           /* non-configurable */
@@ -3639,6 +3521,75 @@ function _wrapInstanceTriggerForSyncAllMark(inst: any): void {
     enumerable: false,
   });
   inst.__gxtTriggerWrapped = true;
+}
+
+// Install `instance[key]` as the reactive accessor of an arg (create and
+// update share it). A read consumes the classic tag, so createCache /
+// invokeHelper consumers track it, then returns the arg's current value, or
+// the local value while component code has overridden the property (tracked in
+// `__gxtLocalOverrides`). A write from the parent's arg dispatch
+// (`__gxtDispatchingArgs`) switches back to the arg. Every write runs a
+// CP-with-setter's setter for its side effects (else this descriptor would eat
+// the write) and dirties the classic tag.
+function _installArgDescriptor(
+  instance: any,
+  key: string,
+  getter: () => unknown,
+  localValue: unknown,
+  useLocal: boolean,
+  cpWithSetter: any
+): void {
+  Object.defineProperty(instance, key, {
+    get() {
+      try {
+        _classicConsumeTagHook(_classicTagForHook(instance, key));
+      } catch {
+        /* noop */
+      }
+      if (useLocal) return localValue;
+      try {
+        return getter();
+      } catch {
+        return localValue;
+      }
+    },
+    set(v: any) {
+      if (instance.__gxtDispatchingArgs) {
+        localValue = v;
+        useLocal = false;
+        if (instance.__gxtLocalOverrides) instance.__gxtLocalOverrides.delete(key);
+      } else {
+        localValue = v;
+        useLocal = true;
+        // `_gxtSyncAllWrappers` skips locally overridden keys.
+        if (!instance.__gxtLocalOverrides) instance.__gxtLocalOverrides = new Set();
+        instance.__gxtLocalOverrides.add(key);
+      }
+      if (cpWithSetter && !instance.__gxtInvokingCpSetter) {
+        // Record the dispatched value so the PROPERTY_DID_CHANGE override can
+        // tell a stale re-read from a deferred observer flush.
+        if (instance.__gxtDispatchingArgs) {
+          if (!instance.__gxtCpArgDispatched) instance.__gxtCpArgDispatched = {};
+          instance.__gxtCpArgDispatched[key] = v;
+        }
+        try {
+          instance.__gxtInvokingCpSetter = true;
+          cpWithSetter.set(instance, key, v);
+        } catch {
+          /* ignore CP setter failures */
+        } finally {
+          instance.__gxtInvokingCpSetter = false;
+        }
+      }
+      try {
+        classicDirtyTagForGuarded(instance, key);
+      } catch {
+        /* noop */
+      }
+    },
+    configurable: true,
+    enumerable: true,
+  });
 }
 
 // Install an effect, owned by `owner`, that dirties `target`'s classic tag
