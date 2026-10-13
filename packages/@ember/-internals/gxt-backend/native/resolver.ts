@@ -22,17 +22,9 @@
 import type { InternalFactory, InternalOwner } from '@ember/-internals/owner';
 import { assert } from '@ember/debug';
 import { DEBUG } from '@glimmer/env';
-import { getContext } from '@lifeart/gxt';
 import { getInternalHelperManager, setInternalHelperManager } from './manager-api';
-import { OWNER } from './managers';
+import { ownerOfContext } from './managers';
 import { array, concat, fn, get, hash, KEYWORD_HELPERS, on } from './runtime-helpers';
-
-/** The Ember owner of the render tree `ctx` belongs to (nearest provider). */
-function ownerOfContext(ctx: unknown): InternalOwner | undefined {
-  if (ctx === null || typeof ctx !== 'object') return undefined;
-  const owner = getContext<InternalOwner>(ctx as never, OWNER, false);
-  return owner === null ? undefined : owner;
-}
 
 // ---------------------------------------------------------------- components
 /**
@@ -128,7 +120,7 @@ function assertNotOverwritten(owner: InternalOwner, name: string): void {
  * overwritten-built-in assertion applies.
  */
 export function assertLooseBuiltins(ctx: object, names: readonly string[]): void {
-  const owner = ownerOfContext(ctx);
+  const owner = ownerOfContext(ctx) as InternalOwner | undefined;
   if (owner === undefined) return;
   for (const name of names) assertNotOverwritten(owner, name);
 }
@@ -168,7 +160,7 @@ export function resolveComponentOrHelper(
   ctx: object,
   optional: boolean
 ): 'component' | 'helper' | null {
-  const owner = ownerOfContext(ctx);
+  const owner = ownerOfContext(ctx) as InternalOwner | undefined;
   if (owner === undefined) {
     throw new Error(
       DEBUG

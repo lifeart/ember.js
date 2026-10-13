@@ -46,7 +46,7 @@ import {
   getInternalModifierManager,
   type ModifierDelegate,
 } from './manager-api';
-import { OWNER } from './managers';
+import { ownerOfContext } from './managers';
 import { lookupModifier, modifierNotFound } from './resolver';
 import { type InternalModifierManager } from './runtime-helpers';
 import { debug, untrack } from './validator';
@@ -348,10 +348,7 @@ function handle(
 
   // The render tree's owner — looked up only when it is used (a modifier
   // name, a custom manager's delegate).
-  const ownerFor = (): object | undefined =>
-    renderCtx === undefined
-      ? undefined
-      : (getContext<object>(renderCtx as never, OWNER, false) ?? undefined);
+  const ownerFor = (): object | undefined => ownerOfContext(renderCtx);
 
   // A modifier NAME (`{{on}}`, a loose-mode `<div {{foo-bar}}>`):
   // classic `lookupModifier` for the render tree's owner.

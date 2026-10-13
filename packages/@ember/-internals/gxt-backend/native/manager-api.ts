@@ -149,7 +149,17 @@ class CustomManagerRecord<D> {
   }
 }
 
-export class CustomComponentManager extends CustomManagerRecord<unknown> {}
+export class CustomComponentManager extends CustomManagerRecord<{ capabilities: object }> {
+  override getDelegateFor(owner: object | undefined): { capabilities: object } {
+    const delegate = super.getDelegateFor(owner);
+    if (DEBUG && !FROM_CAPABILITIES!.has(delegate.capabilities)) {
+      throw new Error(
+        `Custom component managers must have a \`capabilities\` property that is the result of calling the \`capabilities('3.13')\` (imported via \`import { capabilities } from '@ember/component';\`). Received: \`${JSON.stringify(delegate.capabilities)}\` for: \`${String(delegate)}\``
+      );
+    }
+    return delegate;
+  }
+}
 export class CustomHelperManager extends CustomManagerRecord<HelperDelegate> {
   override getDelegateFor(owner: object | undefined): HelperDelegate {
     const delegate = super.getDelegateFor(owner);

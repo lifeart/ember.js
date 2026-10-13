@@ -41,7 +41,6 @@
 //     Glimmer's "nothing was found" error.
 import { DEBUG } from '@glimmer/env';
 import {
-  getContext,
   getCurried,
   registerDestructor as gxtRegisterDestructor,
   resolveCurried,
@@ -54,7 +53,7 @@ import {
   CustomHelperManager,
   type HelperDelegate,
 } from './manager-api';
-import { OWNER } from './managers';
+import { ownerOfContext } from './managers';
 import { createComputeRef, valueForRef, type Reference } from './reference';
 import { helperNotFound, lookupHelper } from './resolver';
 import { type InternalHelper } from './runtime-helpers';
@@ -78,12 +77,6 @@ const NO_NAMED: Readonly<Record<string, unknown>> = Object.freeze({});
 
 const valueOf = (instance: HelperInstance): unknown =>
   instance.cache === null ? instance.value : getValue(instance.cache);
-
-function ownerOf(ctx: unknown): object | undefined {
-  if (ctx === null || ctx === undefined) return undefined;
-  const owner = getContext<object>(ctx as never, OWNER, false);
-  return owner === null ? undefined : owner;
-}
 
 const hasOwn = Object.prototype.hasOwnProperty;
 
@@ -137,7 +130,7 @@ function createInstance(key: object | string, ctx: unknown, source: ArgsSource):
   let owner: object | undefined;
   let definition: object;
   if (typeof key === 'string') {
-    owner = ownerOf(ctx);
+    owner = ownerOfContext(ctx);
     definition = resolveHelperName(key, owner);
   } else {
     definition = key;
@@ -155,7 +148,7 @@ function createInstance(key: object | string, ctx: unknown, source: ArgsSource):
     const value = manager.valueForCallSite(source);
     return { definition: key, source, cache: null, value, destroyable: null };
   }
-  if (typeof key !== 'string') owner = ownerOf(ctx);
+  if (typeof key !== 'string') owner = ownerOfContext(ctx);
 
   if (typeof manager === 'function') {
     // Internal helper (Glimmer protocol): one reference per argument over the

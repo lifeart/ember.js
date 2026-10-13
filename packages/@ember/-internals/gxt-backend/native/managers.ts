@@ -61,7 +61,6 @@ import { trackComponent, type LifecycleDelegate } from './component-lifecycle';
 import { destroy } from './destroyable';
 import {
   CustomComponentManager,
-  FROM_CAPABILITIES,
   getComponentTemplate,
   getInternalComponentManager,
   getOwnComponentTemplate,
@@ -118,32 +117,16 @@ type InternalOwnerLike = Parameters<typeof lookupComponent>[0];
 
 const EMPTY_POSITIONAL: unknown[] = Object.freeze([]) as unknown as unknown[];
 
-// Glimmer's CustomComponentManager.getDelegateFor: one delegate per (manager, owner).
-const DELEGATES = new WeakMap<CustomComponentManager, WeakMap<object, ComponentDelegate>>();
-
-function delegateFor(manager: CustomComponentManager, owner: object): ComponentDelegate {
-  let byOwner = DELEGATES.get(manager);
-  if (byOwner === undefined) {
-    byOwner = new WeakMap();
-    DELEGATES.set(manager, byOwner);
-  }
-  let delegate = byOwner.get(owner);
-  if (delegate === undefined) {
-    delegate = manager.factory(owner) as ComponentDelegate;
-    if (DEBUG && !FROM_CAPABILITIES!.has(delegate.capabilities)) {
-      throw new Error(
-        `Custom component managers must have a \`capabilities\` property that is the result of calling the \`capabilities('3.13')\` (imported via \`import { capabilities } from '@ember/component';\`). Received: \`${JSON.stringify(delegate.capabilities)}\` for: \`${String(delegate)}\``
-      );
-    }
-    byOwner.set(owner, delegate);
-  }
-  return delegate;
+/** The Ember owner of the render tree `ctx` belongs to (nearest OWNER provider). */
+export function ownerOfContext(ctx: unknown): object | undefined {
+  if (ctx === null || ctx === undefined) return undefined;
+  return getContext<object>(ctx as never, OWNER, false) ?? undefined;
 }
 
-// The owner of the render tree `ctx` belongs to (nearest OWNER provider).
+// `ownerOfContext`, which must exist for a component render.
 function ownerFor(ctx: object): object {
-  const owner = getContext<object>(ctx as never, OWNER, false);
-  if (owner === null || owner === undefined) {
+  const owner = ownerOfContext(ctx);
+  if (owner === undefined) {
     throw new Error(
       'native component manager: no Ember owner in this render tree. Render through `renderComponent` from `@ember/renderer` (or an Ember application), which provides one.'
     );
@@ -380,7 +363,7 @@ function handle(
     }
     return internalComponent(manager, definition, args, ctx, owner, positional);
   }
-  const delegate = delegateFor(manager, owner);
+  const delegate = manager.getDelegateFor(owner) as ComponentDelegate;
   const ownTemplate = getOwnComponentTemplate(definition);
   const inheritedTemplate =
     ownTemplate === undefined ? getComponentTemplate(definition) : undefined;
