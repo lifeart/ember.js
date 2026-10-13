@@ -53,7 +53,6 @@ export const GXT_SHIM_DIR = 'packages/@ember/-internals/gxt-backend';
 export const GXT_SHIM_ALIASES = [
   { find: 'ember-template-compiler', shim: 'ember-template-compiler' },
   { find: '@ember/template-compilation', shim: 'compile' },
-  { find: '@ember/-internals/deprecations', shim: 'deprecate' },
   { find: '@glimmer/application', shim: 'glimmer-application' },
   { find: '@glimmer/utils', shim: 'glimmer-util' },
   { find: '@glimmer/manager', shim: 'manager', subpathTolerant: true },
