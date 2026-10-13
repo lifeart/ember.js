@@ -4344,19 +4344,138 @@ function _gxtSnapshotLiveInstances(): void {
   }
 }
 
+// Shared steps of the five classic-component destroy sequences
+// (`_gxtDestroyUnclaimedPoolEntries`, `_gxtDestroyTrackedInstances`,
+// `_gxtDestroyEmberComponentInstance`, `_gxtFinalizeInverseOldRows`,
+// `_gxtDestroyInstancesInNodes`). Each runs, per phase:
+//   1. willDestroyElement + willClearRender, with a removed element re-attached
+//      so `this.element` is still in the document;
+//   2. 'destroying', element cleared, view-registry entry removed, then
+//      didDestroyElement;
+//   3. `destroy()` (willDestroy);
+// and finally drops the instance from the tracking sets. They differ in which
+// instances they skip (deferred each→empty rows, rows whose willDestroyElement
+// already fired) and in what they do with an error thrown by `destroy()`:
+// the unclaimed-pool sweep rethrows the first one after the sweep (unless the
+// sync was not property-driven), the test-teardown sweep queues it for
+// `flushRenderErrors`, and the dynamic-component swap, the each→empty
+// finalizer and the removed-nodes sweep drop it (the callers of the first two
+// drop errors anyway; a throw out of the removed-nodes sweep would abort the
+// curried re-render that called it).
+
+function _lookupViewRegistry(): any {
+  try {
+    return getAmbientOwner()?.lookup?.('-view-registry:main');
+  } catch {
+    return undefined;
+  }
+}
+
+// Phase 1 for one instance: move it to 'inDOM' (an instance rendered without
+// the insert transition may still be 'hasElement'/'preRender', and
+// willDestroyElement hooks assert the state), then fire the hooks.
+function _firePreDestroyHooks(instance: any): void {
+  try {
+    if (instance._transitionTo && instance._state !== 'inDOM') {
+      try {
+        instance._transitionTo('inDOM');
+      } catch {}
+    }
+    triggerLifecycleHook(instance, 'willDestroyElement');
+    triggerLifecycleHook(instance, 'willClearRender');
+  } catch {
+    /* ignore */
+  }
+}
+
+// Re-attach each instance's detached element to `#qunit-fixture` (or `body`)
+// so Phase-1 hooks see it in the document; `_detachElements` undoes it.
+function _reattachDetachedElements(instances: Iterable<any>): HTMLElement[] {
+  const container = document.getElementById('qunit-fixture') || document.body;
+  const reattached: HTMLElement[] = [];
+  for (const instance of instances) {
+    try {
+      const el = getViewElement(instance);
+      if (el instanceof HTMLElement && !el.isConnected) {
+        container.appendChild(el);
+        reattached.push(el);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return reattached;
+}
+
+function _detachElements(elements: readonly HTMLElement[]): void {
+  for (const element of elements) {
+    try {
+      if (element.parentNode) element.parentNode.removeChild(element);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+// Phase 2 up to didDestroyElement: 'destroying', `this.element` cleared,
+// view-registry entry removed.
+function _clearViewForDestroy(instance: any, viewRegistry: any): void {
+  try {
+    if (instance._transitionTo) instance._transitionTo('destroying');
+  } catch {
+    /* ignore */
+  }
+  try {
+    setViewElement(instance, null);
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (viewRegistry) {
+      const viewId = getViewId(instance);
+      if (viewId) delete viewRegistry[viewId];
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+// Phase 3: `destroy()` unless the instance is already destroyed or destroying.
+// Errors propagate to the caller, which applies its own policy.
+function _destroyIfAlive(instance: any): void {
+  if (typeof instance.destroy === 'function' && !instance.isDestroyed && !instance.isDestroying) {
+    instance.destroy();
+  }
+}
+
+// Drop a destroyed instance from the live/created sets and from the first
+// arg-cell and wrapper entry that hold it (and, with `fromPools`, from the
+// instance pools).
+function _untrackDestroyedInstance(instance: any, fromPools: boolean): void {
+  _allLiveInstances.delete(instance);
+  _allCreatedInstances.delete(instance);
+  if (fromPools) removeInstanceFromPools(instance);
+  for (const entry of trackedArgCells) {
+    if (entry.instance === instance) {
+      trackedArgCells.delete(entry);
+      break;
+    }
+  }
+  for (const entry of trackedWrapperInstances) {
+    if (entry.instance === instance) {
+      trackedWrapperInstances.delete(entry);
+      break;
+    }
+  }
+}
+
 // Destroy unclaimed pool entries after a force-rerender.
 // Components that were in the old render but not in the new one need their
 // destroy lifecycle hooks fired: willDestroyElement, willClearRender,
 // didDestroyElement, willDestroy.
 // Exposed via the gxt-bridge as `destruction.destroyUnclaimedPoolEntries`.
 function _gxtDestroyUnclaimedPoolEntries(): void {
-  const gOwner = getAmbientOwner();
-  let viewRegistry: any;
-  try {
-    viewRegistry = gOwner?.lookup?.('-view-registry:main');
-  } catch {
-    /* ignore */
-  }
+  const viewRegistry = _lookupViewRegistry();
 
   // Find components that were in the pre-rerender snapshot but are no longer
   // present in the re-rendered output. An instance is considered unclaimed if:
@@ -4586,9 +4705,6 @@ function _gxtDestroyUnclaimedPoolEntries(): void {
   // The elements have been detached from the DOM by innerHTML=''.
   // Temporarily re-attach them so tests that check
   // document.body.contains(this.element) during these hooks see true.
-  const qunitFixture = document.getElementById('qunit-fixture');
-  const tempContainer = qunitFixture || document.body;
-  const reattached: Array<{ instance: any; element: HTMLElement }> = [];
 
   // Set a flag so that an <ember-outlet> connectedCallback fired by the
   // temporary reattachment does not render content. Otherwise an inner
@@ -4599,69 +4715,23 @@ function _gxtDestroyUnclaimedPoolEntries(): void {
   //
   // The flag lives in compile.ts and is set through the bridge.
   getGxtRenderer()?.compilePipeline.setDestroyReattachInProgress?.(true);
+  let reattached: HTMLElement[];
   try {
-    for (const instance of unclaimed) {
-      try {
-        const el = getViewElement(instance);
-        if (el instanceof HTMLElement && !el.isConnected) {
-          tempContainer.appendChild(el);
-          reattached.push({ instance, element: el });
-        }
-      } catch {
-        /* ignore */
-      }
-    }
+    reattached = _reattachDetachedElements(unclaimed);
   } finally {
     getGxtRenderer()?.compilePipeline.setDestroyReattachInProgress?.(false);
   }
 
   for (const instance of unclaimed) {
-    try {
-      // Ensure instance is in inDOM state before destroy hooks.
-      // Components that were rendered but never transitioned (e.g., created by
-      // GXT formula re-evaluation) may still be in hasElement or preRender state.
-      if (instance._transitionTo && instance._state !== 'inDOM') {
-        try {
-          instance._transitionTo('inDOM');
-        } catch {}
-      }
-      triggerLifecycleHook(instance, 'willDestroyElement');
-      triggerLifecycleHook(instance, 'willClearRender');
-    } catch {
-      /* ignore */
-    }
+    _firePreDestroyHooks(instance);
   }
 
-  // Detach re-attached elements
-  for (const { element } of reattached) {
-    try {
-      if (element.parentNode) element.parentNode.removeChild(element);
-    } catch {
-      /* ignore */
-    }
-  }
+  _detachElements(reattached);
 
   // Phase 2: transition to destroying, clear element, didDestroyElement
   const _dde2cCycle = getGxtRenderer()?.compilePipeline.getSyncCycleId?.() ?? 0;
   for (const instance of unclaimed) {
-    try {
-      if (instance._transitionTo) instance._transitionTo('destroying');
-    } catch {
-      /* ignore */
-    }
-    try {
-      setViewElement(instance, null);
-    } catch {
-      /* ignore */
-    }
-    try {
-      if (viewRegistry) {
-        const viewId = getViewId(instance);
-        if (viewId) delete viewRegistry[viewId];
-      }
-    } catch {
-      /* ignore */
-    }
+    _clearViewForDestroy(instance, viewRegistry);
     try {
       // Skip didDestroyElement here when the each→empty inverse-branch finalizer
       // (compile.ts `_gxtSyncDomNow` Phase 3c) OWNS this row's async teardown —
@@ -4724,13 +4794,9 @@ function _gxtDestroyUnclaimedPoolEntries(): void {
         continue;
       }
       const wasInPriorCycle = instance.__gxtCreatedInSyncCycle !== currentCycle;
-      if (
-        typeof instance.destroy === 'function' &&
-        !instance.isDestroyed &&
-        !instance.isDestroying
-      ) {
+      {
         try {
-          instance.destroy();
+          _destroyIfAlive(instance);
         } catch (e) {
           // Honor _suppressDestroyCapture, which is set during spurious
           // unclaimed-pool sweeps (initial-render syncs not driven by a
@@ -4913,34 +4979,10 @@ function _gxtDestroyTrackedInstances(): void {
   }
 
   // Phase 2: transition to destroying, clear element, unregister from view registry,
-  // then fire didDestroyElement
-  const gOwner = getAmbientOwner();
-  let viewRegistry: any;
-  try {
-    viewRegistry = gOwner?.lookup?.('-view-registry:main');
-  } catch {
-    // Owner may already be destroyed
-  }
+  // then fire didDestroyElement (the owner may already be destroyed)
+  const viewRegistry = _lookupViewRegistry();
   for (const instance of instances) {
-    try {
-      if (instance._transitionTo) instance._transitionTo('destroying');
-    } catch {
-      /* ignore */
-    }
-    try {
-      setViewElement(instance, null);
-    } catch {
-      /* ignore */
-    }
-    // Unregister from view registry
-    try {
-      if (viewRegistry) {
-        const viewId = getViewId(instance);
-        if (viewId) delete viewRegistry[viewId];
-      }
-    } catch {
-      /* ignore */
-    }
+    _clearViewForDestroy(instance, viewRegistry);
     try {
       triggerLifecycleHook(instance, 'didDestroyElement');
     } catch {
@@ -4951,13 +4993,7 @@ function _gxtDestroyTrackedInstances(): void {
   // Phase 3: destroy (fires willDestroy)
   for (const instance of instances) {
     try {
-      if (
-        typeof instance.destroy === 'function' &&
-        !instance.isDestroyed &&
-        !instance.isDestroying
-      ) {
-        instance.destroy();
-      }
+      _destroyIfAlive(instance);
     } catch (e) {
       // Capture destroy errors so they propagate to assert.throws
       captureRenderError(e);
@@ -5002,64 +5038,16 @@ function _gxtDestroyTrackedInstances(): void {
 function _gxtDestroyEmberComponentInstance(instance: any): void {
   if (!instance || instance.isDestroyed || instance.isDestroying) return;
 
-  const gOwner = getAmbientOwner();
-  let viewRegistry: any;
-  try {
-    viewRegistry = gOwner?.lookup?.('-view-registry:main');
-  } catch {
-    /* ignore */
-  }
+  const viewRegistry = _lookupViewRegistry();
 
-  // Phase 1: willDestroyElement + willClearRender (element still available)
-  // Re-attach element temporarily if disconnected so tests see it in DOM
-  const el = getViewElement(instance);
-  let reattached = false;
-  if (el instanceof HTMLElement && !el.isConnected) {
-    const tempContainer = document.getElementById('qunit-fixture') || document.body;
-    tempContainer.appendChild(el);
-    reattached = true;
-  }
-
-  try {
-    if (instance._transitionTo && instance._state !== 'inDOM') {
-      try {
-        instance._transitionTo('inDOM');
-      } catch {}
-    }
-    triggerLifecycleHook(instance, 'willDestroyElement');
-    triggerLifecycleHook(instance, 'willClearRender');
-  } catch {
-    /* ignore */
-  }
-
-  // Detach re-attached element
-  if (reattached && el instanceof HTMLElement && el.parentNode) {
-    try {
-      el.parentNode.removeChild(el);
-    } catch {
-      /* ignore */
-    }
-  }
+  // Phase 1: willDestroyElement + willClearRender (element re-attached if
+  // it is detached, so tests see it in the DOM)
+  const reattached = _reattachDetachedElements([instance]);
+  _firePreDestroyHooks(instance);
+  _detachElements(reattached);
 
   // Phase 2: transition to destroying, clear element, didDestroyElement
-  try {
-    if (instance._transitionTo) instance._transitionTo('destroying');
-  } catch {
-    /* ignore */
-  }
-  try {
-    setViewElement(instance, null);
-  } catch {
-    /* ignore */
-  }
-  try {
-    if (viewRegistry) {
-      const viewId = getViewId(instance);
-      if (viewId) delete viewRegistry[viewId];
-    }
-  } catch {
-    /* ignore */
-  }
+  _clearViewForDestroy(instance, viewRegistry);
   try {
     triggerLifecycleHook(instance, 'didDestroyElement');
   } catch {
@@ -5068,28 +5056,12 @@ function _gxtDestroyEmberComponentInstance(instance: any): void {
 
   // Phase 3: destroy (fires willDestroy)
   try {
-    if (typeof instance.destroy === 'function' && !instance.isDestroyed && !instance.isDestroying) {
-      instance.destroy();
-    }
+    _destroyIfAlive(instance);
   } catch {
     /* ignore */
   }
 
-  _allLiveInstances.delete(instance);
-  _allCreatedInstances.delete(instance);
-  removeInstanceFromPools(instance);
-  for (const entry of trackedArgCells) {
-    if (entry.instance === instance) {
-      trackedArgCells.delete(entry);
-      break;
-    }
-  }
-  for (const entry of trackedWrapperInstances) {
-    if (entry.instance === instance) {
-      trackedWrapperInstances.delete(entry);
-      break;
-    }
-  }
+  _untrackDestroyedInstance(instance, true);
 }
 
 /**
@@ -5115,36 +5087,14 @@ function _gxtDestroyEmberComponentInstance(instance: any): void {
  */
 function _gxtFinalizeInverseOldRows(rows: ReadonlyArray<any>, cycle: number): void {
   if (!rows || rows.length === 0) return;
-  let viewRegistry: any;
-  try {
-    viewRegistry = getAmbientOwner()?.lookup?.('-view-registry:main');
-  } catch {
-    /* ignore */
-  }
+  const viewRegistry = _lookupViewRegistry();
   // Phase 2: didDestroyElement (element cleared first).
   for (const instance of rows) {
     if (!instance || instance.isDestroyed) continue;
     try {
       if ((instance as any).__gxtDDEFiredCycle === cycle) continue;
       (instance as any).__gxtDDEFiredCycle = cycle;
-      try {
-        if (instance._transitionTo) instance._transitionTo('destroying');
-      } catch {
-        /* ignore */
-      }
-      try {
-        setViewElement(instance, null);
-      } catch {
-        /* ignore */
-      }
-      try {
-        if (viewRegistry) {
-          const viewId = getViewId(instance);
-          if (viewId) delete viewRegistry[viewId];
-        }
-      } catch {
-        /* ignore */
-      }
+      _clearViewForDestroy(instance, viewRegistry);
       triggerLifecycleHook(instance, 'didDestroyElement');
     } catch {
       /* user override may throw */
@@ -5154,13 +5104,7 @@ function _gxtFinalizeInverseOldRows(rows: ReadonlyArray<any>, cycle: number): vo
   for (const instance of rows) {
     if (!instance) continue;
     try {
-      if (
-        typeof instance.destroy === 'function' &&
-        !instance.isDestroyed &&
-        !instance.isDestroying
-      ) {
-        instance.destroy();
-      }
+      _destroyIfAlive(instance);
       if (typeof instance.willDestroy === 'function' && !(instance as any).__gxtWillDestroyFired) {
         instance.willDestroy();
       }
@@ -5173,20 +5117,7 @@ function _gxtFinalizeInverseOldRows(rows: ReadonlyArray<any>, cycle: number): vo
     // particular would otherwise re-emit didDestroyElement at teardown (the
     // DocumentFragment-wrapped rows never get pruned by the element-based
     // Phase 2c path).
-    _allLiveInstances.delete(instance);
-    _allCreatedInstances.delete(instance);
-    for (const entry of trackedArgCells) {
-      if (entry.instance === instance) {
-        trackedArgCells.delete(entry);
-        break;
-      }
-    }
-    for (const entry of trackedWrapperInstances) {
-      if (entry.instance === instance) {
-        trackedWrapperInstances.delete(entry);
-        break;
-      }
-    }
+    _untrackDestroyedInstance(instance, false);
   }
 }
 
@@ -5220,18 +5151,7 @@ function _gxtDestroyInstancesInNodes(removedNodeList: ReadonlyArray<Node>): void
   }
   if (instToDestroy.length === 0) return;
 
-  let gOwner: any = null;
-  let viewReg: any = null;
-  try {
-    gOwner = getAmbientOwner();
-  } catch {
-    /* */
-  }
-  try {
-    viewReg = gOwner?.lookup?.('-view-registry:main');
-  } catch {
-    /* */
-  }
+  const viewReg = _lookupViewRegistry();
 
   // Rows whose synchronous willDestroyElement / willClearRender were already
   // fired pre-DOM-removal by the each-row pre-destroy destructor (stamped
@@ -5240,67 +5160,19 @@ function _gxtDestroyInstancesInNodes(removedNodeList: ReadonlyArray<Node>): void
   // skipping avoids a pointless fixture reattach of an already-cleared row.
   // Components removed by other paths (e.g. route changes) are never stamped.
   const __curCycle = getGxtRenderer()?.compilePipeline.getSyncCycleId?.() ?? 0;
+  const preDestroy = instToDestroy.filter(
+    (inst) => (inst as any).__gxtWDEFiredCycle !== __curCycle
+  );
 
   // Re-attach elements temporarily so willDestroyElement sees them connected
-  const tempCont = document.getElementById('qunit-fixture') || document.body;
-  const reattachedList: Array<{ i: any; e: HTMLElement }> = [];
-  for (const inst of instToDestroy) {
-    if ((inst as any).__gxtWDEFiredCycle === __curCycle) continue;
-    try {
-      const e = getViewElement(inst);
-      if (e instanceof HTMLElement && !e.isConnected) {
-        tempCont.appendChild(e);
-        reattachedList.push({ i: inst, e });
-      }
-    } catch {
-      /* */
-    }
+  const reattachedList = _reattachDetachedElements(preDestroy);
+  for (const inst of preDestroy) {
+    _firePreDestroyHooks(inst);
   }
+  _detachElements(reattachedList);
 
   for (const inst of instToDestroy) {
-    if ((inst as any).__gxtWDEFiredCycle === __curCycle) continue;
-    try {
-      if (inst._transitionTo && inst._state !== 'inDOM') {
-        try {
-          inst._transitionTo('inDOM');
-        } catch {
-          /* */
-        }
-      }
-      triggerLifecycleHook(inst, 'willDestroyElement');
-      triggerLifecycleHook(inst, 'willClearRender');
-    } catch {
-      /* */
-    }
-  }
-
-  for (const r of reattachedList) {
-    try {
-      if (r.e.parentNode) r.e.parentNode.removeChild(r.e);
-    } catch {
-      /* */
-    }
-  }
-
-  for (const inst of instToDestroy) {
-    try {
-      if (inst._transitionTo) inst._transitionTo('destroying');
-    } catch {
-      /* */
-    }
-    try {
-      setViewElement(inst, null);
-    } catch {
-      /* */
-    }
-    try {
-      if (viewReg) {
-        const vid = getViewId(inst);
-        if (vid) delete viewReg[vid];
-      }
-    } catch {
-      /* */
-    }
+    _clearViewForDestroy(inst, viewReg);
     try {
       triggerLifecycleHook(inst, 'didDestroyElement');
     } catch {
@@ -5310,30 +5182,14 @@ function _gxtDestroyInstancesInNodes(removedNodeList: ReadonlyArray<Node>): void
 
   for (const inst of instToDestroy) {
     try {
-      if (typeof inst.destroy === 'function' && !inst.isDestroyed && !inst.isDestroying) {
-        inst.destroy();
-      }
+      _destroyIfAlive(inst);
     } catch {
       /* */
     }
   }
 
   for (const inst of instToDestroy) {
-    _allLiveInstances.delete(inst);
-    _allCreatedInstances.delete(inst);
-    removeInstanceFromPools(inst);
-    for (const entry of trackedArgCells) {
-      if (entry.instance === inst) {
-        trackedArgCells.delete(entry);
-        break;
-      }
-    }
-    for (const entry of trackedWrapperInstances) {
-      if (entry.instance === inst) {
-        trackedWrapperInstances.delete(entry);
-        break;
-      }
-    }
+    _untrackDestroyedInstance(inst, true);
   }
 }
 
