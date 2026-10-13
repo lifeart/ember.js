@@ -152,3 +152,18 @@ export function protectGlobal(name: string, value: unknown): void {
     _g[name] = value;
   }
 }
+
+const CAPABILITIES_VERSIONS = { component: '3.13', helper: '3.23', modifier: '3.22' } as const;
+
+/**
+ * The start of the error for a custom component, helper or modifier manager
+ * whose `capabilities` did not come from that kind's `capabilities()`; callers
+ * append what they received.
+ */
+export function capabilitiesErrorPrefix(kind: keyof typeof CAPABILITIES_VERSIONS): string {
+  return (
+    `Custom ${kind} managers must have a \`capabilities\` property that is the result of ` +
+    `calling the \`capabilities('${CAPABILITIES_VERSIONS[kind]}')\` ` +
+    `(imported via \`import { capabilities } from '@ember/${kind}';\`). `
+  );
+}

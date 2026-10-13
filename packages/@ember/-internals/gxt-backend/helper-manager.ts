@@ -17,6 +17,7 @@ import {
 } from './reference';
 import { associateDestroyableChild } from './destroyable';
 import { getGxtRenderer, getAmbientOwner } from './gxt-bridge';
+import { capabilitiesErrorPrefix } from './utils';
 
 // Shared WeakSet to track capabilities created via helperCapabilities()
 export const FROM_CAPABILITIES = new WeakSet();
@@ -188,9 +189,7 @@ export class CustomHelperManager {
       const caps = delegate.capabilities;
       if (!caps || !FROM_CAPABILITIES.has(caps)) {
         const err = new Error(
-          'Custom helper managers must have a `capabilities` property ' +
-            "that is the result of calling the `capabilities('3.23')` " +
-            "(imported via `import { capabilities } from '@ember/helper';`). " +
+          capabilitiesErrorPrefix('helper') +
             'Received: `' +
             (caps ? JSON.stringify(caps) : String(caps)) +
             '`'

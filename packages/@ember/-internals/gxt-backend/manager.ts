@@ -21,6 +21,7 @@ import {
   constructStyleDeprecationMessage,
   isAssertionLike as _isAssertionLike,
   protectGlobal,
+  capabilitiesErrorPrefix,
 } from './utils';
 // Expose the Ember assert function on globalThis so the validator compat can use it
 // for backtracking detection. The assert function is stub-able via setDebugFunction
@@ -7171,6 +7172,101 @@ function resolveComponent(
 // Helper resolution for (helper) keyword
 // =============================================================================
 
+// A helper argument as GXT passes it: a getter thunk (no prototype) is read;
+// helper and class values (with a prototype) pass through.
+function _unwrapHelperArg(v: any): any {
+  return typeof v === 'function' && !v.prototype ? v() : v;
+}
+
+function _helperPositionalArgs(params: any): any[] {
+  return Array.isArray(params) ? params.map(_unwrapHelperArg) : [];
+}
+
+// Named helper args without GXT's internal keys (`$_…`, `hash`), unwrapped.
+function _helperNamedArgs(hash: any): Record<string, any> {
+  return hash && typeof hash === 'object'
+    ? Object.fromEntries(
+        Object.entries(hash)
+          .filter(([k]) => !(k.startsWith('$_') || k === 'hash'))
+          .map(([k, v]: [string, any]) => [k, _unwrapHelperArg(v)])
+      )
+    : {};
+}
+
+// A helper-manager delegate's `capabilities` must come from `capabilities()`.
+function _assertHelperDelegateCapabilities(delegate: any): void {
+  if (delegate && delegate.capabilities && !FROM_CAPABILITIES.has(delegate.capabilities)) {
+    throw new Error(
+      capabilitiesErrorPrefix('helper') +
+        `Received: \`${JSON.stringify(delegate.capabilities)}\` for manager \`${delegate.constructor?.name || 'unknown'}\``
+    );
+  }
+}
+
+// `(helper …)` for a helper whose manager delegate has a value: the bucket is
+// created once, and each call of the curried function updates its args object
+// in place before `getValue`, so the helper instance stays stable (its tracked
+// state re-renders, `getValue` counts are per instance). `createHelper` and
+// `getValue` run in a backtracking frame.
+function _curryDelegateHelper(delegate: any, definition: any, params: any, hash: any): any {
+  const curriedPositionals = _helperPositionalArgs(params);
+  const curriedNamed = _helperNamedArgs(hash);
+  const reactiveArgs: { positional: any[]; named: Record<string, any> } = {
+    positional: [...curriedPositionals],
+    named: { ...curriedNamed },
+  };
+  beginBacktrackingFrame();
+  let bucket: any;
+  try {
+    bucket = delegate.createHelper(definition, reactiveArgs);
+  } finally {
+    endBacktrackingFrame();
+  }
+  if (delegate.capabilities?.hasDestroyable && typeof delegate.getDestroyable === 'function') {
+    const destroyable = delegate.getDestroyable(bucket);
+    if (destroyable) {
+      // Stored for later cleanup.
+      (bucket as any).__destroyable = destroyable;
+    }
+  }
+  const curried = function __emberCurriedHelper(additionalParams?: any[], additionalHash?: any) {
+    const newPositional = [...curriedPositionals, ..._helperPositionalArgs(additionalParams)];
+    const newNamed = { ...curriedNamed, ..._helperNamedArgs(additionalHash) };
+    reactiveArgs.positional = newPositional;
+    reactiveArgs.named = newNamed;
+    beginBacktrackingFrame();
+    try {
+      return delegate.getValue(bucket);
+    } finally {
+      endBacktrackingFrame();
+    }
+  };
+  (curried as any).__isEmberCurriedHelper = true;
+  return curried;
+}
+
+// `(helper …)` for a helper that is a function of `(positional, named)`. The
+// curried function exposes `__resolvedFn` and its curried args, so a further
+// `(helper curried …)` can extend them.
+function _curryFnHelper(
+  resolvedFn: (positional: any[], named: any) => any,
+  params: any,
+  hash: any
+): any {
+  const curriedPositionals = _helperPositionalArgs(params);
+  const curriedNamed = _helperNamedArgs(hash);
+  const curried = function __emberCurriedHelper(additionalParams?: any[], additionalHash?: any) {
+    const mergedPositional = [...curriedPositionals, ..._helperPositionalArgs(additionalParams)];
+    const mergedNamed = { ...curriedNamed, ..._helperNamedArgs(additionalHash) };
+    return resolvedFn(mergedPositional, mergedNamed);
+  };
+  (curried as any).__isEmberCurriedHelper = true;
+  (curried as any).__resolvedFn = resolvedFn;
+  (curried as any).__curriedPositionals = curriedPositionals;
+  (curried as any).__curriedNamed = curriedNamed;
+  return curried;
+}
+
 /**
  * Resolve an Ember helper by name to a callable function.
  * Returns (positional, named) => value, or null if not found.
@@ -7955,17 +8051,8 @@ const $_MANAGERS = {
     handle(helper: any, params: any, hash: any): any {
       // Handle curried ember helper functions (from a previous (helper "name") call)
       if (typeof helper === 'function' && helper.__isEmberCurriedHelper) {
-        const unwrapVal = (v: any) => (typeof v === 'function' && !v.prototype ? v() : v);
-        const isGxtInternal = (k: string) => k.startsWith('$_') || k === 'hash';
-        const additionalPositionals = Array.isArray(params) ? params.map(unwrapVal) : [];
-        const additionalNamed =
-          hash && typeof hash === 'object'
-            ? Object.fromEntries(
-                Object.entries(hash)
-                  .filter(([k]) => !isGxtInternal(k))
-                  .map(([k, v]: [string, any]) => [k, unwrapVal(v)])
-              )
-            : {};
+        const additionalPositionals = _helperPositionalArgs(params);
+        const additionalNamed = _helperNamedArgs(hash);
 
         // Create a new curried function with merged args. The inner curried
         // may have been created via either the delegate pathway (which closes
@@ -7980,10 +8067,7 @@ const $_MANAGERS = {
         const mergedNamed = { ...prevNamed, ...additionalNamed };
 
         const newCurried = function __emberCurriedHelper(extraPos?: any[], extraHash?: any) {
-          const addPos = [
-            ...additionalPositionals,
-            ...(Array.isArray(extraPos) ? extraPos.map(unwrapVal) : []),
-          ];
+          const addPos = [...additionalPositionals, ..._helperPositionalArgs(extraPos)];
           const addHash = { ...additionalNamed, ...(extraHash || {}) };
           return innerCurried(addPos, addHash);
         };
@@ -7999,100 +8083,16 @@ const $_MANAGERS = {
         const internalManager = getInternalHelperManager(helper);
         if (internalManager) {
           const owner = getOwnerWithFallback();
-          const unwrapVal = (v: any) => (typeof v === 'function' && !v.prototype ? v() : v);
-          const isGxtInternal = (k: string) => k.startsWith('$_') || k === 'hash';
 
           if (typeof internalManager.getDelegateFor === 'function') {
             const delegate = internalManager.getDelegateFor(owner);
-            // Validate that capabilities were created via helperCapabilities()
-            if (
-              delegate &&
-              delegate.capabilities &&
-              !FROM_CAPABILITIES.has(delegate.capabilities)
-            ) {
-              const err = new Error(
-                `Custom helper managers must have a \`capabilities\` property ` +
-                  `that is the result of calling the \`capabilities('3.23')\` ` +
-                  `(imported via \`import { capabilities } from '@ember/helper';\`). ` +
-                  `Received: \`${JSON.stringify(delegate.capabilities)}\` for manager \`${delegate.constructor?.name || 'unknown'}\``
-              );
-              throw err;
-            }
+            _assertHelperDelegateCapabilities(delegate);
             if (
               delegate &&
               typeof delegate.createHelper === 'function' &&
               delegate.capabilities?.hasValue
             ) {
-              const curriedPositionals = Array.isArray(params) ? params.map(unwrapVal) : [];
-              const curriedNamed =
-                hash && typeof hash === 'object'
-                  ? Object.fromEntries(
-                      Object.entries(hash)
-                        .filter(([k]) => !isGxtInternal(k))
-                        .map(([k, v]: [string, any]) => [k, unwrapVal(v)])
-                    )
-                  : {};
-
-              // Create a reactive args object that the helper instance holds a reference to.
-              // On re-render we update its positional/named in place so getValue sees fresh data.
-              const reactiveArgs: { positional: any[]; named: Record<string, any> } = {
-                positional: [...curriedPositionals],
-                named: { ...(curriedNamed as Record<string, any>) },
-              };
-
-              // Create the helper bucket once, with backtracking detection
-              beginBacktrackingFrame();
-              let bucket: any;
-              try {
-                bucket = delegate.createHelper(helper, reactiveArgs);
-              } finally {
-                endBacktrackingFrame();
-              }
-
-              // If the delegate has a destroyable, register it for cleanup
-              if (
-                delegate.capabilities?.hasDestroyable &&
-                typeof delegate.getDestroyable === 'function'
-              ) {
-                const destroyable = delegate.getDestroyable(bucket);
-                if (destroyable) {
-                  // Store for potential cleanup
-                  (bucket as any).__destroyable = destroyable;
-                }
-              }
-
-              const curried = function __emberCurriedHelper(
-                additionalParams?: any[],
-                additionalHash?: any
-              ) {
-                // Update the reactive args object in place
-                const newPositional = [
-                  ...curriedPositionals,
-                  ...(Array.isArray(additionalParams) ? additionalParams.map(unwrapVal) : []),
-                ];
-                const newNamed = {
-                  ...(curriedNamed as Record<string, any>),
-                  ...(additionalHash && typeof additionalHash === 'object'
-                    ? Object.fromEntries(
-                        Object.entries(additionalHash)
-                          .filter(([k]) => !isGxtInternal(k))
-                          .map(([k, v]: [string, any]) => [k, unwrapVal(v)])
-                      )
-                    : {}),
-                };
-                // Update in place so the bucket's reference to args sees changes
-                reactiveArgs.positional = newPositional;
-                reactiveArgs.named = newNamed;
-                // Wrap getValue in backtracking frame to detect read-then-write
-                beginBacktrackingFrame();
-                try {
-                  return delegate.getValue(bucket);
-                } finally {
-                  endBacktrackingFrame();
-                }
-              };
-              (curried as any).__isEmberCurriedHelper = true;
-              return curried;
+              return _curryDelegateHelper(delegate, helper, params, hash);
             }
           }
 
@@ -8110,53 +8110,13 @@ const $_MANAGERS = {
               }
               return maybeRef;
             };
-
-            const curriedPositionals = Array.isArray(params) ? params.map(unwrapVal) : [];
-            const curriedNamed =
-              hash && typeof hash === 'object'
-                ? Object.fromEntries(
-                    Object.entries(hash)
-                      .filter(([k]) => !isGxtInternal(k))
-                      .map(([k, v]: [string, any]) => [k, unwrapVal(v)])
-                  )
-                : {};
-
-            const curried = function __emberCurriedHelper(
-              additionalParams?: any[],
-              additionalHash?: any
-            ) {
-              const mergedPositional = [
-                ...curriedPositionals,
-                ...(Array.isArray(additionalParams) ? additionalParams.map(unwrapVal) : []),
-              ];
-              const mergedNamed = {
-                ...curriedNamed,
-                ...(additionalHash && typeof additionalHash === 'object'
-                  ? Object.fromEntries(
-                      Object.entries(additionalHash)
-                        .filter(([k]) => !isGxtInternal(k))
-                        .map(([k, v]: [string, any]) => [k, unwrapVal(v)])
-                    )
-                  : {}),
-              };
-              return resolvedFn(mergedPositional, mergedNamed);
-            };
-            (curried as any).__isEmberCurriedHelper = true;
-            (curried as any).__resolvedFn = resolvedFn;
-            (curried as any).__curriedPositionals = curriedPositionals;
-            (curried as any).__curriedNamed = curriedNamed;
-            return curried;
+            return _curryFnHelper(resolvedFn, params, hash);
           }
         }
       }
 
       if (typeof helper === 'string') {
         const owner = getOwnerWithFallback();
-
-        // Unwrap GXT getter args for the helper, filtering out GXT internal keys
-        // IMPORTANT: don't unwrap function-based helpers (they have prototype)
-        const unwrapVal = (v: any) => (typeof v === 'function' && !v.prototype ? v() : v);
-        const isGxtInternal = (k: string) => k.startsWith('$_') || k === 'hash';
 
         // For string-based helpers, check if the definition has a delegate manager.
         // If so, create the helper bucket ONCE and reuse it across re-renders,
@@ -8170,94 +8130,13 @@ const $_MANAGERS = {
             const internalManager = getInternalHelperManager(definition);
             if (internalManager && typeof internalManager.getDelegateFor === 'function') {
               const delegate = internalManager.getDelegateFor(owner);
-              // Validate that capabilities were created via helperCapabilities()
-              if (
-                delegate &&
-                delegate.capabilities &&
-                !FROM_CAPABILITIES.has(delegate.capabilities)
-              ) {
-                const err = new Error(
-                  `Custom helper managers must have a \`capabilities\` property ` +
-                    `that is the result of calling the \`capabilities('3.23')\` ` +
-                    `(imported via \`import { capabilities } from '@ember/helper';\`). ` +
-                    `Received: \`${JSON.stringify(delegate.capabilities)}\` for manager \`${delegate.constructor?.name || 'unknown'}\``
-                );
-                throw err;
-              }
+              _assertHelperDelegateCapabilities(delegate);
               if (
                 delegate &&
                 typeof delegate.createHelper === 'function' &&
                 delegate.capabilities?.hasValue
               ) {
-                const curriedPositionals = Array.isArray(params) ? params.map(unwrapVal) : [];
-                const curriedNamed =
-                  hash && typeof hash === 'object'
-                    ? Object.fromEntries(
-                        Object.entries(hash)
-                          .filter(([k]) => !isGxtInternal(k))
-                          .map(([k, v]: [string, any]) => [k, unwrapVal(v)])
-                      )
-                    : {};
-
-                // Create a reactive args object that the helper instance holds a reference to.
-                // On re-render we update its positional/named in place so getValue sees fresh data.
-                const reactiveArgs: { positional: any[]; named: Record<string, any> } = {
-                  positional: [...curriedPositionals],
-                  named: { ...(curriedNamed as Record<string, any>) },
-                };
-
-                // Create the helper bucket ONCE, with backtracking detection
-                beginBacktrackingFrame();
-                let bucket: any;
-                try {
-                  bucket = delegate.createHelper(definition, reactiveArgs);
-                } finally {
-                  endBacktrackingFrame();
-                }
-
-                // If the delegate has a destroyable, register it for cleanup
-                if (
-                  delegate.capabilities?.hasDestroyable &&
-                  typeof delegate.getDestroyable === 'function'
-                ) {
-                  const destroyable = delegate.getDestroyable(bucket);
-                  if (destroyable) {
-                    (bucket as any).__destroyable = destroyable;
-                  }
-                }
-
-                const curried = function __emberCurriedHelper(
-                  additionalParams?: any[],
-                  additionalHash?: any
-                ) {
-                  // Update the reactive args object in place
-                  const newPositional = [
-                    ...curriedPositionals,
-                    ...(Array.isArray(additionalParams) ? additionalParams.map(unwrapVal) : []),
-                  ];
-                  const newNamed = {
-                    ...(curriedNamed as Record<string, any>),
-                    ...(additionalHash && typeof additionalHash === 'object'
-                      ? Object.fromEntries(
-                          Object.entries(additionalHash)
-                            .filter(([k]) => !isGxtInternal(k))
-                            .map(([k, v]: [string, any]) => [k, unwrapVal(v)])
-                        )
-                      : {}),
-                  };
-                  // Update in place so the bucket's reference to args sees changes
-                  reactiveArgs.positional = newPositional;
-                  reactiveArgs.named = newNamed;
-                  // Wrap getValue in backtracking frame to detect read-then-write
-                  beginBacktrackingFrame();
-                  try {
-                    return delegate.getValue(bucket);
-                  } finally {
-                    endBacktrackingFrame();
-                  }
-                };
-                (curried as any).__isEmberCurriedHelper = true;
-                return curried;
+                return _curryDelegateHelper(delegate, definition, params, hash);
               }
             }
           }
@@ -8266,8 +8145,8 @@ const $_MANAGERS = {
         // Fast path for built-in helpers: call them directly with the raw args.
         // Built-in helpers like `get`, `concat`, etc. already handle getter
         // functions (they check typeof arg === 'function' and call it). Eagerly
-        // unwrapping the args via unwrapVal would lose reactivity and break
-        // cases where the getter reads from a GXT formula (e.g., each-loop index).
+        // unwrapping the args would lose reactivity and break cases where the
+        // getter reads from a GXT formula (e.g., each-loop index).
         const BUILTIN_HELPERS = getGxtRenderer()?.compilePipeline.getBuiltinHelpers?.();
         if (BUILTIN_HELPERS && BUILTIN_HELPERS[helper]) {
           const builtinFn = BUILTIN_HELPERS[helper];
@@ -8277,51 +8156,12 @@ const $_MANAGERS = {
         }
 
         // Fallback: resolve via _resolveEmberHelper for registered helpers
-        // without a delegate manager
+        // without a delegate manager. GXT's $_helperHelper expects a curried
+        // reference, so that {{helper (helper "name") extraArgs}} works; in
+        // content position ({{helper "name"}}) GXT calls it with no extra args.
         const resolvedFn = _resolveEmberHelper(helper, owner);
         if (resolvedFn) {
-          // Unwrap curried positional args from params
-          const curriedPositionals = Array.isArray(params) ? params.map(unwrapVal) : [];
-
-          // Unwrap curried named args from hash
-          const curriedNamed =
-            hash && typeof hash === 'object'
-              ? Object.fromEntries(
-                  Object.entries(hash)
-                    .filter(([k]) => !isGxtInternal(k))
-                    .map(([k, v]: [string, any]) => [k, unwrapVal(v)])
-                )
-              : {};
-
-          // Return a curried helper reference. GXT's $_helperHelper expects this
-          // pattern so that {{helper (helper "name") extraArgs}} works correctly.
-          // When rendered in content position ({{helper "name"}}), GXT will call
-          // the curried function with no additional args, producing the value.
-          const curried = function __emberCurriedHelper(
-            additionalParams?: any[],
-            additionalHash?: any
-          ) {
-            const mergedPositional = [
-              ...curriedPositionals,
-              ...(Array.isArray(additionalParams) ? additionalParams.map(unwrapVal) : []),
-            ];
-            const mergedNamed = {
-              ...curriedNamed,
-              ...(additionalHash && typeof additionalHash === 'object'
-                ? Object.fromEntries(
-                    Object.entries(additionalHash)
-                      .filter(([k]) => !isGxtInternal(k))
-                      .map(([k, v]: [string, any]) => [k, unwrapVal(v)])
-                  )
-                : {}),
-            };
-            return resolvedFn(mergedPositional, mergedNamed);
-          };
-          (curried as any).__isEmberCurriedHelper = true;
-          (curried as any).__resolvedFn = resolvedFn;
-          (curried as any).__curriedPositionals = curriedPositionals;
-          (curried as any).__curriedNamed = curriedNamed;
-          return curried;
+          return _curryFnHelper(resolvedFn, params, hash);
         }
       }
       return null;
@@ -8947,16 +8787,13 @@ const $_MANAGERS = {
       const caps = manager.capabilities;
       if (caps && !FROM_CAPABILITIES.has(caps)) {
         const err = new Error(
-          "Custom modifier managers must have a `capabilities` property that is the result of calling the `capabilities('3.22')` (imported via `import { capabilities } from '@ember/modifier';`). Received: " +
-            JSON.stringify(caps)
+          capabilitiesErrorPrefix('modifier') + 'Received: ' + JSON.stringify(caps)
         );
         throw err;
       }
 
       if (!caps) {
-        const err = new Error(
-          "Custom modifier managers must have a `capabilities` property that is the result of calling the `capabilities('3.22')` (imported via `import { capabilities } from '@ember/modifier';`). "
-        );
+        const err = new Error(capabilitiesErrorPrefix('modifier'));
         throw err;
       }
 
@@ -9301,12 +9138,7 @@ function handleStringComponent(
         const caps = eagerManager.capabilities;
         if (caps && !FROM_CAPABILITIES.has(caps)) {
           const err = new Error(
-            'Custom component managers must have a `capabilities` property ' +
-              "that is the result of calling the `capabilities('3.13')` " +
-              "(imported via `import { capabilities } from '@ember/component';`). " +
-              'Received: `' +
-              JSON.stringify(caps) +
-              '`'
+            capabilitiesErrorPrefix('component') + 'Received: `' + JSON.stringify(caps) + '`'
           );
           captureRenderError(err);
           return () => null;
@@ -13106,9 +12938,7 @@ export class CustomComponentManager {
     const caps = delegate ? delegate.capabilities : undefined;
     if (!caps || !FROM_CAPABILITIES.has(caps)) {
       throw new Error(
-        'Custom component managers must have a `capabilities` property ' +
-          "that is the result of calling the `capabilities('3.13')` " +
-          "(imported via `import { capabilities } from '@ember/component';`). " +
+        capabilitiesErrorPrefix('component') +
           'Received: `' +
           (caps === undefined ? 'undefined' : JSON.stringify(caps)) +
           '`'
@@ -13362,9 +13192,7 @@ export class CustomModifierManager {
     const caps = delegate ? delegate.capabilities : undefined;
     if (!caps || !FROM_CAPABILITIES.has(caps)) {
       throw new Error(
-        'Custom modifier managers must have a `capabilities` property ' +
-          "that is the result of calling the `capabilities('3.22')` " +
-          "(imported via `import { capabilities } from '@ember/modifier';`). " +
+        capabilitiesErrorPrefix('modifier') +
           'Received: `' +
           (caps === undefined ? 'undefined' : JSON.stringify(caps)) +
           '`'

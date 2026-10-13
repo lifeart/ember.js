@@ -27,6 +27,7 @@ import {
   GXT_ARGS_SYMBOL,
 } from './gxt-bridge';
 import { createComputeRef, valueForRef } from '@glimmer/reference';
+import { capabilitiesErrorPrefix } from './utils';
 
 const g = globalThis as any;
 
@@ -460,9 +461,7 @@ function createEmberMaybeHelper(original: Function) {
             !_FROM_CAPS.has(delegate.capabilities)
           ) {
             const err = new Error(
-              `Custom helper managers must have a \`capabilities\` property ` +
-                `that is the result of calling the \`capabilities('3.23')\` ` +
-                `(imported via \`import { capabilities } from '@ember/helper';\`). ` +
+              capabilitiesErrorPrefix('helper') +
                 `Received: \`${JSON.stringify(delegate.capabilities)}\` for manager \`${delegate.constructor?.name || 'unknown'}\``
             );
             // Capture for flushRenderErrors so assert.throws() can see it
@@ -771,9 +770,7 @@ function createEmberMaybeHelper(original: Function) {
               !_FROM_CAPS.has(delegate.capabilities)
             ) {
               const err = new Error(
-                `Custom helper managers must have a \`capabilities\` property ` +
-                  `that is the result of calling the \`capabilities('3.23')\` ` +
-                  `(imported via \`import { capabilities } from '@ember/helper';\`). ` +
+                capabilitiesErrorPrefix('helper') +
                   `Received: \`${JSON.stringify(delegate.capabilities)}\` for manager \`${delegate.constructor?.name || 'unknown'}\``
               );
               // Capture for flushRenderErrors so assert.throws() can see it
