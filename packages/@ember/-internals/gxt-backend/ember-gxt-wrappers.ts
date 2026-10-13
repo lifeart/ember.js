@@ -1827,6 +1827,81 @@ function createEmberDc(original: Function) {
     return { mergedArgs };
   }
 
+  // The swap paths below render the dynamic component's new value with the
+  // owner captured at the first render (when none is ambient) and with the
+  // component getter as the current dc getter; a string path also stashes its
+  // instance-capture callback on the args for the render (see `__gxtDcCapture`).
+  // A render error leaves the slot empty.
+  function renderSwappedValue(
+    newVal: any,
+    componentGetter: any,
+    gxtArgs: any,
+    ctx: any,
+    capturedOwner: any,
+    captureInstance?: (inst: any) => void
+  ): any {
+    const prevOwner = getAmbientOwner();
+    if (!getAmbientOwner() && capturedOwner && !capturedOwner.isDestroyed) {
+      setAmbientOwner(capturedOwner);
+    }
+    const prevDcGetter = getDcComponentGetter();
+    setDcComponentGetter(componentGetter);
+    if (captureInstance) {
+      Object.defineProperty(gxtArgs, '__gxtDcCapture', {
+        value: captureInstance,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+      });
+    }
+    let newResult: any = null;
+    try {
+      if (newVal.__isCurriedComponent) {
+        const hasCurriedPositionals = (newVal.__curriedPositionals || []).length > 0;
+        newResult = renderComponent(newVal, gxtArgs, ctx, !hasCurriedPositionals);
+      } else {
+        newResult = renderComponent(newVal, gxtArgs, ctx, true);
+      }
+    } catch {
+      // Component not found or render error — leave empty
+    } finally {
+      setDcComponentGetter(prevDcGetter);
+      if (captureInstance) {
+        try {
+          delete (gxtArgs as any).__gxtDcCapture;
+        } catch {
+          /* configurable: true above ensures delete succeeds for our own writes */
+        }
+      }
+      if (!prevOwner && getAmbientOwner() === capturedOwner) {
+        setAmbientOwner(prevOwner);
+      }
+    }
+    return newResult;
+  }
+
+  // Identity of a dynamic component value; a swap happens only when it changes.
+  function dcIdentityKey(val: any): string {
+    if (!val && val !== 0) return '__empty__';
+    if (typeof val === 'string') return '__str:' + val;
+    if (val && val.__isCurriedComponent) return '__curried:' + (val.__name || '');
+    return '__other:' + String(val);
+  }
+
+  // The DOM nodes of a render result: a node, a fragment's children, or a GXT
+  // component's rendered nodes.
+  function renderedNodesOf(result: any): Node[] {
+    if (result instanceof Node) {
+      return result instanceof DocumentFragment ? Array.from(result.childNodes) : [result];
+    }
+    if (result != null && result[gxtModule.RENDERED_NODES_PROPERTY]) {
+      return [...(result[gxtModule.RENDERED_NODES_PROPERTY] as Node[])].filter(
+        (n: any) => n instanceof Node
+      );
+    }
+    return [];
+  }
+
   function renderComponent(
     componentValue: any,
     gxtArgs: any,
@@ -1974,35 +2049,15 @@ function createEmberDc(original: Function) {
 
         // Render the new component
         if (newVal && (newVal.__isCurriedComponent || typeof newVal === 'string')) {
-          const prevOwner = getAmbientOwner();
-          if (!getAmbientOwner() && _dcCapturedOwner && !_dcCapturedOwner.isDestroyed) {
-            setAmbientOwner(_dcCapturedOwner);
-          }
-          const prevDcGetter = getDcComponentGetter();
-          setDcComponentGetter(componentGetter);
-          let newResult: any = null;
-          try {
-            if (newVal.__isCurriedComponent) {
-              const hasCurriedPositionals = (newVal.__curriedPositionals || []).length > 0;
-              newResult = renderComponent(newVal, gxtArgs, ctx, !hasCurriedPositionals);
-            } else {
-              newResult = renderComponent(newVal, gxtArgs, ctx, true);
-            }
-          } catch {
-            /* ignore */
-          } finally {
-            setDcComponentGetter(prevDcGetter);
-            if (!prevOwner && getAmbientOwner() === _dcCapturedOwner) {
-              setAmbientOwner(prevOwner);
-            }
-          }
-
+          const newResult = renderSwappedValue(
+            newVal,
+            componentGetter,
+            gxtArgs,
+            ctx,
+            _dcCapturedOwner
+          );
           if (newResult instanceof Node) {
-            if (newResult instanceof DocumentFragment) {
-              _insertedNodes = Array.from(newResult.childNodes);
-            } else {
-              _insertedNodes = [newResult];
-            }
+            _insertedNodes = renderedNodesOf(newResult);
             parent.insertBefore(newResult, nullPlaceholder);
           }
         }
@@ -2041,8 +2096,6 @@ function createEmberDc(original: Function) {
     // 'my-comp' and 'your-comp'). GXT's $_dc is avoided for CurriedComponents
     // because its factory mechanism does not work with Ember's component manager.
     if (componentValue && componentValue.__isCurriedComponent) {
-      const RNODES = gxtModule.RENDERED_NODES_PROPERTY;
-
       // --- Initial one-shot render ---
       let initialResult: any = null;
       if (componentValue && componentValue.__isCurriedComponent) {
@@ -2057,28 +2110,12 @@ function createEmberDc(original: Function) {
       }
 
       // --- Reactive swap tracking ---
-      const getIdentityKey = (val: any): string => {
-        if (!val && val !== 0) return '__empty__';
-        if (typeof val === 'string') return '__str:' + val;
-        if (val && val.__isCurriedComponent) return '__curried:' + (val.__name || '');
-        return '__other:' + String(val);
-      };
-
-      let _lastIdentityKey = getIdentityKey(componentValue);
+      let _lastIdentityKey = dcIdentityKey(componentValue);
       let _dcDestroyed = false;
       const _dcCapturedOwner = getAmbientOwner();
 
       // Collect initial rendered nodes for later removal during swaps.
-      let currentNodes: Node[] = [];
-      if (initialResult instanceof Node) {
-        if (initialResult instanceof DocumentFragment) {
-          currentNodes = Array.from(initialResult.childNodes);
-        } else {
-          currentNodes = [initialResult];
-        }
-      } else if (initialResult != null && initialResult[RNODES]) {
-        currentNodes = [...initialResult[RNODES]].filter((n: any) => n instanceof Node);
-      }
+      let currentNodes: Node[] = renderedNodesOf(initialResult);
 
       // Perform DOM swap when the component identity changes.
       const performSwap = () => {
@@ -2091,7 +2128,7 @@ function createEmberDc(original: Function) {
           return;
         }
 
-        const newKey = getIdentityKey(newVal);
+        const newKey = dcIdentityKey(newVal);
         if (newKey === _lastIdentityKey) return;
         _lastIdentityKey = newKey;
 
@@ -2118,40 +2155,18 @@ function createEmberDc(original: Function) {
 
         // Render the new component
         if (newVal && (newVal.__isCurriedComponent || typeof newVal === 'string')) {
-          const prevOwner = getAmbientOwner();
-          if (!getAmbientOwner() && _dcCapturedOwner && !_dcCapturedOwner.isDestroyed) {
-            setAmbientOwner(_dcCapturedOwner);
-          }
-          const prevDcGetter = getDcComponentGetter();
-          setDcComponentGetter(componentGetter);
-          let newResult: any = null;
-          try {
-            if (newVal.__isCurriedComponent) {
-              const hasCurriedPositionals = (newVal.__curriedPositionals || []).length > 0;
-              newResult = renderComponent(newVal, gxtArgs, ctx, !hasCurriedPositionals);
-            } else {
-              newResult = renderComponent(newVal, gxtArgs, ctx, true);
-            }
-          } catch {
-            // Component not found or render error — leave empty
-          } finally {
-            setDcComponentGetter(prevDcGetter);
-            if (!prevOwner && getAmbientOwner() === _dcCapturedOwner) {
-              setAmbientOwner(prevOwner);
-            }
-          }
-
+          const newResult = renderSwappedValue(
+            newVal,
+            componentGetter,
+            gxtArgs,
+            ctx,
+            _dcCapturedOwner
+          );
           // Insert new nodes at the position of the old nodes
+          currentNodes = renderedNodesOf(newResult);
           if (newResult instanceof Node) {
-            if (newResult instanceof DocumentFragment) {
-              currentNodes = Array.from(newResult.childNodes);
-            } else {
-              currentNodes = [newResult];
-            }
             parent.insertBefore(newResult, insertBefore);
-          } else if (newResult != null && newResult[RNODES]) {
-            const nodes = newResult[RNODES] as Node[];
-            currentNodes = [...nodes].filter((n: any) => n instanceof Node);
+          } else {
             for (const n of currentNodes) {
               parent.insertBefore(n, insertBefore);
             }
@@ -2219,8 +2234,6 @@ function createEmberDc(original: Function) {
         throw err;
       }
 
-      const RNODES = gxtModule.RENDERED_NODES_PROPERTY;
-
       // Track the Ember component instance created for the CURRENT dynamic
       // component slot so that we can fire willDestroy lifecycle hooks when
       // the component is swapped out. The callback is stashed as a non-enumerable
@@ -2272,34 +2285,15 @@ function createEmberDc(original: Function) {
       }
 
       // --- Reactive swap tracking ---
-      const getIdentityKey = (val: any): string => {
-        if (!val && val !== 0) return '__empty__';
-        if (typeof val === 'string') return '__str:' + val;
-        if (val && val.__isCurriedComponent) return '__curried:' + (val.__name || '');
-        return '__other:' + String(val);
-      };
-
-      let _lastIdentityKey = getIdentityKey(componentValue);
+      let _lastIdentityKey = dcIdentityKey(componentValue);
       let _dcDestroyed = false;
       const _dcCapturedOwner = getAmbientOwner();
 
       // Collect initial rendered nodes for later removal during swaps.
-      let currentNodes: Node[] = [];
+      let currentNodes: Node[] = renderedNodesOf(initialResult);
       // Track the placeholder comment that holds our position when all nodes
       // are removed (so we can find parent/insertBefore on subsequent swaps).
       let anchor: Comment | null = null;
-
-      if (initialResult instanceof Node) {
-        if (initialResult instanceof DocumentFragment) {
-          currentNodes = Array.from(initialResult.childNodes);
-        } else {
-          currentNodes = [initialResult];
-        }
-      } else if (initialResult != null && (initialResult as any)[RNODES]) {
-        currentNodes = [...((initialResult as any)[RNODES] as Node[])].filter(
-          (n: any) => n instanceof Node
-        );
-      }
 
       // Perform DOM swap when the component identity changes.
       const performSwap = () => {
@@ -2312,7 +2306,7 @@ function createEmberDc(original: Function) {
           return;
         }
 
-        const newKey = getIdentityKey(newVal);
+        const newKey = dcIdentityKey(newVal);
         if (newKey === _lastIdentityKey) return;
         _lastIdentityKey = newKey;
 
@@ -2346,54 +2340,21 @@ function createEmberDc(original: Function) {
         // Fire Ember willDestroy lifecycle for the previous instance.
         destroyCurrentDcInstance();
 
-        // Render the new component
+        // Render the new component (the capture callback is re-stashed for
+        // the swap render, see the initial render above).
         if (newVal && (newVal.__isCurriedComponent || typeof newVal === 'string')) {
-          const prevOwner = getAmbientOwner();
-          if (!getAmbientOwner() && _dcCapturedOwner && !_dcCapturedOwner.isDestroyed) {
-            setAmbientOwner(_dcCapturedOwner);
-          }
-          const prevDcGetter = getDcComponentGetter();
-          setDcComponentGetter(componentGetter);
-          // Re-stash the capture callback on gxtArgs for the swap render (see
-          // initial-render block above for the per-render lifetime contract).
-          Object.defineProperty(gxtArgs, '__gxtDcCapture', {
-            value: captureInstance,
-            configurable: true,
-            enumerable: false,
-            writable: true,
-          });
-          let newResult: any = null;
-          try {
-            if (newVal.__isCurriedComponent) {
-              const hasCurriedPositionals = (newVal.__curriedPositionals || []).length > 0;
-              newResult = renderComponent(newVal, gxtArgs, ctx, !hasCurriedPositionals);
-            } else {
-              newResult = renderComponent(newVal, gxtArgs, ctx, true);
-            }
-          } catch {
-            // Component not found or render error — leave empty
-          } finally {
-            setDcComponentGetter(prevDcGetter);
-            try {
-              delete (gxtArgs as any).__gxtDcCapture;
-            } catch {
-              /* configurable: true above ensures delete succeeds for our own writes */
-            }
-            if (!prevOwner && getAmbientOwner() === _dcCapturedOwner) {
-              setAmbientOwner(prevOwner);
-            }
-          }
-
+          const newResult = renderSwappedValue(
+            newVal,
+            componentGetter,
+            gxtArgs,
+            ctx,
+            _dcCapturedOwner,
+            captureInstance
+          );
+          currentNodes = renderedNodesOf(newResult);
           if (newResult instanceof Node) {
-            if (newResult instanceof DocumentFragment) {
-              currentNodes = Array.from(newResult.childNodes);
-            } else {
-              currentNodes = [newResult];
-            }
             parent.insertBefore(newResult, insertBefore);
-          } else if (newResult != null && (newResult as any)[RNODES]) {
-            const nodes = (newResult as any)[RNODES] as Node[];
-            currentNodes = [...nodes].filter((n: any) => n instanceof Node);
+          } else {
             for (const n of currentNodes) {
               parent.insertBefore(n, insertBefore);
             }
