@@ -1274,18 +1274,17 @@ function _emberTagFastPathEligible(tag: unknown, tagProps: any): boolean {
 /**
  * Wraps GXT's $_tag to support:
  * - PascalCase/kebab-case component resolution via Ember's registry
- * - Dynamic components (<@foo />, <this.foo />)
- * - Named blocks (<:header>, <:default>)
+ * - Arg components (<@foo />)
  * - EmberHtmlRaw (triple mustaches {{{expr}}})
  *
  * This inner layer is wrapped again by compile.ts's `$_tag_ember` for
  * runtime-compiled templates, but build-time .gts/.gjs templates import it
  * directly as `$_tag` (vite's `gxtEmberWrapperRedirect` points their `$_tag`
- * import here). For valid
- * .gts/.gjs, the by-name component lookup, `<this.foo/>`, `:named-block` and
- * helper-fallback branches are believed unreachable (strict mode compiles
- * those shapes to `$_c` / `$_dc` / slots / `() => helper` instead of
- * `$_tag`).
+ * import here). `<this.foo/>` and `<:named>` blocks need no branch here: gxt
+ * compiles them to `$_dc` and slots at build time, and compile.ts's outer
+ * wrapper handles (and returns for) both before calling this one. The by-name
+ * lookup is reachable: an undeclared PascalCase tag and a hyphenated tag
+ * (`<foo-bar>`) compile to `$_tag('Name')` / `$_tag('foo-bar')`.
  *
  * The `<@foo/>` arg-component branch (resolvedTag.startsWith('@')) is
  * load-bearing: an arg is not a lexical binding, so build-time templates emit
@@ -1367,49 +1366,6 @@ function createEmberTag(original: Function) {
           }
         }
         return document.createComment(`dynamic component @${argName} not found`);
-      }
-
-      // Dynamic component: <this.foo />
-      if (resolvedTag.startsWith('this.')) {
-        const propPath = resolvedTag.slice(5);
-        let componentValue = ctx;
-        for (const part of propPath.split('.')) {
-          componentValue = componentValue?.[part];
-        }
-        if (componentValue) {
-          const managers = g.$_MANAGERS;
-          if (managers?.component?.canHandle?.(componentValue)) {
-            return managers.component.handle(componentValue, {}, children, ctx);
-          }
-        }
-        return document.createComment(`dynamic component this.${propPath} not found`);
-      }
-
-      // Named blocks: <:header>, <:default>
-      if (resolvedTag.startsWith(':')) {
-        const slotName = resolvedTag.slice(1);
-        let hasBlockParams = false;
-        if (tagProps && tagProps !== gxtModule.$_edp) {
-          const attrs = tagProps[1];
-          if (Array.isArray(attrs)) {
-            for (const [key] of attrs) {
-              if (key === '@__hasBlockParams__') {
-                hasBlockParams = true;
-                break;
-              }
-            }
-          }
-          const fw = tagProps[3];
-          if (fw && fw.__hasBlockParams) {
-            hasBlockParams = true;
-          }
-        }
-        return {
-          __isNamedBlock: true,
-          __slotName: slotName,
-          __children: children,
-          __hasBlockParams: hasBlockParams,
-        };
       }
 
       // EmberHtmlRaw (triple mustaches)
