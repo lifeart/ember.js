@@ -3020,7 +3020,7 @@ let _emberFormValueUndefinedPatched = false;
 //
 // To keep this narrow, `alwaysRevalidate` is flipped only for a VM.execute
 // call that follows a tracked set. The flag lives in compile.ts
-// (`_gxtTrackedSetSinceRerenderFlag`, via the
+// (`_gxtFlags.trackedSetSinceRerender`, via the
 // `compilePipeline.markTrackedSetSinceRerender()` /
 // `consumeTrackedSetSinceRerender()` bridge pair); it is set by a hook on the
 // trigger-re-render path (called by the tracked setter in

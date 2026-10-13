@@ -3045,7 +3045,7 @@ function _gxtWalkHashGetterPaths(getter: any, ctx: any): void {
 // which consults the scheduleRevalidate host hook before using queueMicrotask.
 // We set it to a no-op so GXT doesn't auto-schedule DOM sync — instead we
 // control when gxtSyncDom() is called (after runTask, or via setTimeout fallback).
-// The canonical pending-sync state is the module-local `_gxtPendingSyncFlag`
+// The canonical pending-sync state is the module-local `_gxtFlags.pendingSync`
 // boolean (defaults to `false` at module init).
 const _gxtExternalScheduleHook = function () {
   _gxtSetPendingSync(true);
@@ -3221,17 +3221,74 @@ function _gxtAddAfterTriggerReRender(fn: _TriggerReRenderHook): () => void {
   };
 }
 
-// Save-restore wrapper around the "in trigger-rerender" flag, exposed on the
-// bridge as `compilePipeline.withInTriggerReRender`. Writers: the inline toggle
-// wrapped around `_gxtTriggerReRenderBody` below, and `metal/property_events.ts`
-// (caller-side around `gxtTrigger`). Re-entrancy-safe because the saved value is
-// whatever the enclosing frame wrote (nested calls stack correctly).
-//
-// The canonical state is the module-local boolean `_gxtInTriggerReRenderFlag`.
-// Cross-package readers (`metal/computed.ts` and `@ember/object/core.ts`'s
-// DEBUG proxy trap) route through `compilePipeline.isInTriggerReRender()`; the
-// cross-package writer in `metal/property_events.ts` routes through
-// `compilePipeline.withInTriggerReRender(fn)`.
+// The module's boolean state flags. They are read and written only through
+// the accessor functions below, most of which compile.ts also installs on the
+// bridge's `compilePipeline` (under the same names without `_gxt`), so
+// manager.ts, glimmer's renderer/root/outlet, the runloop and the test helpers
+// share this one state.
+const _gxtFlags = {
+  // Inside the canonical `_gxtTriggerReRender` body (`metal/computed.ts`'s
+  // CP.get re-entrance guard reads it).
+  inTriggerReRender: false,
+  // Inside a render pass or a wrapped event handler: @tracked setters skip the
+  // cross-object trigger fan-out, which would dirty cells mid-render.
+  currentlyRendering: false,
+  // A tracked write happened since the last `UpdatingVM.execute` (the
+  // test-harness VM patch in ember-gxt-wrappers.ts forces a revalidation).
+  trackedSetSinceRerender: false,
+  // Inside the post-`runTask` DOM sync, `_gxtSyncDomNow` (its re-entrancy guard).
+  syncing: false,
+  // manager.ts arg write-backs: validator.ts dirties the classic tag without
+  // scheduling another sync (prevents a backburner re-entry loop).
+  suppressDirtyInRcSet: false,
+  // The current sync was driven by a property change. Unlike `hadPendingSync`
+  // it survives the force-rerender's clear; it gates destroy-error capture.
+  syncIsPropertyDriven: false,
+  // A sync was pending when `_gxtSyncDomNow` started; cleared by the
+  // force-rerender's `finally`.
+  hadPendingSync: false,
+  // `_gxtTriggerReRender` saw a nested-object change; gates the force-rerender
+  // full-tree fallback.
+  hadNestedObjectChange: false,
+  // Inside root.ts's route-template render (the render tree's outlet hierarchy).
+  inOutletRender: false,
+  // Inside renderer.ts's forced `classicRoot.render()`.
+  forceRerender: false,
+  // Nested `renderComponent` calls render text nodes without effects (set by
+  // renderer.ts, which owns the save/restore).
+  skipTextEffects: false,
+  // A DOM sync is scheduled.
+  pendingSync: false,
+  // Inside `runTask`/`runAppend`, which sync themselves: the runloop end
+  // listeners skip their flush.
+  runTaskActive: false,
+  // A property change happened inside an `afterRender` callback (`runAppend`
+  // reads and clears it).
+  afterRenderPropertyChange: false,
+  // Inside a `schedule('afterRender', cb)` callback (set by the runloop wrapper).
+  inAfterRender: false,
+  // A teardown re-attaches removed component elements so `willDestroyElement`
+  // sees them connected; `<ember-outlet>` must not render meanwhile.
+  destroyReattachInProgress: false,
+  // The pending sync comes from a real property change, not from cells created
+  // during the initial render.
+  pendingSyncFromPropertyChange: false,
+  // `_gxtTriggerReRender` is a no-op (`withTriggerSuppressed`).
+  triggerSuppressed: false,
+};
+type GxtFlag = keyof typeof _gxtFlags;
+
+// Run `fn` with `flag` set to `value`, then restore the value it had before
+// (also when `fn` throws), so nested frames stack correctly.
+function _gxtWithFlag<T>(flag: GxtFlag, value: boolean, fn: () => T): T {
+  const prev = _gxtFlags[flag];
+  _gxtFlags[flag] = value;
+  try {
+    return fn();
+  } finally {
+    _gxtFlags[flag] = prev;
+  }
+}
 
 // The render context (`this`) the current template body is being `.call`ed
 // with. itemToNode's capture frame consults this to materialize a leaf cell
@@ -3244,17 +3301,6 @@ let _gxtCurrentTemplateThis: any = null;
 // host hook, through which gxt reads the module-local.
 const _gxtGetTemplateThisFn = () => _gxtCurrentTemplateThis;
 _gxtRegisterHostHooks({ getCurrentTemplateThis: _gxtGetTemplateThisFn });
-
-let _gxtInTriggerReRenderFlag = false;
-function _gxtWithInTriggerReRender<T>(fn: () => T): T {
-  const wasInside = _gxtInTriggerReRenderFlag;
-  _gxtInTriggerReRenderFlag = true;
-  try {
-    return fn();
-  } finally {
-    _gxtInTriggerReRenderFlag = wasInside;
-  }
-}
 
 // Shared subscription-recovery for non-text effect sites ($_attr attribute
 // effect, {{{html-raw}}} effect): run `getter` under a capture tracker frame
@@ -3321,84 +3367,30 @@ function _gxtCaptureLeafOwnersForGetter(getter: any): void {
   }
 }
 
-// Read-side predicate paired with `withInTriggerReRender`. Returns `true` iff
-// the current sync stack is nested inside a `withInTriggerReRender(fn)` frame
-// (which always wraps the canonical `triggerReRender` body). Used by
-// `metal/computed.ts`'s CP.get re-entrance guard.
 function _gxtIsInTriggerReRender(): boolean {
-  return _gxtInTriggerReRenderFlag;
+  return _gxtFlags.inTriggerReRender;
+}
+function _gxtWithInTriggerReRender<T>(fn: () => T): T {
+  return _gxtWithFlag('inTriggerReRender', true, fn);
 }
 
-// Canonical state for the "currently rendering" flag. Two cross-package readers
-// (`metal/tracked.ts` and `gxt-backend/glimmer-tracking.ts`) gate the
-// "cross-object reactivity" trigger fan-out on it so we DON'T fire
-// `__gxtTriggerReRender` from a @tracked setter while we're INSIDE a render
-// pass or a wrapped event-handler frame (otherwise the inner trigger would
-// dirty cells mid-render and break the initial render or the user-input
-// commit). Writer (save-restore wrapper) and reader (predicate) are exposed on
-// the bridge as `compilePipeline.withCurrentlyRendering` +
-// `compilePipeline.isCurrentlyRendering`.
-//
-// It is a pure boolean (no depth counter, no transition side-effects), so the
-// balanced "always save + always restore" wrap is correct here — unlike
-// `withRendering`, where the depth-1→0 drain forces a conditional-restore
-// variant.
-//
-// Intra-file writers (`templateFactory.render`) call
-// `_gxtSetCurrentlyRendering` directly (unconditional set-true / set-false).
-// The cross-package `manager.ts` writer goes through
-// `_gxtWithCurrentlyRendering` via the bridge
-// `compilePipeline.withCurrentlyRendering(fn)` helper.
-let _gxtCurrentlyRenderingFlag = false;
 function _gxtIsCurrentlyRendering(): boolean {
-  return _gxtCurrentlyRenderingFlag;
+  return _gxtFlags.currentlyRendering;
 }
 function _gxtSetCurrentlyRendering(on: boolean): void {
-  _gxtCurrentlyRenderingFlag = on;
+  _gxtFlags.currentlyRendering = on;
 }
 function _gxtWithCurrentlyRendering<T>(fn: () => T): T {
-  const wasRendering = _gxtCurrentlyRenderingFlag;
-  _gxtCurrentlyRenderingFlag = true;
-  try {
-    return fn();
-  } finally {
-    _gxtCurrentlyRenderingFlag = wasRendering;
-  }
+  return _gxtWithFlag('currentlyRendering', true, fn);
 }
 
-// "Tracked set since last rerender" detector flag, exposed via a 2-method
-// bridge (`mark` + `consume`):
-//
-//   Writer: `ember-gxt-wrappers.ts` BEFORE-trigger-rerender hook (registered
-//   via `addBeforeTriggerReRender`). On every `triggerReRender` the hook calls
-//   `markTrackedSetSinceRerender()` which flips this flag to `true` —
-//   signalling that a tracked write occurred since the last VM execute
-//   completed.
-//
-//   Reader: `ember-gxt-wrappers.ts` `UpdatingVM.prototype.execute` patch. On
-//   entry the patched method calls `consumeTrackedSetSinceRerender()`, which
-//   atomically returns the prior value AND clears the flag. When the prior
-//   value was `true`, the patched method forces `alwaysRevalidate=true` for
-//   that one execute call (recompute every childRef) to flush stale cached
-//   values from tracked writes that fired outside the normal VM update cycle.
-//
-// The reader never reads without also clearing, so mark+consume matches its
-// usage exactly.
-//
-// Bridge-not-yet-installed edge: both methods are optional on the bridge
-// interface; the writer hook only registers AFTER the bridge install
-// (registration is itself bridge-mediated via `addBeforeTriggerReRender`), so
-// the writer can assume the bridge is installed. The reader (UVM execute patch)
-// runs on every Glimmer execute, including before the bridge install — the
-// defensive `?.` access plus `?? false` default gives "no detection ⇒ never
-// force revalidate".
-let _gxtTrackedSetSinceRerenderFlag = false;
 function _gxtMarkTrackedSetSinceRerender(): void {
-  _gxtTrackedSetSinceRerenderFlag = true;
+  _gxtFlags.trackedSetSinceRerender = true;
 }
+// Returns the flag and clears it.
 function _gxtConsumeTrackedSetSinceRerender(): boolean {
-  const prev = _gxtTrackedSetSinceRerenderFlag;
-  _gxtTrackedSetSinceRerenderFlag = false;
+  const prev = _gxtFlags.trackedSetSinceRerender;
+  _gxtFlags.trackedSetSinceRerender = false;
   return prev;
 }
 
@@ -3429,145 +3421,51 @@ function _gxtGetSyncCycleId(): number {
   return _gxtSyncCycleId;
 }
 
-// Read-side predicate for the "syncing" flag toggled by `_gxtSyncDomNow` and
-// the post-render-hook re-entry save-restore in `manager.ts`. Returns `true`
-// iff the current synchronous stack is nested inside the GXT post-`runTask` DOM
-// sync flush. Read by the `@ember/object/core.ts` DEBUG proxy trap's
-// `_isInternalPath` predicate (alongside `isRendering()` and
-// `isInTriggerReRender()`) and by several non-proxy-trap readers, all through
-// `compilePipeline.isSyncing()`.
-let _gxtSyncingFlag = false;
 function _gxtIsSyncing(): boolean {
-  return _gxtSyncingFlag;
+  return _gxtFlags.syncing;
 }
 function _gxtSetSyncing(on: boolean): void {
-  _gxtSyncingFlag = on;
+  _gxtFlags.syncing = on;
 }
-// Save-restore wrapper for the "syncing" flag, taking the new flag value as an
-// argument. The compile.ts `_gxtSyncDomNow` body uses straight-line
-// set-true/set-false rather than this wrapper (its try/finally already provides
-// cleanup pairing; no nested caller writes the flag to a different value
-// mid-body). The cross-package `manager.ts` post-render-hook re-entry site uses
-// this helper via the bridge with `value=false` to temporarily clear the flag
-// so the nested `_gxtSyncDomNow` invocation bypasses the re-entrancy guard.
+// manager.ts's post-render hooks call this with `false` so the nested
+// `_gxtSyncDomNow` passes the re-entrancy guard.
 function _gxtWithSyncing<T>(value: boolean, fn: () => T): T {
-  const wasSyncing = _gxtSyncingFlag;
-  _gxtSyncingFlag = value;
-  try {
-    return fn();
-  } finally {
-    _gxtSyncingFlag = wasSyncing;
-  }
+  return _gxtWithFlag('syncing', value, fn);
 }
 
-// Set to TRUE while manager.ts is performing internal arg write-backs (the
-// `instance[key] = newValue` assignment in `rcSet`/dynamic-component arg
-// dispatch) so that `validator.ts`'s `classicDirtyTagFor` wrapper can mark the
-// tag dirty and bump the global revision WITHOUT scheduling another GXT sync —
-// preventing a backburner re-entry loop on curly component tests. Written by 4
-// save-set-TRUE-for-body-restore sites in manager.ts (via
-// `withSuppressDirtyInRcSet`); read by `validator.ts`'s
-// `classicDirtyTagForGuarded` gate via `isDirtyInRcSetSuppressed()`.
-let _gxtSuppressDirtyInRcSetFlag = false;
 function _gxtIsDirtyInRcSetSuppressed(): boolean {
-  return _gxtSuppressDirtyInRcSetFlag;
+  return _gxtFlags.suppressDirtyInRcSet;
 }
 function _gxtWithSuppressDirtyInRcSet<T>(fn: () => T): T {
-  const wasSuppressed = _gxtSuppressDirtyInRcSetFlag;
-  _gxtSuppressDirtyInRcSetFlag = true;
-  try {
-    return fn();
-  } finally {
-    _gxtSuppressDirtyInRcSetFlag = wasSuppressed;
-  }
+  return _gxtWithFlag('suppressDirtyInRcSet', true, fn);
 }
 
-// "Sync is property-driven" flag. Set at the start of `_gxtSyncDomNow`
-// (mirroring `_gxtHadPendingSyncFlag` but surviving `__gxtForceEmberRerender`'s
-// finally-block clear) so downstream phases — specifically
-// `__gxtDestroyUnclaimedPoolEntries` in manager.ts — can still tell whether the
-// sync was driven by a real property change. That reader gates destroy-error
-// capture: spurious unclaimed sweeps from initial-render syncs (where no
-// property change drove the sync) must NOT route user-thrown destroy/lifecycle
-// errors into `_renderErrors`. The two intra-file writers call
-// `_gxtSetSyncIsPropertyDriven(value)` directly; the cross-file reader routes
-// through `compilePipeline.isSyncIsPropertyDriven?.()`.
-let _gxtSyncIsPropertyDrivenFlag = false;
 function _gxtIsSyncIsPropertyDriven(): boolean {
-  return _gxtSyncIsPropertyDrivenFlag;
+  return _gxtFlags.syncIsPropertyDriven;
 }
 function _gxtSetSyncIsPropertyDriven(on: boolean): void {
-  _gxtSyncIsPropertyDrivenFlag = on;
+  _gxtFlags.syncIsPropertyDriven = on;
 }
 
-// "Had pending sync" flag, paired with a 2-method get/set bridge surface
-// (`getHadPendingSync` + `setHadPendingSync`). The flag survives
-// `_gxtSyncDomNow`'s Phase-1 gxtSyncDom call but is cleared by
-// `__gxtForceEmberRerender`'s finally-block (its companion flag
-// `_gxtSyncIsPropertyDrivenFlag` exists precisely because this flag is cleared
-// mid-flush). Intra-`compile.ts` writers/readers use `_gxtSetHadPendingSync` /
-// `_gxtGetHadPendingSync` directly; the cross-file writer in `manager.ts`
-// (helper recompute) routes through `compilePipeline.setHadPendingSync(true)`;
-// the cross-package writer in `glimmer/lib/renderer.ts` (force-rerender
-// finally) through `setHadPendingSync(false)`; the cross-package readers there
-// through `getHadPendingSync?.() ?? false`. Paired get/set rather than a
-// read-only predicate because there are cross-file/cross-package writers as
-// well as readers.
-let _gxtHadPendingSyncFlag = false;
 function _gxtGetHadPendingSync(): boolean {
-  return _gxtHadPendingSyncFlag;
+  return _gxtFlags.hadPendingSync;
 }
 function _gxtSetHadPendingSync(on: boolean): void {
-  _gxtHadPendingSyncFlag = on;
+  _gxtFlags.hadPendingSync = on;
 }
 
-// "Had nested object change" flag, paired with a 2-method get/set bridge
-// surface (`getHadNestedObjectChange` + `setHadNestedObjectChange`). The flag
-// survives `_gxtSyncDomNow`'s Phase-1 sync but is cleared by
-// `_gxtForceEmberRerender`'s finally-block (in renderer.ts) and by the
-// between-test reset block in `compile.ts`. It is set TRUE inside
-// `__gxtTriggerReRender`'s nested-object-change detection (and by the
-// `manager.ts` helper-recompute path); its TRUE value is read inside
-// `_gxtForceEmberRerender` to gate the full-tree morph fallback when no root's
-// own tag moved. Intra-`compile.ts` writers/readers use the helpers directly;
-// cross-file/cross-package writers and the reader route through the
-// `compilePipeline` bridge. Mirrors `_gxtHadPendingSyncFlag`: both are cleared
-// by `_gxtForceEmberRerender`'s finally and both gate the force-rerender
-// fallback.
-let _gxtHadNestedObjectChangeFlag = false;
 function _gxtGetHadNestedObjectChange(): boolean {
-  return _gxtHadNestedObjectChangeFlag;
+  return _gxtFlags.hadNestedObjectChange;
 }
 function _gxtSetHadNestedObjectChange(on: boolean): void {
-  _gxtHadNestedObjectChangeFlag = on;
+  _gxtFlags.hadNestedObjectChange = on;
 }
 
-// "In outlet render" flag: set TRUE for the duration of the
-// `renderTemplateWithContext(routeTemplate, ...)` call inside
-// `glimmer/lib/templates/root.ts`'s outlet render path, restored to FALSE on
-// the surrounding `try/finally`. Consumed by `gxt-backend/manager.ts`'s
-// `_buildRenderTree` body — used together with `__currentOutletState` to decide
-// whether to rebuild the parentView-derived `renderTreeParts` with the proper
-// outlet hierarchy that the Glimmer VM produces (route-name "{{outlet}} for X" /
-// route X entries). Outside the outlet render frame the flag is `false` and the
-// function retains the bare parentView-derived render-tree parts.
-//
-// Exposed as a paired bridge surface `withInOutletRender<T>(fn): T` (writer) +
-// `isInOutletRender(): boolean` (reader). The writer lives in
-// `glimmer/lib/templates/root.ts`, the reader in `gxt-backend/manager.ts`.
-// Pure balanced save-restore wrap; in practice no nested outlet-render occurs.
-let _gxtInOutletRenderFlag = false;
 function _gxtIsInOutletRender(): boolean {
-  return _gxtInOutletRenderFlag;
+  return _gxtFlags.inOutletRender;
 }
 function _gxtWithInOutletRender<T>(fn: () => T): T {
-  const prev = _gxtInOutletRenderFlag;
-  _gxtInOutletRenderFlag = true;
-  try {
-    return fn();
-  } finally {
-    _gxtInOutletRenderFlag = prev;
-  }
+  return _gxtWithFlag('inOutletRender', true, fn);
 }
 
 // Captured top-level outlet ref, exposed via a paired set/get bridge surface
@@ -3605,55 +3503,18 @@ function _gxtGetCurrentHelperScope(): any {
   return _gxtCurrentHelperScope;
 }
 
-// "Is force-rerender" flag, exposed via a paired bridge surface
-// (`withForceRerender<T>(fn): T` writer + `isForceRerender(): boolean` reader).
-// Set TRUE around the `classicRoot.render()` body in `glimmer/lib/renderer.ts`.
-// Read by many gates across the gxt-backend package and renderer/root:
-// `_shouldWarnStyle`, the pool-claim sweep on factory swap,
-// `pushedUpdatedInstance` skip, ember-component init bypass, `_buildDom`
-// reused-from-pool gate, the `$_tag` `__forceRerenderSnapshot`, style-binding
-// XSS warn suppression, engine-instance cache reuse, and the OutletView
-// short-circuit.
-//
-// Pure balanced save-restore wrap; in practice no nested force-rerender occurs.
-// The renderer.ts writer's `catch (renderErr)` (which stashes onto
-// `classicRoot.__gxtDeferredError`) lives inside the `fn` it passes, so the
-// deferred-error stash happens before this wrapper's `finally` resets the flag.
-// Readers' optional-chain fallback treats `undefined` as "not in
-// force-rerender".
-let _gxtIsForceRerenderFlag = false;
 function _gxtIsForceRerender(): boolean {
-  return _gxtIsForceRerenderFlag;
+  return _gxtFlags.forceRerender;
 }
 function _gxtWithForceRerender<T>(fn: () => T): T {
-  const prev = _gxtIsForceRerenderFlag;
-  _gxtIsForceRerenderFlag = true;
-  try {
-    return fn();
-  } finally {
-    _gxtIsForceRerenderFlag = prev;
-  }
+  return _gxtWithFlag('forceRerender', true, fn);
 }
 
-// "Skip text effects" flag, exposed via a paired set/get bridge surface
-// (`setSkipTextEffects` / `getSkipTextEffects`). Set TRUE around each
-// renderComponent template render in `glimmer/lib/renderer.ts`'s
-// `_renderComponent` entrypoint so that nested `renderComponent` calls (during
-// an existing render pass) suppress GXT-effect creation for text nodes. The
-// single reader, in the intra-file `$_text` reactive-binding setup of the
-// glimmer-template forked branch, short-circuits the `gxtEffect(...)` setup when
-// truthy and returns the bare text node instead.
-//
-// The conditional set-true semantics (gated on `wasRendering`) and the
-// save-prior/restore-prior pattern live in the renderer.ts writers, NOT here —
-// the bridge just stores/reads the boolean. The intra-file reader uses the
-// module-local directly.
-let _gxtSkipTextEffectsFlag = false;
 function _gxtGetSkipTextEffects(): boolean {
-  return _gxtSkipTextEffectsFlag;
+  return _gxtFlags.skipTextEffects;
 }
 function _gxtSetSkipTextEffects(value: boolean): void {
-  _gxtSkipTextEffectsFlag = value;
+  _gxtFlags.skipTextEffects = value;
 }
 
 // Root outlet-rerender dispatcher, exposed via the bridge. The writer in
@@ -3698,7 +3559,7 @@ function _gxtSetRootOutletRerenderWrap(wrap: (fn: any) => any): void {
 // destroy error) so that the error can be re-thrown AFTER the `finally`-block
 // sync-state cleanup runs (`_gxtSetSyncing(false)` +
 // `_gxtSetSyncIsPropertyDriven(false)`). Without the defer, the throw would skip
-// the finally's flag-reset and leave `_gxtSyncingFlag === true`, causing every
+// the finally's flag-reset and leave `_gxtFlags.syncing === true`, causing every
 // subsequent `_gxtSyncDomNow` call to short-circuit on the re-entrancy guard and
 // become a permanent no-op.
 //
@@ -3714,122 +3575,39 @@ function _gxtSetRootOutletRerenderWrap(wrap: (fn: any) => any): void {
 // permitted for `unknown`.
 let _gxtDeferredSyncError: unknown = null;
 
-// The master "DOM sync pending" flag, paired with a 2-method get/set bridge
-// surface (`getPendingSync` + `setPendingSync`). It is set TRUE on any scheduled
-// DOM sync (cell.update via GXT's external-schedule hook, a real property change
-// observed by `__gxtTriggerReRender`, force-rerender invalidation, outlet model
-// update, route transition, post-render hook re-entry) and cleared at well-known
-// boundaries: at the start of `_gxtSyncDomNow` (after gating its body), in
-// cross-test teardown, in `__gxtPostRenderHooks` save/restore around
-// `didUpdate`/`didRender` (so hooks can detect their own dirty contributions),
-// in `wrapHandler`'s tail finally (so user-interaction handler property changes
-// do not survive past the handler), and at the end of every `runTask` /
-// `runAppend` / test-case-teardown.
-//
-// Intra-`compile.ts` writers/readers (including the `__gxtExternalSchedule`
-// hook) call `_gxtSetPendingSync` / `_gxtGetPendingSync` directly; cross-file
-// (manager.ts) and cross-package (renderer.ts revalidate, templates/root.ts
-// outlet, router.ts transition, test helpers) writers/readers route through the
-// bridge methods. The `__gxtPostRenderHooks` save-restore in manager.ts operates
-// on two flags (this one + `_gxtPendingSyncFromPropertyChangeFlag`) so it stays
-// an inline save-restore rather than a single-flag `with*` helper.
-let _gxtPendingSyncFlag = false;
 function _gxtGetPendingSync(): boolean {
-  return _gxtPendingSyncFlag;
+  return _gxtFlags.pendingSync;
 }
 function _gxtSetPendingSync(on: boolean): void {
-  _gxtPendingSyncFlag = on;
+  _gxtFlags.pendingSync = on;
 }
 
-// "Run task active" flag, paired with a 2-method get/set bridge surface
-// (`getRunTaskActive` + `setRunTaskActive`). Read together with
-// `_gxtPendingSyncFlag` in the same `getPendingSync?.() && !runTaskActive` gate
-// in `glimmer/lib/renderer.ts` (`_backburner` end listener) and
-// `runloop/index.ts` (runloop `onEnd` hook). Set TRUE during the body of
-// `runTask` / `runAppend` (test-helper writers) to tell the runloop `onEnd` and
-// `_backburner` end listeners to SKIP the post-end `_gxtSyncDomNow` flush —
-// `runTask` / `runAppend` perform their own explicit sync after the user's task
-// completes. Cleared in the `finally` at the end of each helper. The test-helper
-// writers and the two cross-package readers route through the bridge methods.
-let _gxtRunTaskActiveFlag = false;
 function _gxtGetRunTaskActive(): boolean {
-  return _gxtRunTaskActiveFlag;
+  return _gxtFlags.runTaskActive;
 }
 function _gxtSetRunTaskActive(on: boolean): void {
-  _gxtRunTaskActiveFlag = on;
+  _gxtFlags.runTaskActive = on;
 }
 
-// "After-render property change" detector flag, paired with a 2-method get/set
-// bridge surface (`getAfterRenderPropertyChange` +
-// `setAfterRenderPropertyChange`). Set TRUE by `_gxtTriggerReRender` when it
-// fires INSIDE a `schedule('afterRender', cb)` callback (detected via the
-// `_gxtInAfterRenderFlag`), recording that a property change originated from an
-// `afterRender` callback (the classic `afterRender set` pattern where
-// `didInsertElement` queues a set that must re-render the DOM before the test
-// assertion). Consumed in `runAppend` (`internal-test-helpers/lib/run.ts`),
-// which reads-and-clears it in a single get-then-set pair: the read decides
-// whether to preserve `_gxtPendingSyncFromPropertyChangeFlag` for the subsequent
-// `syncNow()` call (TRUE = legitimate user state; FALSE = init artifact noise
-// that should not trigger a post-runAppend full sync). The intra-file writer
-// uses the module-local helper directly; the cross-package reader+clearer routes
-// through the bridge.
-let _gxtAfterRenderPropertyChangeFlag = false;
 function _gxtGetAfterRenderPropertyChange(): boolean {
-  return _gxtAfterRenderPropertyChangeFlag;
+  return _gxtFlags.afterRenderPropertyChange;
 }
 function _gxtSetAfterRenderPropertyChange(on: boolean): void {
-  _gxtAfterRenderPropertyChangeFlag = on;
+  _gxtFlags.afterRenderPropertyChange = on;
 }
 
-// "In after-render" gate flag, paired with a 2-method get/set bridge surface
-// (`getInAfterRender` + `setInAfterRender`). Set TRUE for the duration of a
-// `schedule('afterRender', cb)` wrapped callback body (the
-// `gxtAfterRenderWrapper` in `@ember/runloop/index.ts` does the classic
-// save/set-TRUE/finally-restore around the user callback). Read by
-// `_gxtTriggerReRender` to gate the `_gxtSetAfterRenderPropertyChange(true)`
-// setter — i.e. to decide whether a property change originated inside an
-// `afterRender` callback (a legitimate `afterRender set` that must trigger
-// gxtSyncDom). Together with `_gxtAfterRenderPropertyChangeFlag` this forms the
-// afterRender-detection cluster: this gate marks when the wrapper body is
-// executing, that detector records whether a property change was observed while
-// the gate was open.
-//
-// The intra-file reader uses the module-local helper directly; the cross-package
-// writers route through the bridge.
-let _gxtInAfterRenderFlag = false;
 function _gxtGetInAfterRender(): boolean {
-  return _gxtInAfterRenderFlag;
+  return _gxtFlags.inAfterRender;
 }
 function _gxtSetInAfterRender(on: boolean): void {
-  _gxtInAfterRenderFlag = on;
+  _gxtFlags.inAfterRender = on;
 }
 
-// "Destroy-reattach in progress" flag, paired with a 2-method get/set bridge
-// surface (`getDestroyReattachInProgress` + `setDestroyReattachInProgress`). Set
-// TRUE for the duration of a destroy-phase reattach loop that temporarily
-// re-attaches disconnected component elements to `document.body` /
-// `#qunit-fixture` so that `willDestroyElement` / `willClearRender` hooks see
-// `document.body.contains(this.element) === true` during the destroy phase.
-// Cleared FALSE in a paired `finally` after the lifecycle hooks run and the
-// elements are detached again.
-//
-// The flag gates the `<ember-outlet>` custom element's `connectedCallback`: when
-// a destroy-phase reattach fires `connectedCallback` on an inner `<ember-outlet>`
-// (e.g. one nested inside a just-removed component wrapper), the callback MUST
-// skip rendering — without this gate it would read `__currentOutletState` (the
-// NEW route after the transition), render the new route's template, and corrupt
-// the parentView stack (the new route's components would get the removed
-// wrapper as `parentView` and disappear from `getRootViews`).
-//
-// Two intra-file writers use the module-local helper directly; two cross-file
-// writers in `manager.ts` and the cross-package reader in
-// `glimmer/lib/templates/outlet.ts` route through the bridge.
-let _gxtDestroyReattachInProgressFlag = false;
 function _gxtGetDestroyReattachInProgress(): boolean {
-  return _gxtDestroyReattachInProgressFlag;
+  return _gxtFlags.destroyReattachInProgress;
 }
 function _gxtSetDestroyReattachInProgress(on: boolean): void {
-  _gxtDestroyReattachInProgressFlag = on;
+  _gxtFlags.destroyReattachInProgress = on;
 }
 
 // Engine-instance cache, exposed via a single-method `getEngineInstances`
@@ -3917,39 +3695,12 @@ function _gxtWithRootContext<T>(ctx: GxtRootContextState | null | undefined, fn:
   }
 }
 
-// "Pending sync from property change" flag, paired with a 2-method get/set
-// bridge surface (`getPendingSyncFromPropertyChange` +
-// `setPendingSyncFromPropertyChange`). Set TRUE when `__gxtTriggerReRender`
-// observes a real property change (so `_gxtSyncDomNow` can distinguish a
-// property-driven sync from a cell-creation-during-initial-render sync) and
-// cleared at well-known boundaries: at the start of `_gxtSyncDomNow` (after
-// capturing into `_gxtHadPendingSyncFlag` and `_gxtSyncIsPropertyDrivenFlag`),
-// at the end of every `runTask` / `runAppend` (so the setInterval fallback does
-// not pick up stale sync state for the next test), in the cross-test teardown
-// phases, in `__gxtPostRenderHooks` save/restore around `didUpdate`/`didRender`
-// (to detect whether the hook itself produced property changes), and in
-// `wrapHandler`'s tail finally (so user-interaction handler property changes do
-// not survive past the handler).
-//
-// Intra-file writers/readers use the module-local helpers directly; the
-// cross-file (manager.ts) and cross-package (templates/root.ts outlet,
-// routing/router.ts transition) writers and the test-helper writers route
-// through the bridge.
-let _gxtPendingSyncFromPropertyChangeFlag = false;
 function _gxtGetPendingSyncFromPropertyChange(): boolean {
-  return _gxtPendingSyncFromPropertyChangeFlag;
+  return _gxtFlags.pendingSyncFromPropertyChange;
 }
 function _gxtSetPendingSyncFromPropertyChange(on: boolean): void {
-  _gxtPendingSyncFromPropertyChangeFlag = on;
+  _gxtFlags.pendingSyncFromPropertyChange = on;
 }
-
-// Suppression flag for the canonical `_gxtTriggerReRender` function.
-// `_gxtWithTriggerSuppressed` sets it while running `fn`, and
-// `_gxtTriggerReRender` short-circuits at its entry when the flag is `true`, so
-// the bridge `compilePipeline.triggerReRender(...)` consumers
-// (`metal/tracked.ts` + `glimmer-tracking.ts`) observe the same no-op
-// suppression. Only `_gxtWithTriggerSuppressed` writes it.
-let _gxtTriggerSuppressedFlag = false;
 
 // Bounded depth counter for the inner sibling-getter rescan inside
 // `_walkRenderContexts` (on render-context wrappers via `cellTarget`). That
@@ -3975,7 +3726,7 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
   // short-circuit. The bridge readers (`metal/tracked.ts`, `glimmer-tracking.ts`)
   // reach this via `compilePipeline.triggerReRender(...)`, so the flag-gate is
   // the only surface that preserves their suppression.
-  if (_gxtTriggerSuppressedFlag) return;
+  if (_gxtFlags.triggerSuppressed) return;
   // Detect whether the caller passed a value so SyncCore can skip the
   // `(obj as any)[keyName]` getter read on the value-passing paths.
   const hasValueArg = arguments.length >= 3;
@@ -4185,21 +3936,11 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
   }
 };
 
-// Save-restore suppression helper, exposed on the bridge as
-// `compilePipeline.withTriggerSuppressed`. Used by the two suppression sites
-// (`validator.ts` track() reentrancy guard and `manager.ts` first-render
-// suppression for new classic components). It saves/restores the module-local
-// `_gxtTriggerSuppressedFlag` (the single suppression surface for all readers,
-// both bridge and intra-file). Re-entrancy-safe (`wasSuppressed` preserves an
-// enclosing frame's flag value if any).
+// Exposed on the bridge as `compilePipeline.withTriggerSuppressed`, for
+// validator.ts's track() re-entrancy guard and manager.ts's first-render
+// suppression of new classic components.
 function _gxtWithTriggerSuppressed<T>(fn: () => T): T {
-  const wasSuppressed = _gxtTriggerSuppressedFlag;
-  _gxtTriggerSuppressedFlag = true;
-  try {
-    return fn();
-  } finally {
-    _gxtTriggerSuppressedFlag = wasSuppressed;
-  }
+  return _gxtWithFlag('triggerSuppressed', true, fn);
 }
 
 // Proto-walk + COMPONENT_MANAGERS lookup for the `hadNestedObjectChange`
@@ -7580,8 +7321,8 @@ function _gxtSyncDomNow(): void {
     }
     // Re-throw any deferred errors from the force-rerender or lifecycle phases
     // so they propagate to assert.throws() in tests. The read happens AFTER the
-    // outer try/finally above has already reset `_gxtSyncingFlag` and
-    // `_gxtSyncIsPropertyDrivenFlag`, so the throw escapes with a clean sync
+    // outer try/finally above has already reset `_gxtFlags.syncing` and
+    // `_gxtFlags.syncIsPropertyDriven`, so the throw escapes with a clean sync
     // state — the next `_gxtSyncDomNow` call will not short-circuit on the
     // re-entrancy guard. Clear before throwing so the slot starts the next sync
     // cycle empty.
@@ -8043,7 +7784,7 @@ const _emberBuiltinHelpers: Record<string, any> = {
               }
               // Trigger re-render. Call the module-local `_gxtTriggerReRender`
               // directly (it's in scope, so this avoids the bridge lookup).
-              // Suppression is honored by the `_gxtTriggerSuppressedFlag`
+              // Suppression is honored by the `_gxtFlags.triggerSuppressed`
               // short-circuit at the entry of `_gxtTriggerReRender`.
               const triggerReRender = _gxtTriggerReRender;
               if (triggerReRender) {
