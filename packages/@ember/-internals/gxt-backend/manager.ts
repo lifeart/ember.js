@@ -1797,27 +1797,14 @@ function createComponentInstance(
         // lets createCache / invokeHelper consumers — which captured the
         // classic tag via consumeTag in the getter below — detect that an
         // arg-derived property has changed even when nothing reads it
-        // explicitly after the parent mutates. The effect's first run
-        // primes `lastEffectValue`; later runs compare and dirty the tag.
-        let lastEffectValue: any = undefined;
-        let effectPrimed = false;
+        // explicitly after the parent mutates.
         try {
-          _gxtEffectWithOwner(instance, () => {
-            let v: any;
+          _installArgDirtyEffect(instance, instance, key, () => {
             try {
-              v = getter();
+              return getter();
             } catch {
-              v = undefined;
+              return undefined;
             }
-            if (effectPrimed && v !== lastEffectValue) {
-              try {
-                classicDirtyTagForGuarded(instance, key);
-              } catch {
-                /* noop */
-              }
-            }
-            lastEffectValue = v;
-            effectPrimed = true;
           });
         } catch {
           /* ignore if effect can't be installed */
@@ -2530,41 +2517,7 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
       if (newValue !== oldValue) {
         // Update the instance property (but not elementId - it's frozen)
         if (key !== 'elementId') {
-          // Set the dispatching flag so setters know this is an arg update from
-          // the parent, and run the write inside `withSuppressDirtyInRcSet` so
-          // dirtyTagFor doesn't schedule another sync for this internal write-back.
-          // The `__gxtDispatchingArgs` save/restore is nested inside the suppress
-          // frame so dispatching-arg consumers also see the suppression.
-          const withSuppress = getGxtRenderer()!.compilePipeline.withSuppressDirtyInRcSet!;
-          const body = () => {
-            try {
-              instance.__gxtDispatchingArgs = true;
-              // Update the GXT cell before the assignment below so that any
-              // synchronous reader (child template formula reading `{{this.foo}}`)
-              // sees the new value. The assignment remains the canonical setter path
-              // and may trigger notifyPropertyChange, but the cascade body it
-              // schedules is deferred, so the cell must be hot by this point.
-              try {
-                // skipDefine=true: don't install a cell-backed property
-                // descriptor; the cascade body (when it runs) creates the
-                // cell on demand. Using false here would replace the
-                // tracked-property descriptor and break two-way bindings.
-                const _cell = _gxtCellFor(instance, key, /* skipDefine */ true);
-                _cell?.update?.(newValue);
-              } catch (cellErr) {
-                if (DEBUG) {
-                  // eslint-disable-next-line no-console
-                  console.warn('[gxt] arg-pass cell.update failed', { key, cellErr });
-                }
-                // Continue to the assignment; the tracked setter path remains
-                // the canonical fallback.
-              }
-              instance[key] = newValue;
-            } finally {
-              instance.__gxtDispatchingArgs = false;
-            }
-          };
-          withSuppress(body);
+          _dispatchArgWrite(instance, key, newValue, 'arg-pass cell.update failed');
         }
         lastArgValues[key] = newValue;
         // Notify Ember's computed property system that this property changed.
@@ -2587,32 +2540,7 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
     for (const key of Object.keys(lastArgValues)) {
       if (key === 'elementId' || key === 'id') continue;
       if (!newKeySet.has(key) && lastArgValues[key] !== undefined) {
-        // `withSuppressDirtyInRcSet(fn)` handles the suppress-flag
-        // save/restore pair; the inner try/finally retains the
-        // `__gxtDispatchingArgs` save/restore pair.
-        const withSuppress = getGxtRenderer()!.compilePipeline.withSuppressDirtyInRcSet!;
-        const body = () => {
-          try {
-            instance.__gxtDispatchingArgs = true;
-            // Update the GXT cell before the assignment so the new (undefined)
-            // value is visible to any synchronous reader. See the arg-pass site
-            // above.
-            try {
-              // skipDefine=true: see the arg-pass site above.
-              const _cell = _gxtCellFor(instance, key, /* skipDefine */ true);
-              _cell?.update?.(undefined);
-            } catch (cellErr) {
-              if (DEBUG) {
-                // eslint-disable-next-line no-console
-                console.warn('[gxt] arg-reset cell.update failed', { key, cellErr });
-              }
-            }
-            instance[key] = undefined;
-          } finally {
-            instance.__gxtDispatchingArgs = false;
-          }
-        };
-        withSuppress(body);
+        _dispatchArgWrite(instance, key, undefined, 'arg-reset cell.update failed');
         // If the property has a cell-backed getter from createRenderContext,
         // the setter may have set _useLocal=false but the getter still calls
         // the old arg getter (which returns the stale value). Install a new
@@ -3713,6 +3641,112 @@ function _wrapInstanceTriggerForSyncAllMark(inst: any): void {
   inst.__gxtTriggerWrapped = true;
 }
 
+// Install an effect, owned by `owner`, that dirties `target`'s classic tag
+// for `key` whenever `read()` returns something other than on its previous run
+// (the first run only records the value). Classic consumers (createCache,
+// invokeHelper) consume that tag when they read an arg-derived property, and
+// would otherwise not see a parent's change unless something re-read it.
+function _installArgDirtyEffect(
+  owner: object,
+  target: object,
+  key: string,
+  read: () => unknown
+): void {
+  let lastValue: unknown = undefined;
+  let primed = false;
+  _gxtEffectWithOwner(owner, () => {
+    const v = read();
+    if (primed && v !== lastValue) {
+      try {
+        classicDirtyTagForGuarded(target, key);
+      } catch {
+        /* noop */
+      }
+    }
+    lastValue = v;
+    primed = true;
+  });
+}
+
+// The value an arg's render-context cell stands for: the getter's value when
+// there is a getter, else the cell's value. Both reads run, so an effect calling
+// this depends on the cell as well; a throwing read keeps the previous one.
+function _readArgCell(cell: any, getter: (() => unknown) | undefined): unknown {
+  let v: unknown;
+  try {
+    v = cell.value;
+  } catch {
+    /* noop */
+  }
+  try {
+    v = getter ? getter() : v;
+  } catch {
+    /* noop */
+  }
+  return v;
+}
+
+// Write an arg value onto a component instance as manager.ts's own write-back:
+// under `withSuppressDirtyInRcSet` (validator.ts dirties the tag without
+// scheduling another sync) and with `__gxtDispatchingArgs` set (setters treat
+// the write as a parent arg update). The instance's cell is updated first, so
+// a synchronous reader (a child template formula) already sees the value; the
+// assignment stays the canonical setter path. `skipDefine` keeps the cell from
+// replacing a tracked descriptor. `warning` is the DEBUG warning when the cell
+// update throws.
+// `afterWrite` runs after the assignment, inside the dispatching frame.
+function _dispatchArgWrite(
+  instance: any,
+  key: string,
+  value: unknown,
+  warning: string,
+  afterWrite?: () => void
+): void {
+  getGxtRenderer()!.compilePipeline.withSuppressDirtyInRcSet!(() => {
+    try {
+      instance.__gxtDispatchingArgs = true;
+      try {
+        const _cell = _gxtCellFor(instance, key, /* skipDefine */ true);
+        _cell?.update?.(value);
+      } catch (cellErr) {
+        if (DEBUG) {
+          // eslint-disable-next-line no-console
+          console.warn(`[gxt] ${warning}`, { key, cellErr });
+        }
+      }
+      instance[key] = value;
+      afterWrite?.();
+    } finally {
+      instance.__gxtDispatchingArgs = false;
+    }
+  });
+}
+
+// CP-with-setter side-effect bridge: when the arg is backed by a classic
+// `@computed` with its own setter (`set width(w){ this.set('height', w/2) }`),
+// the setter's side effect must run on every arg change. The arg write-back
+// reaches the CP setter only while the instance's own descriptor is one of the
+// shadow setters that forward to it; across re-renders that descriptor can be
+// replaced by a plain cell descriptor (set -> cell.update, no forward), and the
+// dependent property would go stale. So the setter is run explicitly;
+// `__gxtInvokingCpSetter` makes it a no-op when the descriptor did forward.
+function _runCpSetterSideEffect(instance: any, key: string, value: unknown): void {
+  if (instance.__gxtInvokingCpSetter) return;
+  try {
+    const _cp = _findCpWithSetterFor(instance, key);
+    if (_cp) {
+      instance.__gxtInvokingCpSetter = true;
+      try {
+        _cp.set(instance, key, value);
+      } finally {
+        instance.__gxtInvokingCpSetter = false;
+      }
+    }
+  } catch {
+    /* CP-setter bridge is best-effort */
+  }
+}
+
 // The meta descriptor (computed property, `@tracked`, ...) for `key`:
 // `peekDescriptors` on `obj`'s meta, then on each prototype's meta in turn.
 // The walk differs from `peekDescriptors` alone in one case: it also finds a
@@ -3894,73 +3928,18 @@ function _gxtSyncAllWrappersBody(): void {
               key !== 'classNames' &&
               !cellEntry.skipInstanceAssign
             ) {
-              // `withSuppressDirtyInRcSet(fn)` handles the suppress-flag
-              // save/restore pair; the inner try/catch/finally retains the
-              // `__gxtDispatchingArgs` save/restore pair AND the
-              // catch-and-ignore semantics for the assignment (some setters
-              // can throw).
-              const withSuppress = getGxtRenderer()!.compilePipeline.withSuppressDirtyInRcSet!;
-              const body = () => {
-                try {
-                  entry.instance.__gxtDispatchingArgs = true;
-                  // Refresh the per-instance cellFor cell before the assignment so
-                  // child template formulas reading `{{this.<key>}}` see the new value
-                  // synchronously. `cellEntry.cell` above is the arg-tracking cell on
-                  // the owning syncAll context; the per-instance cell looked up by
-                  // `cellFor(instance, key)` is a distinct slot (one per
-                  // (instance, key) pair) and must be updated separately.
-                  try {
-                    // skipDefine=true: don't replace the tracked descriptor.
-                    // See the arg-pass site above for rationale.
-                    const _cell = _gxtCellFor(entry.instance, key, /* skipDefine */ true);
-                    _cell?.update?.(newValue);
-                  } catch (cellErr) {
-                    if (DEBUG) {
-                      // eslint-disable-next-line no-console
-                      console.warn('[gxt] arg-pass cell.update failed (initOverridden)', {
-                        key,
-                        cellErr,
-                      });
-                    }
-                  }
-                  entry.instance[key] = newValue;
-                  // CP-with-setter side-effect bridge: when the arg is backed by
-                  // a classic `@computed` with an independent setter
-                  // (`set width(w){ this.set('height', w/2) }`), the setter's
-                  // SIDE EFFECT (writing `height`) must run on every arg change.
-                  // The `instance[key] = newValue` assignment above invokes the
-                  // CP setter ONLY while the live own-descriptor is one of our
-                  // shadow/rc setters (which forward to the CP setter); across
-                  // re-renders the descriptor can be replaced by the plain GXT
-                  // cell descriptor (set → cell.update, no CP forward), so a
-                  // later arg change updates the cell yet never re-runs the
-                  // setter — leaving the dependent prop (`height`) stale and the
-                  // dependent CP/text bindings wrong. Invoke the CP setter
-                  // explicitly here, re-entrancy-guarded by `__gxtInvokingCpSetter`
-                  // (so when the descriptor DID forward, this is a no-op the
-                  // second time).
-                  if (!(entry.instance as any).__gxtInvokingCpSetter) {
-                    try {
-                      const _cp = _findCpWithSetterFor(entry.instance, key);
-                      if (_cp) {
-                        (entry.instance as any).__gxtInvokingCpSetter = true;
-                        try {
-                          _cp.set(entry.instance, key, newValue);
-                        } finally {
-                          (entry.instance as any).__gxtInvokingCpSetter = false;
-                        }
-                      }
-                    } catch {
-                      /* CP-setter bridge is best-effort */
-                    }
-                  }
-                } catch {
-                  /* ignore */
-                } finally {
-                  entry.instance.__gxtDispatchingArgs = false;
-                }
-              };
-              withSuppress(body);
+              // Assignment errors are ignored here (some setters throw).
+              try {
+                _dispatchArgWrite(
+                  entry.instance,
+                  key,
+                  newValue,
+                  'arg-pass cell.update failed (initOverridden)',
+                  () => _runCpSetterSideEffect(entry.instance, key, newValue)
+                );
+              } catch {
+                /* ignore */
+              }
             }
             hasChanges = true;
           }
@@ -4003,57 +3982,18 @@ function _gxtSyncAllWrappersBody(): void {
               key !== 'classNames' &&
               !cellEntry.skipInstanceAssign
             ) {
-              // Set the dispatching flag so the setter knows this is an arg update
-              // (not an explicit set from component code) and should clear useLocal,
-              // and run the write inside `withSuppressDirtyInRcSet` so dirtyTagFor
-              // doesn't schedule another sync for this write-back. The inner
-              // try/catch/finally keeps the `__gxtDispatchingArgs` save/restore and
-              // ignores assignment errors (some setters can throw).
-              const withSuppress = getGxtRenderer()!.compilePipeline.withSuppressDirtyInRcSet!;
-              const body = () => {
-                try {
-                  entry.instance.__gxtDispatchingArgs = true;
-                  // Refresh the per-instance cellFor cell before the assignment. This is
-                  // the curly two-way-binding upstream-flow path; the cell must be hot
-                  // before the (deferred) cascade body runs. See the arg-pass site above.
-                  try {
-                    // skipDefine=true: don't replace the tracked descriptor.
-                    // See the arg-pass site above for rationale.
-                    const _cell = _gxtCellFor(entry.instance, key, /* skipDefine */ true);
-                    _cell?.update?.(newValue);
-                  } catch (cellErr) {
-                    if (DEBUG) {
-                      // eslint-disable-next-line no-console
-                      console.warn('[gxt] arg-pass cell.update failed (sync)', {
-                        key,
-                        cellErr,
-                      });
-                    }
-                  }
-                  entry.instance[key] = newValue;
-                  // CP-with-setter side-effect bridge (see the identical block above).
-                  if (!(entry.instance as any).__gxtInvokingCpSetter) {
-                    try {
-                      const _cp = _findCpWithSetterFor(entry.instance, key);
-                      if (_cp) {
-                        (entry.instance as any).__gxtInvokingCpSetter = true;
-                        try {
-                          _cp.set(entry.instance, key, newValue);
-                        } finally {
-                          (entry.instance as any).__gxtInvokingCpSetter = false;
-                        }
-                      }
-                    } catch {
-                      /* CP-setter bridge is best-effort */
-                    }
-                  }
-                } catch {
-                  /* ignore */
-                } finally {
-                  entry.instance.__gxtDispatchingArgs = false;
-                }
-              };
-              withSuppress(body);
+              // Assignment errors are ignored here (some setters throw).
+              try {
+                _dispatchArgWrite(
+                  entry.instance,
+                  key,
+                  newValue,
+                  'arg-pass cell.update failed (sync)',
+                  () => _runCpSetterSideEffect(entry.instance, key, newValue)
+                );
+              } catch {
+                /* ignore */
+              }
               // When there are active $_dc dynamic component listeners,
               // call notifyPropertyChange to dirty Ember tags for @computed
               // properties that depend on this arg. Without this, computed
@@ -6649,30 +6589,9 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
               // Install a gxt effect that dirties the classic tag whenever
               // the upstream arg cell invalidates — handles parent mutations
               // that don't route through the instance's setter.
-              let lastEffectValue4: any = undefined;
-              let effectPrimed4 = false;
-              _gxtEffectWithOwner(instance || renderContext, () => {
-                let v: any;
-                try {
-                  v = cell.value;
-                } catch {
-                  /* noop */
-                }
-                try {
-                  v = getter ? getter() : v;
-                } catch {
-                  /* noop */
-                }
-                if (effectPrimed4 && v !== lastEffectValue4) {
-                  try {
-                    classicDirtyTagForGuarded(renderContext, key);
-                  } catch {
-                    /* noop */
-                  }
-                }
-                lastEffectValue4 = v;
-                effectPrimed4 = true;
-              });
+              _installArgDirtyEffect(instance || renderContext, renderContext, key, () =>
+                _readArgCell(cell, getter)
+              );
             } catch {
               /* ignore */
             }
@@ -6765,30 +6684,9 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
             // mutation and the downstream cache read — the effect re-runs
             // on cell change and proactively dirties the tag.
             try {
-              let lastEffectValue3: any = undefined;
-              let effectPrimed3 = false;
-              _gxtEffectWithOwner(instance || renderContext, () => {
-                let v: any;
-                try {
-                  v = cell.value;
-                } catch {
-                  /* noop */
-                }
-                try {
-                  v = getter ? getter() : v;
-                } catch {
-                  /* noop */
-                }
-                if (effectPrimed3 && v !== lastEffectValue3) {
-                  try {
-                    classicDirtyTagForGuarded(renderContext, key);
-                  } catch {
-                    /* noop */
-                  }
-                }
-                lastEffectValue3 = v;
-                effectPrimed3 = true;
-              });
+              _installArgDirtyEffect(instance || renderContext, renderContext, key, () =>
+                _readArgCell(cell, getter)
+              );
             } catch {
               /* ignore */
             }
