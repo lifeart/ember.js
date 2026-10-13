@@ -20,6 +20,7 @@ import {
   doubleColonToSlash,
   constructStyleDeprecationMessage,
   isAssertionLike as _isAssertionLike,
+  protectGlobal,
 } from './utils';
 // Expose the Ember assert function on globalThis so the validator compat can use it
 // for backtracking detection. The assert function is stub-able via setDebugFunction
@@ -1114,20 +1115,7 @@ function _patchEachSyncForRowKeying(): boolean {
   };
   wrappedEachSync.__emberRowKeyPatched = true;
   wrappedEachSync.__emberPatched = true; // preserve compile.ts's marker
-  try {
-    Object.defineProperty(g, '$_eachSync', {
-      get() {
-        return wrappedEachSync;
-      },
-      set(_v: any) {
-        /* keep patched */
-      },
-      configurable: true,
-      enumerable: true,
-    });
-  } catch {
-    g.$_eachSync = wrappedEachSync;
-  }
+  protectGlobal('$_eachSync', wrappedEachSync);
   return true;
 }
 _patchEachSyncForRowKeying();

@@ -15,6 +15,7 @@ import {
   isAllDigits,
   constructStyleDeprecationMessage as _constructStyleDeprecationMessage,
   isAssertionLike as _isAssertionLike,
+  protectGlobal,
 } from './utils';
 import {
   initChildViews as _emberInitChildViews,
@@ -845,38 +846,6 @@ const BUILTIN_HELPER_NAMES: readonly string[] = EMBER_KEYWORD_HELPER_NAMES.filte
 );
 
 /**
- * Install `value` at `globalThis[name]` behind a getter that ignores writes, so
- * a later `setupGlobalScope()` pass (GXT iterates its symbol table and writes
- * each symbol to globalThis) cannot clobber the Ember-patched version. The
- * descriptor is `configurable: true, enumerable: true`; on a defineProperty
- * failure it falls back to a direct assignment (installs `value` either way).
- *
- * Hoisted from four byte-identical inline traps ($_if, $_eachSync,
- * $_maybeModifier, $_helperHelper). The other protect traps in this file
- * intentionally differ and are NOT routed through this helper: `$_inElement`
- * uses `configurable: false`, `$_c` is deliberately non-enumerable (its
- * setupGlobalScope comment depends on it), and `$__log`/`$__if` use
- * side-effecting setters that re-restore the Ember version on write.
- */
-function protectGlobal(name: string, value: unknown): void {
-  const _g = globalThis as any;
-  try {
-    Object.defineProperty(_g, name, {
-      get() {
-        return value;
-      },
-      set(_v: any) {
-        /* protect from setupGlobalScope overwrite */
-      },
-      configurable: true,
-      enumerable: true,
-    });
-  } catch {
-    _g[name] = value;
-  }
-}
-
-/**
  * Build the Ember named-args object from a GXT `$_args`-shaped `args` value:
  * copy every own descriptor whose key is not `args`/`$`-prefixed (see
  * `copyOwnNamedArgs` for `unwrap`), merge the nested `args.args` bag as it is,
@@ -1227,8 +1196,8 @@ installEmberWrappers();
     if (args.length !== 2) _throwArgCount('eq', 'exactly two arguments', args.length);
     return _unwrap(args[0]) === _unwrap(args[1]);
   };
-  // Install non-writable, non-configurable so a subsequent setupGlobalScope()
-  // call (e.g. in a test reset) cannot clobber the Ember-spec versions.
+  // Installed as plain writable data properties (not protected like the
+  // helpers that use `protectGlobal`).
   for (const [name, fn] of [
     ['$__and', $__and_ember],
     ['$__or', $__or_ember],
@@ -2424,22 +2393,7 @@ function _renderCurriedNode(
       return '';
     };
 
-    // Protect from setupGlobalScope overwrite
-    try {
-      let _currentLog = g.$__log;
-      Object.defineProperty(g, '$__log', {
-        get() {
-          return _currentLog;
-        },
-        set(v: any) {
-          _currentLog = g.$__log;
-        },
-        configurable: true,
-        enumerable: true,
-      });
-    } catch {
-      /* ignore */
-    }
+    protectGlobal('$__log', g.$__log);
   }
 }
 
@@ -3020,25 +2974,7 @@ function _gxtWalkHashGetterPaths(getter: any, ctx: any): void {
   };
   g.$__if = _ember$__if;
 
-  // Protect the override: GXT's setupGlobalScope iterates its symbol table
-  // and assigns every helper to globalThis, which would replace our $__if.
-  // Intercept writes so we can re-apply the Ember version.
-  try {
-    let _currentIf = _ember$__if;
-    Object.defineProperty(g, '$__if', {
-      get() {
-        return _currentIf;
-      },
-      set(v: any) {
-        // Allow GXT to "set" it, but immediately restore Ember version
-        _currentIf = _ember$__if;
-      },
-      configurable: true,
-      enumerable: true,
-    });
-  } catch {
-    /* ignore if defineProperty fails */
-  }
+  protectGlobal('$__if', _ember$__if);
 }
 
 // GXT external schedule hook: GXT's cell.update() calls scheduleRevalidate()

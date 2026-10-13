@@ -121,3 +121,34 @@ export function isAssertionLike(e: unknown): boolean {
   if (e !== null && e !== undefined && typeof e === 'object') return true;
   return false;
 }
+
+/**
+ * Install `value` at `globalThis[name]` behind a getter that ignores writes, so
+ * a later `setupGlobalScope()` pass (GXT iterates its symbol table and writes
+ * each symbol to globalThis) cannot clobber the Ember-patched version. The
+ * descriptor is `configurable: true, enumerable: true`; on a defineProperty
+ * failure it falls back to a direct assignment (installs `value` either way).
+ *
+ * Used by compile.ts for `$_if`, `$_eachSync`, `$_maybeModifier`,
+ * `$_helperHelper`, `$__log` and `$__if`, and by manager.ts for its row-keying
+ * `$_eachSync` wrapper. compile.ts's `$_inElement` and `$_c` traps differ and
+ * stay inline: `$_inElement` is non-configurable and `$_c` is defined without
+ * `enumerable`; neither falls back to an assignment.
+ */
+export function protectGlobal(name: string, value: unknown): void {
+  const _g = globalThis as any;
+  try {
+    Object.defineProperty(_g, name, {
+      get() {
+        return value;
+      },
+      set(_v: any) {
+        /* protect from setupGlobalScope overwrite */
+      },
+      configurable: true,
+      enumerable: true,
+    });
+  } catch {
+    _g[name] = value;
+  }
+}
