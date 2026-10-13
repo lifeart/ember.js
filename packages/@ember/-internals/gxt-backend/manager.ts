@@ -1506,36 +1506,10 @@ function createComponentInstance(
     let _skipPropSeed = false;
     if (getter) {
       try {
-        let cproto: any = (factory as any)?.class?.prototype || (factory as any)?.prototype;
-        while (cproto && cproto !== Object.prototype) {
-          const pdesc = Object.getOwnPropertyDescriptor(cproto, key);
-          if (pdesc) {
-            if (
-              pdesc.get &&
-              !pdesc.set &&
-              !(pdesc.get as any).__isTrackedGetter &&
-              !(pdesc.set as any)?.__isTrackedSetter
-            ) {
-              let _isClassicCp = false;
-              try {
-                let p2: any = (factory as any)?.class?.prototype || (factory as any)?.prototype;
-                while (p2 && p2 !== Object.prototype) {
-                  const pm: any = peekMeta(p2);
-                  if (pm?.peekDescriptors?.(key)) {
-                    _isClassicCp = true;
-                    break;
-                  }
-                  p2 = Object.getPrototypeOf(p2);
-                }
-              } catch {
-                /* ignore */
-              }
-              _skipPropSeed = !_isClassicCp;
-            }
-            break;
-          }
-          cproto = Object.getPrototypeOf(cproto);
-        }
+        _skipPropSeed = _isPlainNativeGetterCollision(
+          (factory as any)?.class?.prototype || (factory as any)?.prototype,
+          key
+        );
       } catch {
         /* ignore — fall through to seeding props */
       }
@@ -1783,50 +1757,13 @@ function createComponentInstance(
   // tag system (createCache / invokeHelper) and the @computed-with-setter
   // pass-through. Glimmer components read `this.args.<arg>` (never `this.<arg>`),
   // and in a native build createComponentInstance only ever builds Glimmer
-  // instances, so this whole block — the `_findCpWithSetter` helper and the
+  // instances, so this whole block — the `_findCpWithSetterFor` call and the
   // reactive-getter loop — is gated and DCE-stripped when
   // __GXT_CLASSIC_COMPONENTS__ === false. NOTE: the shared instance metadata
   // assigned above (__argGetters / __gxtReadonlyKeys / __gxtRawArgGetters …) is
   // deliberately OUTSIDE this gate — createRenderContext consumes it to build
   // the args proxy / arg cells on the Glimmer path.
   if (__GXT_CLASSIC_COMPONENTS__) {
-    // Helper: detect a classic Ember @computed descriptor (with an independent
-    // setter) on the prototype chain for this instance+key. When present, the
-    // shadow descriptor we install on the instance must still invoke the CP's
-    // `_setter` so its side effects (e.g. `this.set('height', w/2)` inside a
-    // `set width(w)` body) run on arg-dispatch writes. Without this, installing
-    // an own-property reactive getter/setter shadows the CP and breaks
-    // @computed properties that declare both `get` and `set` — see
-    // GH#19028-style "mutable bindings of CP with setter" behavior.
-    const _findCpWithSetter = (inst: any, k: string): any => {
-      try {
-        const m = peekMeta(inst) as any;
-        let desc: any = null;
-        try {
-          desc = m?.peekDescriptors?.(k);
-        } catch {
-          /* ignore */
-        }
-        if (!desc) {
-          let proto = Object.getPrototypeOf(inst);
-          while (proto && proto !== Object.prototype && !desc) {
-            try {
-              const pmeta = peekMeta(proto) as any;
-              if (pmeta) desc = pmeta.peekDescriptors?.(k);
-            } catch {
-              /* ignore */
-            }
-            proto = Object.getPrototypeOf(proto);
-          }
-        }
-        // Ensure the CP has an independent setter (not a plain getter-only CP)
-        if (desc && desc._setter && desc._setter !== desc._getter) return desc;
-      } catch {
-        /* ignore */
-      }
-      return null;
-    };
-
     // Install reactive getters for args that have closures.
     // This ensures instance.foo always returns the current arg value,
     // even when GXT doesn't re-invoke the component function on re-render.
@@ -1843,39 +1780,10 @@ function createComponentInstance(
         // equivalent: a getter that just returns the arg yields argValue, so
         // `useLocal` resolves identically). Scoped to plain-native getters only
         // (not @tracked / @computed / getters with a setter).
-        let _plainNativeCollision = false;
-        {
-          let proto = Object.getPrototypeOf(instance);
-          while (proto && proto !== Object.prototype) {
-            const pdesc = Object.getOwnPropertyDescriptor(proto, key);
-            if (pdesc) {
-              if (
-                pdesc.get &&
-                !pdesc.set &&
-                !(pdesc.get as any).__isTrackedGetter &&
-                !(pdesc.set as any)?.__isTrackedSetter
-              ) {
-                let _isClassicCp = false;
-                try {
-                  let p2: any = Object.getPrototypeOf(instance);
-                  while (p2 && p2 !== Object.prototype) {
-                    const pm: any = peekMeta(p2);
-                    if (pm?.peekDescriptors?.(key)) {
-                      _isClassicCp = true;
-                      break;
-                    }
-                    p2 = Object.getPrototypeOf(p2);
-                  }
-                } catch {
-                  /* ignore */
-                }
-                _plainNativeCollision = !_isClassicCp;
-              }
-              break;
-            }
-            proto = Object.getPrototypeOf(proto);
-          }
-        }
+        const _plainNativeCollision = _isPlainNativeGetterCollision(
+          Object.getPrototypeOf(instance),
+          key
+        );
         const argValue = getter();
         let localValue = _plainNativeCollision ? argValue : instance[key]; // current value (from factory.create or init)
         // If instance value differs from arg value, the component overrode it in init()
@@ -1883,7 +1791,7 @@ function createComponentInstance(
         // Detect @computed CP with a setter on the prototype chain so the
         // shadow setter below can still invoke the CP's `_setter` body for
         // its side effects (e.g. {mut, set}-triggered writes into other deps).
-        const cpWithSetter = _findCpWithSetter(instance, key);
+        const cpWithSetter = _findCpWithSetterFor(instance, key);
         // Install a gxt effect that dirties the classic validator tag for
         // (instance, key) whenever the upstream arg cell invalidates. This
         // lets createCache / invokeHelper consumers — which captured the
@@ -2099,38 +2007,16 @@ function createComponentInstance(
       // passed in as `value=this.string`.
       const cpDepToArgKey: Record<string, string[]> = {};
       try {
-        const metaObj = peekMeta(instance) as any;
-        if (metaObj) {
-          for (const argKey of argKeySet) {
-            if (argKey === 'id' || argKey === 'elementId') continue;
-            // Walk the meta chain to find the descriptor for this key.
-            let desc: any = null;
-            try {
-              desc = metaObj.peekDescriptors?.(argKey);
-            } catch {
-              /* ignore */
-            }
-            if (!desc) {
-              // Fall back to walking prototype's meta
-              let proto = Object.getPrototypeOf(instance);
-              while (proto && proto !== Object.prototype && !desc) {
-                try {
-                  const pmeta = peekMeta(proto) as any;
-                  if (pmeta) desc = pmeta.peekDescriptors?.(argKey);
-                } catch {
-                  /* ignore */
-                }
-                proto = Object.getPrototypeOf(proto);
-              }
-            }
-            const deps: string[] | undefined = desc?._dependentKeys;
-            if (Array.isArray(deps) && deps.length > 0) {
-              for (const dep of deps) {
-                // Only handle simple local keys (not chained paths)
-                if (dep.indexOf('.') !== -1) continue;
-                if (!cpDepToArgKey[dep]) cpDepToArgKey[dep] = [];
-                cpDepToArgKey[dep].push(argKey);
-              }
+        for (const argKey of argKeySet) {
+          if (argKey === 'id' || argKey === 'elementId') continue;
+          const desc = _findMetaDescriptor(instance, argKey);
+          const deps: string[] | undefined = desc?._dependentKeys;
+          if (Array.isArray(deps) && deps.length > 0) {
+            for (const dep of deps) {
+              // Only handle simple local keys (not chained paths)
+              if (dep.indexOf('.') !== -1) continue;
+              if (!cpDepToArgKey[dep]) cpDepToArgKey[dep] = [];
+              cpDepToArgKey[dep].push(argKey);
             }
           }
         }
@@ -2143,24 +2029,7 @@ function createComponentInstance(
       try {
         for (const argKey of argKeySet) {
           if (argKey === 'id' || argKey === 'elementId') continue;
-          let desc: any = null;
-          try {
-            desc = (peekMeta(instance) as any)?.peekDescriptors?.(argKey);
-          } catch {
-            /* ignore */
-          }
-          if (!desc) {
-            let proto = Object.getPrototypeOf(instance);
-            while (proto && proto !== Object.prototype && !desc) {
-              try {
-                const pmeta = peekMeta(proto) as any;
-                if (pmeta) desc = pmeta.peekDescriptors?.(argKey);
-              } catch {
-                /* ignore */
-              }
-              proto = Object.getPrototypeOf(proto);
-            }
-          }
+          const desc = _findMetaDescriptor(instance, argKey);
           if (desc && typeof desc.get === 'function') {
             argKeyToCpDesc[argKey] = desc;
           }
@@ -2596,35 +2465,10 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
             const getter = newGetter;
             let useLocal = false;
             // Detect classic @computed CP with a setter on the prototype chain.
-            // See createComponentInstance (_findCpWithSetter) for rationale —
+            // See `_findCpWithSetterFor` for rationale —
             // without invoking the CP's `_setter`, the shadow descriptor below
             // swallows arg-dispatch writes and breaks CP-with-setter semantics.
-            let cpWithSetter_u: any = null;
-            try {
-              const m_u = peekMeta(instance) as any;
-              let desc_u: any = null;
-              try {
-                desc_u = m_u?.peekDescriptors?.(key);
-              } catch {
-                /* ignore */
-              }
-              if (!desc_u) {
-                let proto_u = Object.getPrototypeOf(instance);
-                while (proto_u && proto_u !== Object.prototype && !desc_u) {
-                  try {
-                    const pmeta_u = peekMeta(proto_u) as any;
-                    if (pmeta_u) desc_u = pmeta_u.peekDescriptors?.(key);
-                  } catch {
-                    /* ignore */
-                  }
-                  proto_u = Object.getPrototypeOf(proto_u);
-                }
-              }
-              if (desc_u && desc_u._setter && desc_u._setter !== desc_u._getter)
-                cpWithSetter_u = desc_u;
-            } catch {
-              /* ignore */
-            }
+            const cpWithSetter_u = _findCpWithSetterFor(instance, key);
             Object.defineProperty(instance, key, {
               get() {
                 // Route through classic @glimmer/validator tag system so
@@ -3869,37 +3713,86 @@ function _wrapInstanceTriggerForSyncAllMark(inst: any): void {
   inst.__gxtTriggerWrapped = true;
 }
 
-// Module-level CP-with-independent-setter finder (mirrors the closure
-// `_findCpWithSetter` inside createComponentInstance). Used by the CP-setter
-// side-effect bridge in `_gxtSyncAllWrappersBody` so an arg change to a
-// `@computed`-with-setter prop re-runs the setter's side effect regardless of
-// which descriptor currently sits on the instance.
+// The meta descriptor (computed property, `@tracked`, ...) for `key`:
+// `peekDescriptors` on `obj`'s meta, then on each prototype's meta in turn.
+// The walk differs from `peekDescriptors` alone in one case: it also finds a
+// parent class's descriptor that a subclass removed (meta's `UNDEFINED` marker,
+// e.g. a computed property overridden by a plain value in `extend()`).
+function _findMetaDescriptor(obj: object, key: string): any {
+  let desc = (peekMeta(obj) as any)?.peekDescriptors?.(key);
+  let proto = desc ? null : Object.getPrototypeOf(obj);
+  while (!desc && proto && proto !== Object.prototype) {
+    const pmeta = peekMeta(proto) as any;
+    if (pmeta) desc = pmeta.peekDescriptors?.(key);
+    proto = Object.getPrototypeOf(proto);
+  }
+  return desc;
+}
+
+// The classic `@computed` descriptor for `k` when it has its own setter (not
+// a getter-only CP), else `null`. Arg-dispatch writes must still run such a
+// setter for its side effects (e.g. `this.set('height', w/2)` in a
+// `set width(w)` body), though the instance's own reactive descriptor shadows
+// the CP (GH#19028-style mutable bindings of a CP with a setter).
 function _findCpWithSetterFor(inst: any, k: string): any {
   try {
-    const m = peekMeta(inst) as any;
-    let desc: any = null;
-    try {
-      desc = m?.peekDescriptors?.(k);
-    } catch {
-      /* ignore */
-    }
-    if (!desc) {
-      let proto = Object.getPrototypeOf(inst);
-      while (proto && proto !== Object.prototype && !desc) {
-        try {
-          const pmeta = peekMeta(proto) as any;
-          if (pmeta) desc = pmeta.peekDescriptors?.(k);
-        } catch {
-          /* ignore */
-        }
-        proto = Object.getPrototypeOf(proto);
-      }
-    }
+    const desc = _findMetaDescriptor(inst, k);
     if (desc && desc._setter && desc._setter !== desc._getter) return desc;
   } catch {
     /* ignore */
   }
   return null;
+}
+
+// Whether `key` on `inst` is a `@tracked` property: a TrackedDescriptor in
+// meta (metal's `@tracked`), or a getter/setter marked by glimmer-tracking.ts
+// on the first prototype that has an own descriptor for it.
+function _isTrackedKey(inst: any, k: string): boolean {
+  if (!inst) return false;
+  try {
+    if (_findMetaDescriptor(inst, k) instanceof TrackedDescriptor) return true;
+  } catch {
+    /* ignore */
+  }
+  try {
+    let p = Object.getPrototypeOf(inst);
+    while (p && p !== Object.prototype) {
+      const desc = Object.getOwnPropertyDescriptor(p, k);
+      if (desc) {
+        if ((desc.get as any)?.__isTrackedGetter || (desc.set as any)?.__isTrackedSetter)
+          return true;
+        return false;
+      }
+      p = Object.getPrototypeOf(p);
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+// Whether the first own descriptor for `key` on the prototype chain from
+// `start` is a plain native get-only getter: no setter, not a `@tracked`
+// accessor, and not a classic computed property (no meta descriptor from
+// `start`). Writing an arg value through such a key is impossible, and reading
+// it runs the user's getter.
+function _isPlainNativeGetterCollision(start: any, key: string): boolean {
+  let proto = start;
+  while (proto && proto !== Object.prototype) {
+    const pdesc = Object.getOwnPropertyDescriptor(proto, key);
+    if (pdesc) {
+      if (!pdesc.get || pdesc.set || (pdesc.get as any).__isTrackedGetter) return false;
+      let isClassicCp = false;
+      try {
+        isClassicCp = !!_findMetaDescriptor(start, key);
+      } catch {
+        /* ignore */
+      }
+      return !isClassicCp;
+    }
+    proto = Object.getPrototypeOf(proto);
+  }
+  return false;
 }
 
 function _gxtSyncAllWrappers(): void {
@@ -6420,39 +6313,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
     //     (see metal/lib/tracked.ts writeDescriptors()).
     //  2) Our local glimmer-tracking marks the getter with __isTrackedGetter.
     if (instance && getter) {
-      let hasTrackedDescriptor = false;
-      // Check meta for TrackedDescriptor walking up the prototype chain.
-      try {
-        const m = peekMeta(instance) as any;
-        let d = m?.peekDescriptors?.(key);
-        if (!d) {
-          let p = Object.getPrototypeOf(instance);
-          while (p && p !== Object.prototype && !d) {
-            const pm = peekMeta(p) as any;
-            if (pm) d = pm.peekDescriptors?.(key);
-            p = Object.getPrototypeOf(p);
-          }
-        }
-        if (d instanceof TrackedDescriptor) {
-          hasTrackedDescriptor = true;
-        }
-      } catch {
-        /* ignore */
-      }
-      // Also check own/proto descriptor for our local marker flag.
-      if (!hasTrackedDescriptor) {
-        let proto = Object.getPrototypeOf(instance);
-        while (proto && proto !== Object.prototype) {
-          const desc = Object.getOwnPropertyDescriptor(proto, key);
-          if (desc) {
-            if ((desc.get as any)?.__isTrackedGetter || (desc.set as any)?.__isTrackedSetter) {
-              hasTrackedDescriptor = true;
-            }
-            break;
-          }
-          proto = Object.getPrototypeOf(proto);
-        }
-      }
+      const hasTrackedDescriptor = _isTrackedKey(instance, key);
       if (hasTrackedDescriptor) {
         // @tracked owns this key on the instance. Don't install an arg
         // cell that would shadow it. `this.args.key` remains available.
@@ -6514,39 +6375,8 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
       // instance-read probe entirely and treat it as un-overridden.
       // @computed/@tracked/get-with-setter keep the original probe (they may
       // legitimately be overridden).
-      let _plainNativeCollisionRc = false;
-      if (instance) {
-        let _pr: any = Object.getPrototypeOf(instance);
-        while (_pr && _pr !== Object.prototype) {
-          const _pd = Object.getOwnPropertyDescriptor(_pr, key);
-          if (_pd) {
-            if (
-              _pd.get &&
-              !_pd.set &&
-              !(_pd.get as any).__isTrackedGetter &&
-              !(_pd.set as any)?.__isTrackedSetter
-            ) {
-              let _isCp = false;
-              try {
-                let _p2: any = Object.getPrototypeOf(instance);
-                while (_p2 && _p2 !== Object.prototype) {
-                  const _pm: any = peekMeta(_p2);
-                  if (_pm?.peekDescriptors?.(key)) {
-                    _isCp = true;
-                    break;
-                  }
-                  _p2 = Object.getPrototypeOf(_p2);
-                }
-              } catch {
-                /* ignore */
-              }
-              _plainNativeCollisionRc = !_isCp;
-            }
-            break;
-          }
-          _pr = Object.getPrototypeOf(_pr);
-        }
-      }
+      const _plainNativeCollisionRc =
+        !!instance && _isPlainNativeGetterCollision(Object.getPrototypeOf(instance), key);
       // Check if the instance overrode this property in init()
       // If so, we should use the init-set value, not the arg value.
       // Also check __gxtInitOverrides which persists across re-renders.
@@ -6655,16 +6485,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
               if (!desc.set && !_isTrackedG && !_isTrackedS) {
                 let _isClassicCp = false;
                 try {
-                  let p2: any = Object.getPrototypeOf(instance);
-                  while (p2 && p2 !== Object.prototype) {
-                    const pm: any = peekMeta(p2);
-                    const d = pm?.peekDescriptors?.(key);
-                    if (d) {
-                      _isClassicCp = true;
-                      break;
-                    }
-                    p2 = Object.getPrototypeOf(p2);
-                  }
+                  _isClassicCp = !!_findMetaDescriptor(Object.getPrototypeOf(instance), key);
                 } catch {
                   /* ignore — treat as plain native on detection failure */
                 }
@@ -7019,39 +6840,6 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
   // same name, `this.foo` is the tracked state and `this.args.foo` is the
   // arg — two different namespaces. The sync loop must only refresh the
   // attrsProxy cell for such keys, never touch `instance.foo`.
-  const _isTrackedKey = (inst: any, k: string): boolean => {
-    if (!inst) return false;
-    try {
-      const m = peekMeta(inst) as any;
-      let d = m?.peekDescriptors?.(k);
-      if (!d) {
-        let p = Object.getPrototypeOf(inst);
-        while (p && p !== Object.prototype && !d) {
-          const pm = peekMeta(p) as any;
-          if (pm) d = pm.peekDescriptors?.(k);
-          p = Object.getPrototypeOf(p);
-        }
-      }
-      if (d instanceof TrackedDescriptor) return true;
-    } catch {
-      /* ignore */
-    }
-    try {
-      let p = Object.getPrototypeOf(inst);
-      while (p && p !== Object.prototype) {
-        const desc = Object.getOwnPropertyDescriptor(p, k);
-        if (desc) {
-          if ((desc.get as any)?.__isTrackedGetter || (desc.set as any)?.__isTrackedSetter)
-            return true;
-          return false;
-        }
-        p = Object.getPrototypeOf(p);
-      }
-    } catch {
-      /* ignore */
-    }
-    return false;
-  };
   // Merge attrsProxy cells as secondary cells that also need updating
   for (const key of Object.keys(argCells)) {
     const instanceIsTracked = _isTrackedKey(instance, key);
