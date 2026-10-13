@@ -3,7 +3,7 @@
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
     "capturedAt": "2026-10-13T07:01:28.598Z",
     "gxtVersion": "0.0.82",
-    "emberCommit": "3ff5803823",
+    "emberCommit": "b26159f73a",
     "totalTests": 9828,
     "totalModules": 954,
     "quarantinedTests": 0,

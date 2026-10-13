@@ -513,6 +513,13 @@ const pkg = {
   license: rootPkg.license,
   main: 'lib/index.cjs',
   files: ['build-metadata.json', 'dist', 'lib', 'types/stable', 'vite'],
+  // ember-source's own `sideEffects` (same `./dist/<mode>/packages/…` layout);
+  // the bundled @glimmer/component declares none, so all of it counts.
+  sideEffects: Array.isArray(rootPkg.sideEffects)
+    ? [...rootPkg.sideEffects, './dist/glimmer-component/**']
+    : rootPkg.sideEffects === false
+      ? ['./dist/glimmer-component/**']
+      : true,
   repository: rootPkg.repository,
   dependencies: { '@lifeart/gxt': gxtVersion },
   peerDependencies: { '@glimmer/component': '>= 2.0.0', vite: '^7.0.0' },

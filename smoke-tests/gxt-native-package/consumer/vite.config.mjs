@@ -8,15 +8,16 @@ import { defineConfig } from 'vite';
 import { babel } from '@rollup/plugin-babel';
 import { emberGxtNative } from 'ember-source/vite';
 
-// ember.js config/targets.cjs with EMBER_ENV=production (the harness's targets)
+// ember.js config/targets.cjs with EMBER_ENV=production (the harness's targets:
+// lib/browsers.cjs)
 const browsers = [
   'Chrome >= 109',
-  'Edge >= 128',
-  'Firefox >= 115',
-  'iOS >= 15.6',
-  'Safari >= 15.6',
-  'ChromeAndroid >= 130',
-  'FirefoxAndroid >= 130',
+  'Edge >= 149',
+  'Firefox >= 121',
+  'iOS >= 16.6',
+  'Safari >= 18.5',
+  'ChromeAndroid >= 151',
+  'FirefoxAndroid >= 153',
 ];
 
 export default defineConfig({

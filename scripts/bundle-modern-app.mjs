@@ -181,6 +181,30 @@ function copyDir(from, to) {
   }
 }
 
+// A snapshot is shaped like a published package's dist (`<mode>/packages/…`,
+// `glimmer-component/`). Its package.json carries ember-source's own
+// `sideEffects` (the repo package.json's, `./dist/<mode>/…` → `./<mode>/…`), so
+// the app bundle tree-shakes the snapshot the way an app tree-shakes the
+// installed package. Without it the repo package.json is the nearest one, its
+// `./dist/…` patterns match nothing here, and every module (ext/rsvp's RSVP
+// run-loop wiring included) would read as side-effect free. @glimmer/component
+// declares no `sideEffects`, so all of its modules count.
+function snapshotPackageJson(rootPackageJson) {
+  const { sideEffects } = JSON.parse(rootPackageJson.toString('utf8'));
+  const own = Array.isArray(sideEffects)
+    ? sideEffects.map((p) => p.replace(/^\.\/dist\//, './'))
+    : sideEffects === false
+      ? []
+      : null;
+  const pkg = {
+    name: 'ember-dist-snapshot',
+    private: true,
+    type: 'module',
+    sideEffects: own === null ? true : [...own, './glimmer-component/**'],
+  };
+  return JSON.stringify(pkg, null, 2) + '\n';
+}
+
 // rm -rf dist + `npx rollup --config` per flavor, snapshotted for the from-dist
 // variants. gxt-native first, classic LAST (dist/ is left holding the classic
 // build). Rollup's packageMeta rewrites package.json `renamed-modules` for
@@ -218,6 +242,7 @@ function buildDists(requested) {
         join(EMBER_ROOT, 'packages/@glimmer/component/dist'),
         join(snapshot, 'glimmer-component')
       );
+      writeFileSync(join(snapshot, 'package.json'), snapshotPackageJson(pkgBefore));
       log(
         `built ${flavor} dist in ${((Date.now() - t0) / 1000).toFixed(1)}s → ${relative(EMBER_ROOT, snapshot)}`
       );
