@@ -4363,14 +4363,12 @@ function _orderIfWatcherFlush(
 // `wrapBranch` captures those instances into per-branch Sets
 // (`trueBranchHelpers` / `falseBranchHelpers`); these functions reap them.
 //
-// Historically the reaping was driven by an `ifCondition.syncState` monkey-patch
-// that flip-tracked `prevBool`. gxt >=0.0.79 (glimmer-next #259) ships the
-// `onConditionBranchSwap` host hook — the runtime fires a fresh per-branch ctx's
-// destructors at the START of the outgoing branch's teardown (pre-DOM-removal) —
-// so the reaping is delegated to that hook (registered once near
-// `registerHostHooks`) and the syncState wrapper retired. These helpers only
-// close over `getGxtRenderer()` and the module-local `_tagHelperInstanceCache`
-// (forward-referenced; the bodies run at runtime, long after module init).
+// gxt's `onConditionBranchSwap` host hook (registered near
+// `registerHostHooks`) runs a fresh per-branch ctx's destructors at the start
+// of the outgoing branch's teardown, before its DOM is removed, so the reaping
+// runs there. These helpers only close over `getGxtRenderer()` and the
+// module-local `_tagHelperInstanceCache` (forward-referenced; the bodies run
+// long after module init).
 function _gxtDestroyHelperScope(scope: Set<any>): void {
   if (!scope || scope.size === 0) return;
   const copy = Array.from(scope);
@@ -4758,18 +4756,17 @@ function patchGlobalIf() {
       }
     }
 
-    // Branch class-helper teardown (I-a). Stash the per-branch helper-capture
-    // Sets on the IfCondition so the global `onConditionBranchSwap` hook
-    // (registered once near `registerHostHooks`) can reap them on each branch
-    // SWAP — gxt >=0.0.79 (glimmer-next #259) fires that hook's per-branch ctx
-    // destructor at the START of the outgoing branch's teardown (pre-DOM-removal),
-    // retiring the old `ifCondition.syncState` prevBool flip-tracking wrapper +
-    // its cache-diff fallback. Here we additionally register the whole-`{{#if}}`
-    // destroy fallback: reap BOTH branches promptly when the IfCondition itself
-    // is torn down (whole `{{#if}}` removed with no final swap; gxt fires
-    // `registerDestructor` callbacks on the IfCondition synchronously on destroy).
-    // `_gxtDestroyHelperScope` is idempotent (clears the Set + guards
-    // `isDestroyed`), so a prior swap-time hook teardown makes this a no-op.
+    // Branch class-helper teardown. Stash the per-branch helper-capture Sets
+    // on the IfCondition so the global `onConditionBranchSwap` hook can reap
+    // them on each branch SWAP (gxt fires that hook's per-branch ctx
+    // destructor at the start of the outgoing branch's teardown, before DOM
+    // removal). Here we additionally register the whole-`{{#if}}` destroy
+    // fallback: reap BOTH branches promptly when the IfCondition itself is
+    // torn down (whole `{{#if}}` removed with no final swap; gxt fires
+    // `registerDestructor` callbacks on the IfCondition synchronously on
+    // destroy). `_gxtDestroyHelperScope` is idempotent (clears the Set +
+    // guards `isDestroyed`), so a prior swap-time hook teardown makes this a
+    // no-op.
     if (ifCondition && !(ifCondition as any).__emberHelperCleanupInstalled) {
       (ifCondition as any).__emberHelperCleanupInstalled = true;
       (ifCondition as any).__gxtTrueBranchHelpers = trueBranchHelpers;
@@ -4973,10 +4970,6 @@ function patchGlobalIf() {
             /* ignore — fall through to legacy path */
           }
           repairPlaceholder();
-          // Branch-swap class-helper teardown is delegated to the global
-          // `onConditionBranchSwap` hook (gxt >=0.0.79 #259); the whole-`{{#if}}`
-          // destroy fallback is registered once in `patchGlobalIf`'s scope-stash
-          // block above. Nothing to do on the syncState flip here anymore.
           // Push the owner view so any components created by syncState's
           // re-render of the trueBranch (typically {{yield}} block content)
           // are registered as children of the correct view via the parentView
@@ -5199,8 +5192,6 @@ function _afterRebuildViewTreeFromDom(explicitRegistry?: unknown): void {
   // for the outermost render pass has been committed to the live
   // document — so document.getElementById() can finally resolve any
   // in-element targets whose host div was rendered in the same pass.
-  // This covers the renderComponent strict-mode path that does NOT
-  // go through globalThis.__gxtFlushAfterInsertQueue.
   //
   // The `_drainInElementDeferQueue` pointer is undefined until the setup block
   // runs at module-load, so the guard is preserved for ordering safety.
@@ -5299,18 +5290,16 @@ function _gxtSubscribeBackingArray(raw: any): void {
   }
 }
 
-// `normalizeEachCollection` materializes a non-Array iterable into a real Array.
-// Background: the each/if delegation plan Step 1 deleted this and let gxt's native
-// `$_eachSync` → `normalizeIterableValue` (list.ts) own normalization — which it
-// does for ITERATION across every shape (plain arrays, Symbol.iterator iterables,
-// ArrayProxy via `.content`, forEach-delegates, strings-as-falsy). BUT gxt's
-// `as |item index|` index path calls `.indexOf(item)` on the raw cell value, which
-// is absent/wrong on a Set / Symbol.iterator object / forEach array-like — so the
-// index block param came back undefined for those shapes. The wrappers below now
-// re-materialize to an Array ONLY on the `hasIndex` path (this helper short-circuits
-// real Arrays, so the no-index and Array cases stay free, preserving the Step 1
-// delegation win). The KVO subscriptions (`_registerIterableUnderlyingArray` /
-// `_gxtSubscribeBackingArray`) and watch-target/id copies are the genuine bridge.
+// `normalizeEachCollection` materializes a non-Array iterable into a real
+// Array. gxt's `$_eachSync` normalizes every iterable shape for ITERATION
+// (plain arrays, Symbol.iterator iterables, ArrayProxy via `.content`,
+// forEach-delegates, strings-as-falsy), but its `as |item index|` index path
+// calls `.indexOf(item)` on the raw value, which is missing or wrong for a Set,
+// a Symbol.iterator object or a forEach array-like. So the wrappers below
+// materialize an Array only on the `hasIndex` path (real Arrays short-circuit,
+// so the no-index and Array cases cost nothing). The KVO subscriptions
+// (`_registerIterableUnderlyingArray` / `_gxtSubscribeBackingArray`) and the
+// watch-target/id copies are the rest of the bridge.
 function normalizeEachCollection(raw: any): any[] {
   if (raw == null || raw === false || raw === '' || raw === 0) return [];
   if (Array.isArray(raw)) return raw;
@@ -5370,17 +5359,16 @@ const _eachItemHolderByTarget = new WeakMap<object, _EachItemHolder>();
 // keyed property can re-bind a stale key to a new object); it is FALSE for
 // `@identity`-keyed lists (no `key=` / `key="@identity"` / `key="@index"`),
 // where the key IS the object identity (WeakMap) so a given key can NEVER bind
-// to a different ref → `__gxtRebindEachItem` is never called for that row. When
-// FALSE, the per-row `__gxtRev` revision cell is dead weight (created + read +
-// subscribed by every body formula but never bumped), so the proxy get-trap
-// SKIPS it entirely.
+// to a different ref → the `rebindEachItem` host hook never fires for that row.
+// When FALSE, the per-row `__gxtRev` revision cell is dead weight (created +
+// read + subscribed by every body formula but never bumped), so the proxy
+// get-trap SKIPS it entirely.
 interface _EachItemHolder {
   raw: any;
   rebindPossible: boolean;
 }
 
 // Shared trap skip-list (framework/internal props bypass cell tracking).
-// Hoisted out of the per-row closure.
 function _eachProxySkipProp(prop: string): boolean {
   return (
     prop.charCodeAt(0) === 95 /* _ */ ||
@@ -5417,9 +5405,9 @@ function _eachProxySkipProp(prop: string): boolean {
 const _eachItemShadowedValue = new WeakMap<object, Map<string, any>>();
 const _eachItemReadInflight = new WeakMap<object, Set<string>>();
 // Shared body of the each-item `get` trap: read `raw[prop]`, entangle the
-// per-prop (and, for rebind-capable rows, the per-holder revision) cell, and wrap
-// nested objects for sub-path tracking. Hoisted so the `get` trap can call it from
-// both the fast path and the re-entrancy-guarded path.
+// per-prop (and, for rebind-capable rows, the per-holder revision) cell, and
+// wrap nested objects for sub-path tracking. The `get` trap calls it from both
+// the fast path and the re-entrancy-guarded path.
 function _eachItemReadProp(raw: any, prop: string, holder: _EachItemHolder | undefined): any {
   const value = Reflect.get(raw, prop, raw);
   if (typeof value === 'function') return value;
@@ -5557,8 +5545,9 @@ function wrapEachItemForTracking(item: any, rebindPossible: boolean = false): an
     return existing;
   }
   // Mutable holder — `raw` is the CURRENT source object for this row. On a
-  // keyed reuse where the row's source object changed by ref, `__gxtRebindEachItem`
-  // swaps `holder.raw` + bumps the revision cell so the body re-reads the new one.
+  // keyed reuse where the row's source object changed by ref, the
+  // `rebindEachItem` host hook swaps `holder.raw` + bumps the revision cell so
+  // the body re-reads the new one.
   const holder: _EachItemHolder = { raw: item, rebindPossible };
   // The single shared handler (`_eachItemProxyHandler`) resolves the holder from
   // the proxy target (`item`) via `_eachItemHolderByTarget` — no per-row handler
@@ -5730,7 +5719,7 @@ const _eachNestedProxyHandler: ProxyHandler<any> = {
 };
 
 // Holders whose revision cell must be bumped on the next sync pass (keyed-reuse
-// rebind). syncList calls `__gxtRebindEachItem` from INSIDE the first
+// rebind). syncList calls the `rebindEachItem` host hook from INSIDE the first
 // `gxtSyncDom()` pass (the each-source opcode → syncList → reuse branch); a
 // revision bump there lands in `tagsToRevalidate` but is wiped by that pass's
 // terminal `tagsToRevalidate.clear()` before the second pass runs. So we swap
@@ -5798,22 +5787,11 @@ const _gxtEachItemRawFor = function (maybeProxy: any): any {
 //
 // `{{#each-in obj}}` compiles to `{{#each (gxtEntriesOf obj)}}`. The
 // `gxtEntriesOf` source formula does `Object.keys(obj)`, which taps the
-// per-VALUE cells (`cellFor(obj, key)`) but NOT the SET of keys. So when
-// `set(obj, 'NewKey', v)` adds a brand-new key, the source formula has no dep
-// on "the key set" and never re-iterates → the new key is never rendered.
-//
-// FIX: a per-object key-SET revision cell `cellFor(obj, '__gxtKeySet')`.
-// `gxtEntriesOf` READS it (so the source formula subscribes) and records the
-// keys it has observed. SyncCore, on a write to a key NOT yet observed for that
-// object, BUMPS the revision cell → the source re-iterates and picks up the new
-// key. `_keySetSeen` tracks observed keys per object so we only bump on genuine
-// additions (a value-only change of an existing key already propagates via its
-// own per-value cell).
-// NOTE: the per-object key-set revision cell + `_gxtRecordKeySet` /
-// `_gxtMaybeBumpKeySet` / `_gxtRecordEachInKeySetFn` / `_keySetSeen` are retired
-// — gxt >=0.0.79 owns the key-set reactivity primitive (glimmer-next #257,
-// `entangleObjectKeys`/`notifyObjectKeyAdded`); ember only forwards the two
-// signals (the each-in source's observed keys, and the SyncCore write).
+// per-VALUE cells (`cellFor(obj, key)`) but NOT the SET of keys, so a
+// `set(obj, 'NewKey', v)` that adds a key would not re-iterate. gxt owns the
+// key-set reactivity (`entangleObjectKeys` / `notifyObjectKeyAdded`); ember
+// forwards the two signals: the keys the each-in source observed, and
+// SyncCore's write of a key.
 
 // Exposed so `gxtEntriesOfEmber` (ember-gxt-wrappers.ts) can subscribe the
 // active each-in source formula to an intermediate property cell — e.g. an
@@ -5876,8 +5854,8 @@ function _gxtDrainPendingInverseOldRowFinalize(): void {
   }
 }
 
-// ─── each/if delegation Step 3 (E-c): each-row pre-destroy via gxt host hooks ──
-// gxt 0.0.69 fires `onRowContextCreated(rowCtx)` per `{{#each}}` row (rowCtx is a
+// ─── each-row pre-destroy via gxt host hooks ──────────────────────────────────
+// gxt fires `onRowContextCreated(rowCtx)` per `{{#each}}` row (rowCtx is a
 // plain object) and per `{{#if}}`/`{{#unless}}` branch (an IfCondition class
 // instance), and a `registerDestructor(rowCtx, fn)` runs PRE-DOM-REMOVAL on a
 // still-connected element (list.ts `destroyItem` → `destroyRowCtx` precedes
@@ -5896,13 +5874,12 @@ function _gxtDrainPendingInverseOldRowFinalize(): void {
 // in that window (`_gxtCaptureRowInstance`, called from manager.ts's
 // `renderComponent` right after `_allLiveInstances.add`) with its row.
 //
-// (The gxt render-scope hooks `onEnterRenderScope`/`onLeaveRenderScope` were the
-// first design, but rowCtx is NEVER pushed onto gxt's parentContext stack —
-// verified empirically — so the body-fn window is the correct seam.)
+// (The gxt render-scope hooks `onEnterRenderScope`/`onLeaveRenderScope` cannot
+// be used for this: rowCtx is never pushed onto gxt's parentContext stack.)
 
 // Ctxs flagged (in `onRowContextCreated`) as `{{#each}}` rows. IfCondition
-// branch ctxs are deliberately NOT added (the if-branch delegation I-a is a
-// follow-on). Used to validate `_gxtCurrentRowCtx` is a real each-row.
+// branch ctxs are deliberately NOT added. Used to validate `_gxtCurrentRowCtx`
+// is a real each-row.
 const _gxtEachRowCtxSet = new WeakSet<object>();
 // rowCtx → the Ember component instances rendered under it (Set insertion order =
 // creation order = parent-first). Read by `_gxtFireRowPreDestroy` at teardown.
@@ -5942,9 +5919,7 @@ function _gxtFireRowPreDestroy(rowCtx: object): void {
     // wired as listeners), and TAGLESS interactive rows have no `HTMLElement`
     // wrapper yet still must fire willDestroyElement. The destructor runs
     // PRE-DOM-removal (teardownAllRowCtxs before clearChildren; destroyRowCtx
-    // before destroyElementSync(row)), so the row is still connected here —
-    // matching what the old `wrappedInverseFn` reattach+fire used to do, now
-    // owned entirely by this path.
+    // before destroyElementSync(row)), so the row is still connected here.
     if (!(inst as any).__gxtEverInserted) continue;
     try {
       (inst as any).__gxtWDEFiredCycle = _gxtGetSyncCycleId();
@@ -5959,10 +5934,9 @@ function _gxtFireRowPreDestroy(rowCtx: object): void {
         inst.trigger('willDestroyElement');
         inst.trigger('willClearRender');
       }
-      // Per-instance trigger gate so the legacy reattach paths' subsequent
-      // willDestroyElement/willClearRender re-fire (same sync cycle) is a no-op.
-      // Other hooks (didDestroyElement, willDestroy) keep flowing. Mirrors the
-      // gate installed in `wrappedInverseFn`.
+      // Per-instance trigger gate: a later willDestroyElement/willClearRender
+      // trigger in the same sync cycle (e.g. from a reattach path in manager.ts)
+      // is a no-op. Other hooks (didDestroyElement, willDestroy) keep flowing.
       if (!(inst as any).__gxtPreDestroyGateInstalled) {
         (inst as any).__gxtPreDestroyGateInstalled = true;
         const origTrigger = inst.trigger;
@@ -6012,16 +5986,16 @@ function patchGlobalEachSync() {
     // re-locates the item in the current source array on every revalidation.
     //
     // Determine whether this list's keying can ever STALE a key and rebind a
-    // reused row to a NEW object ref (`__gxtRebindEachItem`). glimmer-next's
-    // compiler emits `key` as: `null` (no `key=`), `'@identity'` (each-in /
-    // explicit identity), or `'@index'` (rare; compiler warns + downgrades to
-    // identity) → ALL of these key by object identity (a stable WeakMap), so a
-    // given key can NEVER bind to a different ref → rebind is impossible → the
-    // per-row `__gxtRev` cell is dead weight. Only an EXPLICIT property/function
-    // `key=` (e.g. `key="id"`) can stale a key (in-place mutate the keyed prop,
-    // then a ref-swap reuses the row by the stale key) → rebind possible → KEEP
-    // the rev cell. So: rebindPossible = key is non-null, non-identity,
-    // non-index.
+    // reused row to a NEW object ref (the `rebindEachItem` host hook).
+    // glimmer-next's compiler emits `key` as: `null` (no `key=`), `'@identity'`
+    // (each-in / explicit identity), or `'@index'` (rare; compiler warns +
+    // downgrades to identity) → ALL of these key by object identity (a stable
+    // WeakMap), so a given key can NEVER bind to a different ref → rebind is
+    // impossible → the per-row `__gxtRev` cell is dead weight. Only an EXPLICIT
+    // property/function `key=` (e.g. `key="id"`) can stale a key (in-place
+    // mutate the keyed prop, then a ref-swap reuses the row by the stale key) →
+    // rebind possible → KEEP the rev cell. So: rebindPossible = key is
+    // non-null, non-identity, non-index.
     const _keyIsIdentity =
       key === null || key === undefined || key === '' || key === '@identity' || key === '@index';
     const _rebindPossible = !_keyIsIdentity;
@@ -6125,12 +6099,11 @@ function patchGlobalEachSync() {
       // `cellFor(rawItem, <prop>)` and the GXT formula becomes reactive
       // (otherwise it's isConst → torn down → text never updates).
       const bodyItem = wrapEachItemForTracking(item, _rebindPossible);
-      // each/if delegation Step 3 (E-c): `ctx0` IS the row's gxt rowCtx (the
-      // `bodyCtx` gxt threads through `buildRow`), the same object
-      // `onRowContextCreated` saw. Mark it current for the duration of the row's
-      // synchronous body render so every Ember instance created here (direct +
-      // nested) is associated with this row's pre-destroy destructor. Save/restore
-      // keeps nested `{{#each}}` correct.
+      // `ctx0` IS the row's gxt rowCtx (the `bodyCtx` gxt threads through
+      // `buildRow`), the same object `onRowContextCreated` saw. Mark it current
+      // for the duration of the row's synchronous body render so every Ember
+      // instance created here (direct + nested) is associated with this row's
+      // pre-destroy destructor. Save/restore keeps nested `{{#each}}` correct.
       const _prevRowCtx = _gxtCurrentRowCtx;
       _gxtCurrentRowCtx = ctx0 || null;
       try {
@@ -6163,10 +6136,10 @@ function patchGlobalEachSync() {
     // items' SYNC `willDestroyElement`/`willClearRender` (fired BEFORE the
     // inverse content is constructed) followed by their ASYNC
     // `didDestroyElement`/`willDestroy` (fired AFTER the new content's
-    // didInsertElement). The SYNC half is now owned by the each-row pre-destroy
-    // delegation (Step 3 / E-c: `onRowContextCreated` → `_gxtFireRowPreDestroy`,
-    // which fires while the row is still connected — pre-`clearChildren`). This
-    // wrapper retains only the ASYNC half: it collects the old rows (guarded by
+    // didInsertElement). The SYNC half is owned by the each-row pre-destroy
+    // destructor (`onRowContextCreated` → `_gxtFireRowPreDestroy`, which fires
+    // while the row is still connected — pre-`clearChildren`). This wrapper
+    // owns only the ASYNC half: it collects the old rows (guarded by
     // `__gxtInverseDestroyFiredCycle` against double-collection) and defers their
     // didDestroyElement/willDestroy into `_pendingInverseOldRowFinalize`, marking
     // each `__gxtDeferAsyncDestroyCycle` so the Phase 2c sweep skips them.
@@ -6226,10 +6199,10 @@ function patchGlobalEachSync() {
                     pv = pv.parentView;
                   }
                   if (!underParent) continue;
-                  // NOTE: rows already fired this cycle by the each-row pre-destroy
-                  // delegation (Step 3 / E-c) are intentionally NOT excluded here —
-                  // `ordered` drives only the ASYNC didDestroy/willDestroy finalize
-                  // now (the sync willDestroyElement/willClearRender is owned by the
+                  // Rows already fired this cycle by the each-row pre-destroy
+                  // destructor are intentionally NOT excluded here: `ordered`
+                  // drives only the ASYNC didDestroy/willDestroy finalize (the
+                  // sync willDestroyElement/willClearRender is owned by the
                   // per-row destructor), and every row still needs that finalize.
                   candidates.push(inst);
                 }
@@ -6254,20 +6227,15 @@ function patchGlobalEachSync() {
                 for (const root of directChildren) visit(root);
                 for (const c of candidates) if (!visited.has(c)) ordered.push(c);
 
-                // each/if delegation Step 3 (E-c) follow-on: the old reattach-to-
-                // fixture + synchronous willDestroyElement/willClearRender firing
-                // for these rows used to live here. It is now owned by the per-row
-                // `onRowContextCreated` destructor (`_gxtFireRowPreDestroy`), which
-                // fires the sync hooks PRE-DOM-removal on the still-connected
-                // element (during `fastCleanup`→`teardownAllRowCtxs` before
-                // `clearChildren`, or per-row `destroyItem`→`destroyRowCtx` before
-                // `destroyElementSync(row)`) — so no reattach is needed. Interactive
-                // each→else rows are always connected at destructor time (hence
-                // delegated); non-interactive rows fire no element hooks anyway.
-                // We still collect `ordered` below to drive the ASYNC finalize
-                // (didDestroyElement → willDestroy), which the delegation does NOT
-                // own and which must stay deferred until after the new inverse
-                // content's didInsertElement (Phase 3b).
+                // No reattach-to-fixture is needed for these rows: the per-row
+                // `onRowContextCreated` destructor (`_gxtFireRowPreDestroy`)
+                // fires their sync willDestroyElement/willClearRender
+                // PRE-DOM-removal on the still-connected element (during
+                // `fastCleanup`→`teardownAllRowCtxs` before `clearChildren`, or
+                // per-row `destroyItem`→`destroyRowCtx` before
+                // `destroyElementSync(row)`). Interactive each→else rows are
+                // always connected at destructor time; non-interactive rows fire
+                // no element hooks anyway.
                 //
                 // Remember the ordered old rows so we can DEFER their async
                 // teardown (didDestroyElement + willDestroy) until AFTER the new
@@ -6295,11 +6263,10 @@ function patchGlobalEachSync() {
         // new components' didInsertElement/didRender into the after-insert
         // queue (interactive mode).
         const _inverseResult = withParent(() => origInverseFn(ctx0));
-        // Lifecycle teardown ORDERING (fine-grained only): queue the old rows'
-        // async teardown so `_gxtSyncDomNow` drains it AFTER Phase 3b
-        // (flushAfterInsertQueue) has fired the NEW content's
-        // didInsertElement/didRender — matching classic Ember's
-        // new-insert-before-async-destroy.
+        // Lifecycle teardown ORDERING: queue the old rows' async teardown so
+        // `_gxtSyncDomNow` drains it AFTER Phase 3b (flushAfterInsertQueue)
+        // has fired the NEW content's didInsertElement/didRender — matching
+        // classic Ember's new-insert-before-async-destroy.
         if (_oldRowsToFinalize && _oldRowsToFinalize.length > 0) {
           _pendingInverseOldRowFinalize.push({
             rows: _oldRowsToFinalize,
@@ -6406,16 +6373,16 @@ function patchGlobalEachSync() {
         // collection wrappers (post replaceList) hook their underlying
         // arrays into KVO mutation propagation too.
         _registerIterableUnderlyingArray(raw);
-        // Fine-grained mode (gated): subscribe the source formula DIRECTLY to
-        // the backing array's `[]` cell. `arrayContentDidChange` →
-        // `notifyPropertyChange(array,'[]')` dirties `cellFor(array,'[]')`
-        // (SyncCore primary cell.update). The array-owner fan-out covers
-        // `this.<prop>` sources (parseable name), but NOT block-param sources
-        // like the INNER each in `{{#each foo as |bar|}}` where `foo` has no
-        // owner cell — its in-place mutation (`inner.replace(0,1,['lady'])`,
-        // nested-each test) then never re-fired the inner list. Reading the
-        // backing array's `[]` cell here makes the formula re-run on any
-        // in-place mutation regardless of source shape.
+        // Subscribe the source formula DIRECTLY to the backing array's `[]`
+        // cell. `arrayContentDidChange` → `notifyPropertyChange(array,'[]')`
+        // dirties `cellFor(array,'[]')` (SyncCore primary cell.update). The
+        // array-owner fan-out covers `this.<prop>` sources (parseable name),
+        // but NOT block-param sources like the INNER each in
+        // `{{#each foo as |bar|}}` where `foo` has no owner cell — its in-place
+        // mutation (`inner.replace(0,1,['lady'])`, nested-each test) would not
+        // re-fire the inner list. Reading the backing array's `[]` cell here
+        // makes the formula re-run on any in-place mutation regardless of
+        // source shape.
         {
           _gxtSubscribeBackingArray(raw);
         }
@@ -6564,9 +6531,8 @@ function _resetTemplateOnlyState() {
 }
 
 // The in-flight pass-id / cycle-id state and DC-change-listener dispatch live in
-// the canonical `__gxtSyncAllWrappers` body in manager.ts; the reader in
-// `_gxtSyncDomNow` (Phase 1 below) dispatches through
-// `getGxtRenderer()?.compilePipeline.syncAllWrappers?.()`.
+// `_gxtSyncAllWrappers` in manager.ts; `_gxtSyncDomNow` (Phase 1 below) calls it
+// through `getGxtRenderer()?.compilePipeline.syncAllWrappers?.()`.
 
 // Flush pending GXT DOM updates synchronously.
 // Called after runTask() completes so test assertions see updated DOM.
@@ -6583,12 +6549,12 @@ function _gxtSyncDomNow(): void {
     // change triggered the sync. Cell creation during initial render also sets
     // the pending-sync flag, but that should NOT force a full re-render.
     _gxtSetHadPendingSync(_gxtGetPendingSyncFromPropertyChange());
-    // Mirror "had pending sync" into a flag that survives
-    // __gxtForceEmberRerender's finally-block clear, so downstream phases (e.g.
-    // __gxtDestroyUnclaimedPoolEntries in manager.ts) can still tell whether this
-    // sync was driven by a real property change. Used to gate destroy-error
-    // capture: spurious unclaimed sweeps from initial-render syncs (where no
-    // property change drove the sync) should NOT route user-thrown
+    // Mirror "had pending sync" into a flag that survives the force-rerender's
+    // (`_gxtForceEmberRerender`) finally-block clear, so downstream phases
+    // (e.g. `_gxtDestroyUnclaimedPoolEntries` in manager.ts) can still tell
+    // whether this sync was driven by a real property change. Used to gate
+    // destroy-error capture: spurious unclaimed sweeps from initial-render syncs
+    // (where no property change drove the sync) should NOT route user-thrown
     // destroy/lifecycle errors into _renderErrors.
     _gxtSetSyncIsPropertyDriven(_gxtGetPendingSyncFromPropertyChange());
     // Clear the property-change flag after capturing it into the two survivor
@@ -6601,7 +6567,7 @@ function _gxtSyncDomNow(): void {
     // Clear modifier update tracking for this new sync cycle
     const modMgr = (globalThis as any).$_MANAGERS?.modifier;
     if (modMgr?._updatedInstances) modMgr._updatedInstances.clear();
-    // Wrap ALL phases in try/finally so __gxtSyncing is ALWAYS reset,
+    // Wrap ALL phases in try/finally so the syncing flag is ALWAYS reset,
     // even if an unexpected error escapes a catch block.
     try {
       // Start a new render pass to prevent double-firing of lifecycle hooks.
@@ -6661,10 +6627,11 @@ function _gxtSyncDomNow(): void {
         }
       }
       // Only run gxtSyncDom when a real property change triggered the sync.
-      // Cell creation during initial render also sets __gxtPendingSync, but those
-      // cells may have stale values (e.g., each-formula re-evaluates with [] before
-      // the correct value propagates). Skipping gxtSyncDom for non-property-change
-      // syncs prevents spurious #each inverse rendering on first render.
+      // Cell creation during initial render also sets the pending-sync flag, but
+      // those cells may have stale values (e.g., each-formula re-evaluates with []
+      // before the correct value propagates). Skipping gxtSyncDom for
+      // non-property-change syncs prevents spurious #each inverse rendering on
+      // first render.
       if (_gxtGetHadPendingSync()) {
         try {
           gxtSyncDom();
@@ -6715,9 +6682,10 @@ function _gxtSyncDomNow(): void {
         /* ignore */
       }
       // PHASE 1a: Flush deferred if-watcher notifications. These were accumulated
-      // during __gxtTriggerReRender calls and are flushed HERE (after all gxtSyncDom
-      // calls) so batched property changes are applied atomically — IfConditions see
-      // the final state of all conditions, not intermediate states.
+      // during `_gxtTriggerReRender` calls and are flushed HERE (after all
+      // gxtSyncDom calls) so batched property changes are applied atomically —
+      // IfConditions see the final state of all conditions, not intermediate
+      // states.
       //
       // Watchers are processed in PARENT-FIRST order: those whose IfCondition is
       // about to flip to FALSE fire before those flipping to TRUE. This way, an
@@ -6853,13 +6821,11 @@ function _gxtSyncDomNow(): void {
       } catch {
         /* ignore */
       }
-      // NOTE: Previously this block used __gxtCheckAllTagsCurrent to skip the morph
-      // when root tags appeared current. However, __gxtUpdateRootTagValues (Phase 1b
-      // above) already updates tags to match current values, so checkAllTagsCurrent
-      // always returned true — incorrectly skipping the morph for cases where
-      // gxtSyncDom didn't handle the update (e.g., inline $__if with function values,
-      // undefined → truthy transitions). The morph must always run when hadPendingSync
-      // is true from a property change to ensure correctness.
+      // The morph is not skipped when root tags merely look current: Phase 1b
+      // above has just updated them, so such a check always passes and would
+      // skip the morph for updates gxtSyncDom did not handle (e.g., inline
+      // $__if with function values, undefined → truthy transitions). The morph
+      // must always run when hadPendingSync is true from a property change.
       // PHASE 2a: Snapshot live instances before force-rerender.
       try {
         getGxtRenderer()?.compilePipeline.snapshotLiveInstances();
@@ -7042,7 +7008,7 @@ function _gxtSyncDomNow(): void {
         /* ignore */
       }
     } finally {
-      // CRITICAL: Always reset __gxtSyncing even if an error escapes.
+      // CRITICAL: Always reset the syncing flag even if an error escapes.
       // Without this, the flag stays true forever and _gxtSyncDomNow becomes a
       // permanent no-op, causing all subsequent tests to fail.
       _gxtSetSyncing(false);
@@ -7069,7 +7035,7 @@ function _gxtSyncDomNow(): void {
 // where _gxtSyncDomNow isn't called explicitly.
 // Guards:
 // 1. Skip if no pending sync (`_gxtGetPendingSync()`).
-// 2. Skip if __gxtSyncing is stuck true (prevents piling up on a hung sync).
+// 2. Skip if the syncing flag is stuck true (prevents piling up on a hung sync).
 // 3. Budget: max 3 consecutive interval-triggered syncs without an explicit
 //    runTask-triggered sync in between. Prevents the interval from driving
 //    an infinite re-render loop when tests produce continuous dirty state.
@@ -7170,7 +7136,7 @@ function _gxtCleanupActiveComponents(): void {
   // `clearDynamicComponentListeners()`. The clear resets both in lockstep —
   // without that lockstep, an orphaned listener count leaks across tests and
   // makes _gxtSyncDomNow incorrectly clear the had-pending-sync flag in Phase 1,
-  // which then causes __gxtForceEmberRerender to skip the morph for tests that
+  // which then causes `_gxtForceEmberRerender` to skip the morph for tests that
   // need it (e.g. classic Component.extend properties changed via set()).
   setDcComponentGetter(null);
   getGxtRenderer()?.compilePipeline.clearDynamicComponentListeners?.();
@@ -7181,7 +7147,7 @@ function _gxtCleanupActiveComponents(): void {
   _resetGxtComponentContexts();
   // Reset pending sync flags to prevent timer-based re-renders leaking into next test.
   // The setInterval checks the pending-sync flag and calls _gxtSyncDomNow(), which
-  // can trigger __gxtForceEmberRerender (innerHTML='' + rebuild) on the next
+  // can trigger `_gxtForceEmberRerender` (innerHTML='' + rebuild) on the next
   // test's DOM.
   _gxtSetPendingSync(false);
   _gxtSetPendingSyncFromPropertyChange(false);
@@ -7396,12 +7362,6 @@ function _gxtClearTagHelperCache(): void {
   protectGlobal('$_helperHelper', emberHelperHelper);
 }
 
-// Register built-in keyword helpers for GXT integration
-// These are simplified implementations for GXT since it doesn't have Glimmer VM's reference system
-// Module-local (the retired `globalThis.__EMBER_BUILTIN_HELPERS__` slot);
-// cross-file readers (ember-gxt-wrappers' helper resolution + entries-of
-// patch) reach it by reference through `compilePipeline.getBuiltinHelpers`.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 // The body of the `gt`/`gte`/`lt`/`lte`/`neq` keyword helpers (see their use in
 // `_emberBuiltinHelpers`). Built under a computed key so the function keeps the
 // helper's name.
@@ -7421,6 +7381,11 @@ function _comparisonHelper(name: string, compare: (a: any, b: any) => boolean) {
   }[name]!;
 }
 
+// Register built-in keyword helpers for GXT integration
+// These are simplified implementations for GXT since it doesn't have Glimmer VM's reference system
+// Module-local; other files (ember-gxt-wrappers' helper resolution + entries-of
+// patch) reach it by reference through `compilePipeline.getBuiltinHelpers`.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _emberBuiltinHelpers: Record<string, any> = {
   // readonly: Returns a readonly cell marker object.
   // The component manager detects __isReadonly and provides an immutable attr
@@ -7658,28 +7623,27 @@ const _emberBuiltinHelpers: Record<string, any> = {
   // natively (unlike `eq`/`and`/`or`/`not`, which map to GXT's
   // `$__eq`/`$__and`/`$__or`/`$__not` opcodes). For unrecognized bare
   // identifiers like `{{gt a b}}`, GXT emits `$_maybeHelper("gt", [a, b],
-  // this)`. The Ember-mode strict-shadow check (compile.ts:15527) then
-  // verifies the name is in `__EMBER_BUILTIN_HELPERS__`; without these
-  // entries, every `gt`/`gte`/`lt`/`lte`/`neq` invocation throws
-  // "not in scope".
+  // this)`. The strict-mode `$_maybeHelper` shadow emitted into the template
+  // body then checks the name against this table (`__gxtBuiltinHelpers`);
+  // without these entries, every `gt`/`gte`/`lt`/`lte`/`neq` invocation
+  // throws "not in scope".
   //
-  // Args arrive pre-unwrapped via `unwrapArgs` in
-  // `ember-gxt-wrappers.ts:835` for `{{gt a b}}` content position, but
-  // for the SubExpression case `{{if (gt a b) ...}}` GXT routes through
-  // a different code path that leaves the args as zero-arity getter
-  // functions. We re-unwrap defensively so both paths produce numeric
-  // results. The arg-count `throw` matches the Glimmer runtime helper
-  // bodies (packages/@glimmer/runtime/lib/helpers/gt.ts, etc.) so the
-  // `'throws if not called with exactly two arguments'` tests pass.
-  // Use getDebugFunction('assert') so expectAssertion's stub can capture
+  // Args arrive pre-unwrapped via `unwrapArgs` (ember-gxt-wrappers.ts) for
+  // `{{gt a b}}` content position, but for the SubExpression case
+  // `{{if (gt a b) ...}}` GXT routes through a different code path that
+  // leaves the args as zero-arity getter functions. We re-unwrap defensively
+  // so both paths produce numeric results. The arg-count `throw` matches the
+  // Glimmer runtime helper bodies (packages/@glimmer/runtime/lib/helpers/gt.ts,
+  // etc.) so the `'throws if not called with exactly two arguments'` tests
+  // pass. Use getDebugFunction('assert') so expectAssertion's stub can capture
   // the throw before it propagates.
   gt: _comparisonHelper('gt', (a, b) => a > b),
   gte: _comparisonHelper('gte', (a, b) => a >= b),
   lt: _comparisonHelper('lt', (a, b) => a < b),
   lte: _comparisonHelper('lte', (a, b) => a <= b),
   neq: _comparisonHelper('neq', (a, b) => a !== b),
-  // gxtGetOutletState: Returns the current outlet state from
-  // globalThis.__currentOutletState. Used as the fallback for
+  // gxtGetOutletState: Returns the current outlet state
+  // (`getCurrentOutletState()`). Used as the fallback for
   // `{{-get-dynamic-var "outletState"}}` when no enclosing
   // `{{#-with-dynamic-vars outletState=...}}` has provided a scoped
   // override. The Ember template keyword accepts only `outletState` as
@@ -7749,9 +7713,9 @@ const _emberBuiltinHelpers: Record<string, any> = {
     // - Arrays: numeric indices + custom properties like arr.foo = 'bar'
     // - Sparse arrays: only defined indices (skips holes)
     const keys = Object.keys(resolved);
-    // Subscribe the each-in source to the object's key-SET revision (gxt
-    // >=0.0.79 #257) so `set(obj,'NewKey')` re-iterates. (This inline copy is
-    // the fallback — ember-gxt-wrappers.ts overrides `gxtEntriesOf` at runtime.)
+    // Subscribe the each-in source to the object's key set so
+    // `set(obj,'NewKey')` re-iterates. (This inline copy is the fallback —
+    // ember-gxt-wrappers.ts overrides `gxtEntriesOf` at runtime.)
     _gxtEntangleObjectKeys(resolved, keys);
     return keys.map((key) => ({ k: key, v: (resolved as any)[key] }));
   },
@@ -8048,8 +8012,7 @@ const _emberBuiltinHelpers: Record<string, any> = {
   // HTML comment source produced by `gxtHtmlCommentTransform`. The token
   // is a plain-ASCII identifier with no mustache characters, so it
   // survives the GXT parser without being interpreted as a mustache.
-  // Reads the registry that `gxtHtmlCommentTransform` populated (now owned by
-  // ast-transforms.ts) via the imported `lookupGxtComment`.
+  // The registry lives in ast-transforms.ts (`lookupGxtComment`).
   __gxtCommentLookup: (token: unknown) => lookupGxtComment(token),
 };
 
@@ -8080,9 +8043,9 @@ const _emberBuiltinHelpers: Record<string, any> = {
 //
 // The alias name uses a hyphen so it can never collide with a user-defined
 // modifier (Glimmer's Handlebars parser accepts hyphenated identifiers).
-// `_GXT_ON_EXT_ALIAS` is the shared contract string, now owned by ast-transforms.ts
-// (imported above) so the `gxtOnModifierTransform` rewrite and this registration
-// stay in sync.
+// `_GXT_ON_EXT_ALIAS` (from ast-transforms.ts) is the shared contract string, so
+// the `gxtOnModifierTransform` rewrite (see `buildGxtDialectTransforms`) and
+// this registration stay in sync.
 let _gxtOnExtAliasInstalled = false;
 /**
  * Register `on-ext` as an alias for the `on` modifier inside
@@ -8102,37 +8065,19 @@ function _ensureOnExtAlias(): void {
   _gxtOnExtAliasInstalled = true;
 }
 
-// `{{on ...}}` → `{{on-ext ...}}` rewriting is now handled by the
-// `gxtOnModifierTransform` AST visitor (see `buildGxtDialectTransforms`), which
-// targets `ElementModifierStatement` nodes directly. The former
-// `transformOnModifierHashArgs` string scanner lived here.
-
-// Caching wrapper for {{unbound}} helper.
-// Each call site in a template gets a unique ID. The first evaluation
-// stores the result; subsequent evaluations return the cached value.
-// The cache is stored on the component context (`ctx`) to isolate
-// different component instances.
-// IMPORTANT: Takes a lazy thunk `() => value` to avoid eagerly evaluating
-// the expression (which would track GXT cell dependencies).
-// Caching wrapper for {{unbound}} helper.
-// Each context gets its own cache (a plain object keyed by call-site ID).
-// This handles both:
-// - Single component renders (same ctx across re-evaluations)
-// - #each iterations (each iteration has its own ctx)
+// {{unbound}} caching. Each call site in a template gets a unique ID; the first
+// evaluation stores the result and later evaluations return the cached value.
+// The cache is per context (a plain object keyed by call-site ID), which covers
+// both a single component re-evaluating (same ctx) and #each iterations (one
+// ctx per iteration). The value is passed as a lazy thunk `() => value` so the
+// expression is not evaluated eagerly (which would track GXT cell
+// dependencies).
 //
-// `__gxtUnboundEval` (the eval+cache function) and `__gxtUnboundResetSlots`
-// (the per-render slot-counter reset) are inlined directly into the emitted
-// `templateFnCode` Function() body rather than published on globalThis. The GXT
-// serializer emits `__gxtUnboundEval(__ubCache, "__ubN", () => unbound(...))` for
-// the `{{unbound X}}` top-level form AND for inline `(unbound X)` sub-expressions
-// (both serializer paths are at parity). The `_ubSlots` Map state is a per-Function-body local
-// (avoids a shared global Map that was fragile across concurrent renders of
-// different templates). The GXT reactive tracker getter/setter are passed in as
-// Function() constructor parameters
-// (`Function('__ubGT', '__ubST', templateFnCode)(_gxtGetTracker, _gxtSetTracker)`),
-// so the inlined eval body closes over stable module-bound references without a
-// globalThis surface. See the `templateFnCode` builder (search for `__ubCache`)
-// for the inlined definitions.
+// The GXT serializer emits `__gxtUnboundEval(__ubCache, "__ubN", () =>
+// unbound(...))` for both the `{{unbound X}}` top-level form and inline
+// `(unbound X)` sub-expressions; `__gxtUnboundEval` and its slot state are
+// inlined into the emitted `templateFnCode` Function() body (search for
+// `__ubCache` in the `templateFnCode` builder).
 
 // Runtime guard for the "resolved helper passed as a named argument" form.
 // When a template contains `<Component @name={{helperIdent}} />` (no parens),
@@ -8142,25 +8087,23 @@ function _ensureOnExtAlias(): void {
 // throw the same error. Otherwise this returns undefined (letting the
 // surrounding expression fall through to its original $_maybeHelper path).
 //
-// The guard body is inlined into the emitted `templateFnCode` Function() body
-// (not published on globalThis); the post-processor rewrites the bare named-arg
-// helper pattern `["@name", $_maybeHelper("ident", [], this)]` into
+// The guard body is inlined into the emitted `templateFnCode` Function() body;
+// the post-processor rewrites the bare named-arg helper pattern
+// `["@name", $_maybeHelper("ident", [], this)]` into
 // `["@name", (__gxtAssertNotResolvedHelperAsNamedArg("ident", this),
 // $_maybeHelper("ident", [], this))]`. The body reads only the injected
 // `__gxtBuiltinHelpers` / `__gxtAmbientOwner` Function parameters and
-// `Symbol.for('OWNER')` — no globalThis surface. The inline injection is
-// gated on `hasNamedArgHelperGuard` so templates without the guard pattern
-// pay zero overhead. See the `templateFnCode` builder (search for
+// `Symbol.for('OWNER')`. The inline injection is gated on
+// `hasNamedArgHelperGuard` so templates without the guard pattern pay zero
+// overhead. See the `templateFnCode` builder (search for
 // `__gxtAssertNotResolvedHelperAsNamedArg`) for the inlined definition.
 
 // Global block params stack for yielded values
 // When a slot is rendered with block params, they're pushed here; the `$_bp<N>`
 // getters below read the top of the stack.
-// Cross-file readers (ember-gxt-wrappers' slot-render frames, manager.ts's
-// has-block frames) reach these by REFERENCE through the compilePipeline
-// bridge accessors (getBlockParamsStack / getContextBlockParams /
-// getSlotsContextStack) — the retired `globalThis.__blockParamsStack` /
-// `__contextBlockParams` / `__slotsContextStack` slots.
+// Other files (ember-gxt-wrappers' slot-render frames, manager.ts's has-block
+// frames) reach these by REFERENCE through the compilePipeline bridge accessors
+// (getBlockParamsStack / getContextBlockParams / getSlotsContextStack).
 const blockParamsStack: any[][] = [];
 
 // Per-context block params storage for persistence across re-renders
@@ -8173,13 +8116,11 @@ const contextBlockParams = new WeakMap<object, any[]>();
 // allows re-renders to access them even after the slot function returns
 let currentSlotParams: any[] | null = null;
 
-// The current render's `$slots` / `$fw` — formerly the `globalThis.$slots` /
-// `globalThis.$fw` slots written around every template render. Compiled
-// template Function() bodies read them through the injected `__gxtGetSlots` /
-// `__gxtGetFw` accessor parameters.
+// The current render's `$slots` / `$fw`. Compiled template Function() bodies
+// read them through the injected `__gxtGetSlots` / `__gxtGetFw` accessor
+// parameters.
 // The most recent template render context and the hash-getter construction
-// context (set while a hash-constructed getter runs) — the retired
-// `globalThis.__lastRenderContext` / `__hashGetterCtx` slots; used by the
+// context (set while a hash-constructed getter runs); used by the
 // $_componentHelper mut-parent-context capture.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _gxtLastRenderContext: any;
@@ -8193,10 +8134,9 @@ let _gxtCurrentFw: any;
 const _gxtGetSlotsFn = () => _gxtCurrentSlots;
 const _gxtGetFwFn = () => _gxtCurrentFw;
 
-// Per-template scope-value store — formerly per-template `globalThis
-// .__gxtScope_<hash>` keys. Same late-binding semantics: each compile
-// overwrites its storeKey entry, and compiled bodies read through the
-// injected `__gxtGetScope` accessor parameter PER INVOCATION.
+// Per-template scope-value store. Each compile overwrites its storeKey entry,
+// and compiled bodies read it through the injected `__gxtGetScope` accessor
+// parameter on every invocation, so they see the latest values.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _gxtScopeStore = new Map<string, any>();
 const _gxtGetScopeFn = (key: string) => _gxtScopeStore.get(key);
@@ -8344,8 +8284,7 @@ function _resolveHasBlockArgs(arg1: any, arg2: any): { slots: any; name: string 
 // plain-HTML attribute/SafeString cleanup paths when a namespace is active (the
 // SVG / MathML branches apply their own attributes via `applyNsAttr`).
 //
-// All sites are intra-file. Save/restore tolerates `undefined`, so no lazy-init
-// is needed.
+// Save/restore tolerates `undefined`, so no lazy-init is needed.
 let _gxtNamespace: string | undefined;
 
 // Override $_c to handle CurriedComponent — when a GXT binding (e.g., from {{#let}})
@@ -9394,7 +9333,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
             }
 
             // Create or reuse a persistent class-based helper instance.
-            // The cache prevents re-creation when __gxtForceEmberRerender does
+            // The cache prevents re-creation when `_gxtForceEmberRerender` does
             // a full innerHTML='' + rebuild, which would otherwise create a new
             // instance and inflate createCount / computeCount.
             let helperInstance: any = null;
@@ -9829,12 +9768,11 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
             for (let _ci = 0; _ci < effectiveChildren.length; _ci++) {
               let child = effectiveChildren[_ci];
               // GXT compiles named block children as lazy functions producing
-              // a __isNamedBlock marker. gxt >=0.0.76 MARKS those factories
-              // via $_nbt (fn.$_namedBlock = name, glimmer-next #253) — read
-              // the marker instead of the old `$_tag(':` source sniff
-              // (minify-fragile, the $_isNode lesson). Evaluate ONLY marked
-              // factories to avoid side effects from eagerly evaluating plain
-              // component children.
+              // a __isNamedBlock marker, and marks those factories itself
+              // (`$_nbt` sets `fn.$_namedBlock = name`). Read the marker, not
+              // the function source (which minification changes). Evaluate
+              // ONLY marked factories to avoid side effects from eagerly
+              // evaluating plain component children.
               if (
                 typeof child === 'function' &&
                 !child.__isCurriedComponent &&
@@ -9941,13 +9879,12 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
                       !child.__isCurriedComponent &&
                       !(child instanceof Node)
                     ) {
-                      // Node-producing child thunks are MARKED by the gxt ≥0.0.70
-                      // compiler (`$_nt` sets `$_isNode` on every component-child DOM
+                      // Node-producing child thunks are MARKED by the gxt compiler
+                      // (`$_nt` sets `$_isNode` on every component-child DOM
                       // producer, AST-driven — including `$_each*` children, whose
                       // component rows match the wrap predicate recursively). Unmarked
-                      // functions are reactive text getters. This replaces the former
-                      // `.toString()` source sniff, which false-negatived under
-                      // minification.
+                      // functions are reactive text getters. The marker, unlike a
+                      // `.toString()` source check, survives minification.
                       if ((child as any).$_isNode === true) {
                         try {
                           return child();
@@ -10091,14 +10028,14 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
             // During a force-rerender (e.g., runTask(() => set(items, ...))),
             // manager.ts's renderClassicComponent skips willRender/willUpdate
             // for reused pooled instances (skipInitHooks = isReused && isForceRerender)
-            // and __gxtSyncAllWrappers is never invoked by GXT to fire the
+            // and `_gxtSyncAllWrappers` is never invoked by GXT to fire the
             // deferred hooks. Classic lifecycle contract requires `willRender`
             // to fire on every re-render whose args changed (test #11044
             // "component helper properly invalidates hash params inside an
             // {{#each}}" depends on this). After handle() runs we fire the
             // update hooks on the last-created/reused instance so that any
             // `set()` inside willRender propagates through Ember's
-            // notifyPropertyChange → __gxtTriggerReRender → cell.update chain
+            // notifyPropertyChange → `_gxtTriggerReRender` → cell.update chain
             // and the DOM is re-read in the post-runTask sync.
             // Snapshot the force-rerender flag BEFORE `handle()` runs so the
             // post-`finally` block can gate willRender/didUpdateAttrs fan-out on
@@ -10131,10 +10068,10 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
             }
             if (__forceRerenderSnapshot) {
               const _inst = peekInstanceCapture();
-              // Fire willRender/willUpdate ONLY if __gxtSyncAllWrappers did not
+              // Fire willRender/willUpdate ONLY if `_gxtSyncAllWrappers` did not
               // already fire them on this instance for the current sync cycle.
-              // syncAll is wrapped above to stamp `__gxtSyncAllFiredCycleId`
-              // on any instance whose update hooks it fires via `trigger`.
+              // manager.ts stamps `__gxtSyncAllFiredCycleId` on any instance
+              // whose update hooks syncAll fires via `trigger`.
               // This gate prevents double-firing for direct-invocation args
               // (e.g. {{non-block prop=this.x}}) while still firing for
               // each-iteration re-renders whose parent-getter captures an
@@ -10887,8 +10824,8 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
     // original GXT `$_tag` in that state crashes in `n(ctx).element(...)` because
     // the walker (St/Q-based) cannot climb to any ancestor — the parent linkage
     // was never recorded. Fall back to the global gxt root's rendering context so
-    // the DOM API is available for element creation. This mirrors the recovery
-    // path used in the top-level `template.render` entry (see line ~8255).
+    // the DOM API is available for element creation, as the top-level
+    // `template.render` entry does.
     if (RENDERING_CONTEXT_PROPERTY && ctx && typeof ctx === 'object') {
       const rcKey = RENDERING_CONTEXT_PROPERTY as any;
       const existing = (ctx as any)[rcKey];
@@ -11304,24 +11241,11 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
   g.$_tag.__compileWrapped = true;
 }
 
-// NOTE(#245 consumption deferred): gxt >=0.0.72 derives manager fw from the
-// invocation props tuple natively, but the full-gate run of the minimal
-// wrapper showed the YIELDED CONTEXTUAL component splat-merge cases (3
-// AngleBracket "merges class attribute with ...attributes in yielded
-// contextual component" tests) regress without this wrapper's
-// renderCurriedWithFw path — the native dispatch misses that merge shape.
-// Keep the full wrapper until the upstream covers it (report on #245).
-// #245 CONSUMED: the ~160-line $_dc splat-forward wrapper (with its
-// `.toString().includes('$_bp')` source sniff) is deleted. Ember's own
-// `$_dc_ember.renderComponent` (ember-gxt-wrappers.ts) now derives the manager
-// fw from the invocation props tuple via gxt's exported
-// hasDynamicSplatProps/deriveManagerFwFromPropsTuple (0.0.72+) and passes it
-// to `managers.component.handle` — the root cause of the yielded-contextual
-// splattributes regressions was that it passed fw=null (gxt's native $_dc
-// split is bypassed for ember curried/string components by design).
-// ONE residual stays: a block-param component getter may THROW before its
-// params are bound (a slot that hasn't fired yet) — defer via a lazy component
-// thunk that re-invokes $_dc once the getter resolves.
+// `$_dc` wrapper: a block-param component getter may THROW before its params
+// are bound (a slot that hasn't fired yet) — defer via a lazy component thunk
+// that re-invokes $_dc once the getter resolves. (The manager fw for
+// splattributes is derived in `$_dc_ember.renderComponent`,
+// ember-gxt-wrappers.ts, from the invocation props tuple.)
 if (g.$_dc && !g.$_dc.__splatForwardWrapped) {
   const __origDc = g.$_dc;
 
@@ -11355,60 +11279,8 @@ if (g.$_dc && !g.$_dc.__splatForwardWrapped) {
 
 // Template cache for performance
 const templateCache = new Map<string, any>();
-/**
- * Transform {{#each-in EXPR as |KEY VALUE|}}BODY{{else}}ELSE{{/each-in}}
- * into {{#each (gxtEntriesOf EXPR) key="@identity" as |__ei__|}}{{#let __ei__.k __ei__.v as |KEY VALUE|}}BODY{{/let}}{{else}}ELSE{{/each}}
- *
- * This avoids Ember's (-each-in) SubExpression which GXT doesn't understand.
- * gxtEntriesOf returns [{k, v}, ...] for objects, Maps, proxies, custom iterables.
- * The let block destructures each entry into the original key/value block params.
- *
- * Handles nesting by processing from innermost to outermost.
- */
-// Triple-mustache `{{{expr}}}` → `<EmberHtmlRaw @value={{expr}} />` is now handled
-// by the `gxtTripleMustacheTransform` AST visitor (see `buildGxtDialectTransforms`),
-// which detects the `escaped === false` `MustacheStatement` and reproduces the
-// rawtext fallback via an ancestor lookup. The former `transformTripleMustaches`
-// template-source string scanner lived here.
-
-// `_dynVarCounter` (the `-with-dynamic-vars` scope-var uniqueness counter) moved
-// to ast-transforms.ts with `gxtDynamicVarsTransform`, its sole consumer.
-
-// `{{#-with-dynamic-vars …}}` / `{{-get-dynamic-var "…"}}` lowering is now handled
-// by the `gxtDynamicVarsTransform` AST visitor (see `buildGxtDialectTransforms`),
-// which recurses the AST, fires the same `Ember.assert` diagnostics, and builds the
-// `{{#let EXPR as |VAR|}}` scope with generated block-param names. The former
-// `_findInnermostWithDynamicVars` / `_parseDynamicVarsArgs` / `_rewriteGetOutletInBody`
-// / `transformDynamicVars` string scanners lived here. `_dynVarCounter` above is now
-// consumed by the AST visitor.
-
-// `{{#each-in EXPR as |k v|}}` → `{{#each (gxtEntriesOf EXPR) …}}` rewriting
-// is now handled by the `gxtEachInTransform` AST visitor (see
-// `buildGxtDialectTransforms`), which recurses the AST and splits `{{else}}`
-// inverses for free. The former `transformEachInBlocks` + `splitElse` string
-// scanners lived here.
 
 let _functionCodeCache: Map<string, Function> | null = null;
-
-// HTML comments `<!-- ... -->` are now preserved by the `gxtHtmlCommentTransform`
-// AST visitor, and the implicit `<table><tbody>` wrap is now inserted by the
-// `gxtTableTbodyTransform` AST visitor (both wired into the compiler `transforms`
-// hook — see `buildGxtDialectTransforms`). The former `_preserveHtmlComments` and
-// `transformTableTbody` template-source string scanners lived here.
-
-// Zero-arg bare kebab-case mustaches in BODY position (`{{my-component}}` →
-// `<MyComponent />`) are now lowered by the `gxtBodyBareHelperTransform` AST
-// visitor (see `buildGxtDialectTransforms`), which visits `MustacheStatement`
-// nodes and uses the parsed node classification for the position-awareness the
-// former string scanner hand-rolled (open-tag / quoted-attr / comment /
-// triple-stache / block skipping). The former `transformBodyBareHelperMustaches`
-// string scanner lived here.
-
-// Bare-identifier helper mustaches inside quoted attribute values
-// (`attr="{{foo-bar}}"` → `attr="{{(foo-bar)}}"`) are now handled by the
-// `gxtAttrQuotedHelperTransform` AST visitor (see `buildGxtDialectTransforms`),
-// which targets `AttrNode` values directly. The former
-// `transformAttrQuotedHelperMustaches` string scanner lived here.
 
 /**
  * Map of GXT block-keyword names that must be rewritten to a PascalCase
@@ -11529,32 +11401,31 @@ function _scopeNameAppearsAsReference(template: string, name: string): boolean {
   return re.test(template);
 }
 
-// ── P4 increment 0: native-templateFn dual path ─────────────────────────────
+// ── Native-templateFn dual path ─────────────────────────────────────────────
 // gxt's compileTemplate already builds a finished templateFn from the compiled
 // code (runtime-compiler.ts fnBody: `$_GET_ARGS(this, arguments)` + the
-// flag-driven $a/$slots/$fw preamble + `return CODE`) — the bridge historically
-// DISCARDED it and re-assembled its own Function around a regex-patched copy of
-// the code. A template can ride the native fn only when NONE of the bridge's
-// post-emission rewrites / wrapper injections would fire for it; this predicate
-// whitelists exactly that set (leaf presentational templates), everything else
-// keeps the legacy assembly. The native path is the strategic convergence step:
-// $_GET_ARGS puts the render context into gxt's component TREE (fresh id via
-// `??= cId()`, addToTree under the ambient gxtRoot parent), which is what
-// unlocks gxt-native destroy sequencing for ember components.
-// P4 increment 2: scopeValues are threaded into gxtCompileTemplate (gxt binds
-// them as real Function parameters) when EVERY key is a plain valid JS
-// identifier — matching gxt's emitted identifier references verbatim. Keys
-// needing the legacy normalization machinery (hyphens → underscore rewrite,
-// reserved-word `__scope_` prefixing, kebab-identifier code surgery) keep the
-// legacy path; a leading `$` is rejected too so user scope can never collide
-// with gxt's own `$a`/`$slots`/`$fw` preamble locals or `$_*` params. (gxt's
-// own scope-name validation THROWS on invalid identifiers — this guard is
-// what makes passing scopeValues safe for the shared compile call.)
+// flag-driven $a/$slots/$fw preamble + `return CODE`); the legacy path instead
+// assembles its own Function around a rewritten copy of the code. A template
+// can ride the native fn only when NONE of the legacy post-emission rewrites /
+// wrapper injections would fire for it; `_gxtNativeTemplateEligible`
+// whitelists exactly that set, everything else keeps the legacy assembly. On
+// the native path $_GET_ARGS puts the render context into gxt's component TREE
+// (fresh id via `??= cId()`, addToTree under the ambient gxtRoot parent),
+// which gives ember components gxt-native destroy sequencing.
+// scopeValues are threaded into gxtCompileTemplate (gxt binds them as real
+// Function parameters) when EVERY key is a plain valid JS identifier —
+// matching gxt's emitted identifier references verbatim. Keys needing the
+// legacy normalization machinery (hyphens → underscore rewrite, reserved-word
+// `__scope_` prefixing, kebab-identifier code surgery) keep the legacy path; a
+// leading `$` is rejected too so user scope can never collide with gxt's own
+// `$a`/`$slots`/`$fw` preamble locals or `$_*` params. (gxt's own scope-name
+// validation THROWS on invalid identifiers — this guard is what makes passing
+// scopeValues safe for the shared compile call.)
 const _GXT_NATIVE_SCOPE_IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
 // Names that pass the identifier regex but are NOT usable as Function
 // parameter names (literals + strict-mode-restricted). JS_RESERVED_WORDS
 // covers statement keywords; these are the residue (`new Function('true', …)`
-// is a SyntaxError — gate-proven via the eval-form's `{{if true …}}`).
+// is a SyntaxError, e.g. for the eval form's `{{if true …}}`).
 const _GXT_UNSAFE_PARAM_NAMES = new Set([
   'true',
   'false',
@@ -11586,32 +11457,20 @@ function _gxtFindAddedToTreeSym(obj: object): symbol | null {
   if (s) _gxtAddedToTreeSymCache = s;
   return s ?? null;
 }
-// Identifiers whose presence in the COMPILED CODE means the legacy wrapper's
-// injections/rewrites are load-bearing for this template (keyword-helper
-// locals, each-in entries, outlet state, comment-registry lookups, unbound
-// cache, mut writers, unique-id counters).
-// (P4 routing notes: the `$_each*(`, `$_qStr(` and `].join("")` blockers that
-// once lived here are all retired — each-containing and quoted-attr templates
-// ride the native templateFn. The prior evidence against native eachs was
-// gathered while the compile flags were silently inert (the duplicate-
-// flags-key bug) and did not reproduce on the clean re-baseline; the
-// quoted-attr "deltas" were the corrupt 0.0.72 dist + a stale vite dep-cache.)
-// Native-vs-legacy routing is driven ENTIRELY by gxt's ground-truth emission
-// report (gxt >=0.0.74, glimmer-next #250: CompileResult.emittedSymbols /
-// maybeHelperNames / maybeHelperInNamedArgPosition / referencedBindings,
-// collected by the serializer at emission time) — the former
-// regex-over-generated-JS blockers and template-source scans are deleted.
+// Native-vs-legacy routing is driven ENTIRELY by gxt's emission report
+// (CompileResult.emittedSymbols / maybeHelperNames /
+// maybeHelperInNamedArgPosition / referencedBindings / emittedIdentifiers,
+// collected by the serializer at emission time) — no scans of the generated
+// code or the template source.
 //
 // Names that route a template to the legacy wrapper because a legacy-only
 // injection/rewrite is load-bearing for them:
 // - MAYBE-HELPER names: `unbound` (the __gxtUnboundEval freeze/replay
-//   rewrite), `unique-id` (the per-instance stable-id counter rewrite),
-//   `__mutGet` (mut writer plumbing).
+//   rewrite) and `__mutGet` (mut writer plumbing).
 // - REFERENCED BINDINGS: the ember-injected locals the legacy Function
-//   provides (each-in entries, outlet state, comment registry, mut writer,
-//   unique-id impl) and the keyword-helper locals the legacy wrapper shadows
-//   with ember-spec implementations.
-// ('unique-id' left this set with gxt 0.0.76: $_uid is first-class native.)
+//   provides (each-in entries, outlet state, comment registry, mut writer)
+//   and the keyword-helper locals the legacy wrapper shadows with ember-spec
+//   implementations.
 const _GXT_LEGACY_MAYBE_HELPER_NAMES = new Set(['unbound', '__mutGet']);
 // The JS-identifier keyword helpers plus the ember-injected locals, which the
 // legacy Function declares as `const <name> = __gxtBuiltinHelpers[<name>]`
@@ -11624,11 +11483,10 @@ const _GXT_LEGACY_HELPER_LOCALS: readonly string[] = [
 ];
 const _GXT_LEGACY_BINDING_NAMES = new Set([
   // gxt's raw-embedded {{unbound}} islands reference the legacy-provided
-  // `globalThis.__gxtUnboundEval(...)` — since gxt 0.0.78 (#255) the report
-  // records the MEMBER name for globalThis.* roots (and the compound-island
-  // scan also surfaces the nested `unbound` callee, which the entry below
-  // already blocks). Kept as a belt for island shapes where the bare name
-  // isn't visible.
+  // `globalThis.__gxtUnboundEval(...)`; the report records the MEMBER name for
+  // globalThis.* roots (and the compound-island scan also surfaces the nested
+  // `unbound` callee, which the maybe-helper set already blocks). Kept for
+  // island shapes where the bare name isn't visible.
   '__gxtUnboundEval',
   ..._GXT_LEGACY_HELPER_LOCALS,
 ]);
@@ -11638,21 +11496,20 @@ function _gxtNativeTemplateEligible(
 ): boolean {
   if (!cr || typeof cr.templateFn !== 'function') return false;
   if (cr.errors && cr.errors.length > 0) return false;
-  // Increment 2: NON-STRICT scoped templates are eligible when their
-  // scopeValues were threaded into gxtCompileTemplate as native Function
-  // params (all keys plain identifiers — see _gxtScopeValuesNativeSafe) AND no
-  // key collides with the ember builtin-helper table (the legacy
-  // helperInjections deliberately SHADOW such keys with ember-spec callable
-  // implementations — e.g. a scope-passed `fn` from '@ember/helper' is an
-  // internal helper definition, not directly callable; gate-proven by the
-  // keyword-helper fn MustacheStatement test).
+  // NON-STRICT scoped templates are eligible when their scopeValues were
+  // threaded into gxtCompileTemplate as native Function params (all keys plain
+  // identifiers — see _gxtScopeValuesNativeSafe) AND no key collides with the
+  // ember builtin-helper table (the legacy helperInjections deliberately
+  // SHADOW such keys with ember-spec callable implementations — e.g. a
+  // scope-passed `fn` from '@ember/helper' is an internal helper definition,
+  // not directly callable; the keyword-helper fn MustacheStatement test
+  // covers it).
   //
-  // STRICT MODE stays legacy for now: two gate-proven gaps — the
-  // builtin-shadowing above, and the implicit-eval (`template(src, {eval})`)
-  // component-module flow, which renders empty on the native path while the
-  // same emission renders correctly standalone (root cause in the
-  // component-module interplay, not the emission; revisit as its own
-  // increment).
+  // STRICT MODE stays legacy: two known gaps — the builtin-shadowing above,
+  // and the implicit-eval (`template(src, {eval})`) component-module flow,
+  // which renders empty on the native path while the same emission renders
+  // correctly standalone (root cause in the component-module interplay, not
+  // the emission).
   if (options?.strictMode === true) return false;
   if (options?.scopeValues) {
     if (!_gxtScopeValuesNativeSafe(options.scopeValues)) return false;
@@ -11660,21 +11517,17 @@ function _gxtNativeTemplateEligible(
       if (Object.prototype.hasOwnProperty.call(_emberBuiltinHelpers, key)) return false;
     }
   }
-  // {{yield}} / splattributes: allowed since increment 1 — the render seam
-  // mirrors _gxtCurrentSlots/_gxtCurrentFw onto ctx['args'][$SLOTS/$PROPS]
-  // so gxt's native $_GET_SLOTS/$_GET_FW preamble resolves the SAME objects
-  // the legacy __gxtGetSlots/__gxtGetFw params provided. Recycle stays
-  // excluded (runtime-recycle registration is not wired on this path).
+  // {{yield}} / splattributes are allowed: the render seam mirrors
+  // _gxtCurrentSlots/_gxtCurrentFw onto ctx['args'][$SLOTS/$PROPS] so gxt's
+  // native $_GET_SLOTS/$_GET_FW preamble resolves the SAME objects the legacy
+  // __gxtGetSlots/__gxtGetFw params provide. Recycle stays excluded
+  // (runtime-recycle registration is not wired on this path).
   if (cr.usedRecycle === true) return false;
   // ── Pure ground-truth checks on the emission report (no code/source scans) ──
   const maybeHelperNames: readonly string[] = cr.maybeHelperNames || [];
   const referencedBindings: readonly string[] = cr.referencedBindings || [];
-  // ({{#in-element}} left the block with the EMBER_IN_ELEMENT mode-arg
-  // consumption — the insertBefore semantics ride the emission, and the ember
-  // $_inElement shim is a GLOBAL override serving both paths. {{log}} left
-  // with gxt 0.0.76 — site ids arrive globally unique.)
   // Legacy-only rewrites keyed on specific unresolved-helper names
-  // (unbound freeze/replay, unique-id stable counters, mut writer).
+  // (unbound freeze/replay, mut writer).
   for (const name of maybeHelperNames) {
     if (_GXT_LEGACY_MAYBE_HELPER_NAMES.has(name)) return false;
   }
@@ -11683,11 +11536,10 @@ function _gxtNativeTemplateEligible(
   for (const binding of referencedBindings) {
     if (_GXT_LEGACY_BINDING_NAMES.has(binding)) return false;
   }
-  // Free identifiers the serializer emitted regardless of binding provenance
-  // (gxt >=0.0.75, #251) — covers bare keyword references like
-  // `{{yield (get …)}}` emitting `get(` for a name that was never a caller
-  // binding (referencedBindings is caller-provided-only). This replaced the
-  // last regex over generated code in the routing.
+  // Free identifiers the serializer emitted regardless of binding provenance —
+  // covers bare keyword references like `{{yield (get …)}}` emitting `get(` for
+  // a name that was never a caller binding (referencedBindings is
+  // caller-provided-only).
   const emittedIdentifiers: readonly string[] = cr.emittedIdentifiers || [];
   for (const id of emittedIdentifiers) {
     if (_GXT_LEGACY_BINDING_NAMES.has(id)) return false;
@@ -11884,72 +11736,17 @@ export function precompileTemplate(
     }
   }
 
-  // The `<TextArea />` typo is now DETECTED by the `gxtTextAreaTypoAssert` AST
-  // visitor wired into the GXT compiler's `transforms` hook below (see
-  // `buildGxtDialectTransforms`); the assert itself fires from this function
-  // just after the compile call (`_gxtDialectFindings.textArea`). The former
-  // `hasTextAreaTag` source scanner is gone. No template-source scan needed.
+  // The Ember-dialect source rewrites (`{{outlet}}`, `{{#each-in}}`, `{{{…}}}`,
+  // HTML comments, the implicit `<tbody>`, quoted-attribute and body bare
+  // helpers, `{{#@arg}}` blocks, block params, dynamic vars, `{{on}}` hash
+  // args) and the source asserts (`<TextArea />` typo, dotted paths with a free
+  // head, dynamic `(helper)` / `(modifier)`) run as AST visitors in the GXT
+  // compiler's `transforms` hook (see `buildGxtDialectTransforms` in
+  // ast-transforms.ts). The asserts fire from this function just after the
+  // compile call, from `_gxtDialectFindings`.
 
   // Transform the template
   let transformedTemplate = templateString;
-
-  // Pre-transform: rewrite bare-identifier helper mustaches in HTML attribute
-  // quoted values from `attr="{{foo-bar}}"` → `attr="{{(foo-bar)}}"`.
-  //
-  // Bare-identifier helper mustaches inside quoted attribute values
-  // (`attr="{{foo-bar}}"` → `attr="{{(foo-bar)}}"`) are now handled by the
-  // `gxtAttrQuotedHelperTransform` AST visitor wired into the GXT compiler's
-  // `transforms` hook below (see `buildGxtDialectTransforms`). No
-  // template-source string rewrite needed.
-
-  // Zero-arg bare kebab-case mustaches in BODY position (`{{my-component}}` →
-  // `<MyComponent />`) are now lowered by the `gxtBodyBareHelperTransform` AST
-  // visitor wired into the GXT compiler's `transforms` hook below (see
-  // `buildGxtDialectTransforms`). The visitor receives `options?.scopeValues` so
-  // explicitly scope-bound kebab names (rehydration fixtures, strict-mode
-  // locals) keep their `{{name}}` form. No template-source string rewrite needed.
-
-  // {{outlet}} → <ember-outlet /> is now handled by the `gxtOutletTransform`
-  // AST visitor wired into the GXT compiler's `transforms` hook below
-  // (see `buildGxtDialectTransforms`). No template-source string rewrite needed.
-
-  // `<table><tr>` → `<table><tbody><tr>` (the implicit-tbody HTML-parser fix-up)
-  // is now inserted by the `gxtTableTbodyTransform` AST visitor wired into the
-  // GXT compiler's `transforms` hook below (see `buildGxtDialectTransforms`). No
-  // template-source string rewrite needed.
-
-  // {{#-with-dynamic-vars ...}} / {{-get-dynamic-var ...}} lowering is now handled
-  // by the `gxtDynamicVarsTransform` AST visitor wired into the GXT compiler's
-  // `transforms` hook below (see `buildGxtDialectTransforms`). It lowers
-  // `{{#-with-dynamic-vars outletState=EXPR}}BODY{{/-with-dynamic-vars}}` to
-  // `{{#let EXPR as |VAR|}}BODY'{{/let}}` (inner `{{-get-dynamic-var "outletState"}}`
-  // → `{{VAR}}`), lowers remaining top-level `{{-get-dynamic-var "outletState"}}`
-  // to the `gxtGetOutletState` built-in helper, and fires the same Ember.assert
-  // diagnostics on non-`outletState` keys (now from inside the visitor). The
-  // `gxtGetOutletState` scope binding is still added below (gated on the source
-  // containing `-get-dynamic-var`) so the compiler emits a bare binding reference.
-
-  // {{#each-in EXPR as |k v|}} → {{#each (gxtEntriesOf EXPR) …}} is now handled
-  // by the `gxtEachInTransform` AST visitor wired into the GXT compiler's
-  // `transforms` hook below (see `buildGxtDialectTransforms`). The
-  // `gxtEntriesOf` scope binding is still added below (gated on the source
-  // containing `{{#each-in`) so the compiler emits a bare binding reference.
-
-  // Triple-mustache {{{expr}}} → <EmberHtmlRaw @value={{expr}} /> is now handled
-  // by the `gxtTripleMustacheTransform` AST visitor wired into the GXT compiler's
-  // `transforms` hook below (see `buildGxtDialectTransforms`). It detects the
-  // `escaped === false` MustacheStatement and emits the same EmberHtmlRaw element
-  // (with the rawtext `{{expr}}` fallback inside title/script/style/textarea).
-  // The ember-gxt-wrappers render mechanism is untouched. No source rewrite needed.
-
-  // HTML comments <!-- ... --> are now preserved by the `gxtHtmlCommentTransform`
-  // AST visitor wired into the GXT compiler's `transforms` hook below (see
-  // `buildGxtDialectTransforms`). It converts each `CommentStatement` to the same
-  // `<EmberHtmlRaw @value={{(__gxtCommentLookup "<token>")}} />` invocation, using
-  // the unchanged `_gxtCommentRegistry` + `__gxtCommentLookup` resolver (whose
-  // `<!---->` / `<!--/htmlRaw-->` markers `MARKER_COMMENT_RE` in snapshot.ts still
-  // strips). Handlebars comments `{{! }}` / `{{!-- --}}` parse as
-  // `MustacheCommentStatement` and are left to be stripped. No source rewrite needed.
 
   // {{on "evt" handler once=X capture=Y passive=Z}} — the `gxtOnModifierTransform`
   // AST visitor (wired below) renames the modifier to the `on-ext` alias so
@@ -11977,28 +11774,13 @@ export function precompileTemplate(
     }
   }
 
-  // Dotted-path mustache expressions like `{{foo.bar}}` where `foo` is a free
-  // variable not in scope are now DETECTED by the `gxtDottedMustacheAssert` AST
-  // visitor wired into the GXT compiler's `transforms` hook below (see
-  // `buildGxtDialectTransforms`); the throw fires from this function just after
-  // the compile call (`_gxtDialectFindings.dottedMustache`). The block-param +
-  // strict-mode-binding sets it consults are computed once
-  // (`_gxtDialectBlockParamNames`) just before the compile call and threaded in.
-  // The former `findDottedMustaches` source scanner is gone.
-
-  // Transform {{#in-element dest insertBefore=EXPR}} to extract the insertBefore
-  // parameter. GXT's native $_inElement only takes (elementRef, roots, ctx) but
-  // Ember also supports insertBefore=null (append mode) and validates the destination.
-  // We strip the insertBefore param from the template and set a global flag
-  // that our $_inElement override reads at runtime.
-  // Possible insertBefore values:
-  //   null      → append mode (don't clear existing content)
-  //   undefined → replace mode (default, clear existing content)
-  //   other     → assert error (Ember only allows null)
-  // Extracted literal string destination ids for `{{#in-element (... "id")}}`
-  // in template order. Used by $_inElement as a fallback when the reactive
+  // Literal string destination ids of `{{#in-element (... "id")}}` blocks, in
+  // template order. $_inElement uses them as a fallback when the reactive
   // destination ref resolves to null during a render-order-timing situation
-  // (nested component rendering before the outer fragment is committed).
+  // (nested component rendering before the outer fragment is committed). The
+  // template itself reaches gxt unstripped: with the EMBER_IN_ELEMENT flag the
+  // compiler reads the `insertBefore=` hash and passes the mode as
+  // $_inElement's 4th argument.
   const _inElementLiteralIds: string[] = [];
   if (transformedTemplate.includes('{{#in-element')) {
     // Scan the pre-parse template for literal string ids inside each
@@ -12023,31 +11805,7 @@ export function precompileTemplate(
         i = endTag + 2;
       }
     }
-    // NOTE: the `parseInElementInsertBefore` strip-and-signal pre-parse is
-    // retired — with the EMBER_IN_ELEMENT compile flag (gxt >=0.0.76) the
-    // compiler reads the `insertBefore=` hash at the AST and emits the mode
-    // as $_inElement's 4th argument; the template must reach gxt UNSTRIPPED.
   }
-
-  // Dynamic `(helper)` / `(modifier)` usage — `{{helper this.xxx}}` /
-  // `(modifier this.xxx)` etc. — is disallowed in Ember and is now DETECTED by
-  // the `gxtDynamicHelperAssert` / `gxtDynamicModifierAssert` AST visitors wired
-  // into the GXT compiler's `transforms` hook below (see
-  // `buildGxtDialectTransforms`); the asserts fire from this function just after
-  // the compile call (`_gxtDialectFindings.dynamicHelper` / `.dynamicModifier`).
-  // The former `hasDynamicHelper` / `hasDynamicModifier` source scanners are gone.
-
-  // {{#@argName args}}content{{/@argName}} block invocations are now lowered to
-  // {{#component @argName args}}content{{/component}} by the
-  // `gxtBlockAtArgTransform` AST visitor wired into the GXT compiler's
-  // `transforms` hook below (see `buildGxtDialectTransforms`). No
-  // template-source string rewrite needed.
-
-  // Block params transform (`<Foo as |x|>{{x}}</Foo>` → `<Foo @__hasBlockParams__="default">{{this.$_bp0}}</Foo>`)
-  // is now handled by the `gxtBlockParamsTransform` AST visitor wired into the GXT
-  // compiler's `transforms` hook below (see `buildGxtDialectTransforms`). The
-  // visitor is shadow-aware (the former `transformBlockParamsInTemplate` string
-  // scanner was not). No template-source string rewrite needed.
 
   // Build bindings set from scopeValues so the GXT compiler knows which names
   // are in scope and should NOT be transformed to built-in symbols (e.g. the
@@ -12059,33 +11817,26 @@ export function precompileTemplate(
     }
   }
 
-  // NOTE: the `unique_id` scope-binding hack is retired — gxt >=0.0.76 emits
-  // `{{unique-id}}` as the first-class stable `$_uid(this, SITE)` helper
-  // (glimmer-next #252), resolved through the runtime symbol table.
-
   // Add gxtEntriesOf to scope bindings whenever the source contains an
-  // `{{#each-in` block. The `gxtEachInTransform` AST visitor (wired below)
-  // injects a `(gxtEntriesOf …)` SubExpression during compile, so the binding
-  // must be present up front for the compiler to emit a bare binding reference
-  // (`gxtEntriesOf`) instead of a string lookup (`"gxtEntriesOf"`). We gate on
-  // the original `templateString` (not the post-string-transform
-  // `transformedTemplate`) since the AST rewrite no longer puts the name in the
-  // source. `{{#each-in` is exactly the precondition the former
-  // `transformEachInBlocks` loop used.
+  // `{{#each-in` block. The `gxtEachInTransform` AST visitor injects a
+  // `(gxtEntriesOf …)` SubExpression during compile, so the binding must be
+  // present up front for the compiler to emit a bare binding reference
+  // (`gxtEntriesOf`) instead of a string lookup (`"gxtEntriesOf"`). The check
+  // reads the original `templateString`: the name only appears after the AST
+  // rewrite.
   if (templateString.indexOf('{{#each-in') !== -1) {
     scopeBindings.add('gxtEntriesOf');
   }
 
   // Add gxtGetOutletState to scope bindings whenever the source contains a
   // `-get-dynamic-var` call (either form). The `gxtDynamicVarsTransform` AST
-  // visitor (wired below) injects a `(gxtGetOutletState)` SubExpression during
-  // compile for top-level / non-`outletState` gets, so the binding must be
-  // present up front for the compiler to emit a bare binding reference
+  // visitor injects a `(gxtGetOutletState)` SubExpression during compile for
+  // top-level / non-`outletState` gets, so the binding must be present up
+  // front for the compiler to emit a bare binding reference
   // (`gxtGetOutletState`) rather than a string lookup (`"gxtGetOutletState"`).
-  // We gate on the original `templateString` (not the post-string-transform
-  // `transformedTemplate`) since the AST rewrite no longer puts the name in the
-  // source. The OR keeps the prior behavior for a template that literally
-  // mentions `gxtGetOutletState`. An unused binding (all gets in-scope) is inert.
+  // The check reads the original `templateString`: the name only appears after
+  // the AST rewrite. The second test covers a template that literally mentions
+  // `gxtGetOutletState`. An unused binding (all gets in-scope) is inert.
   if (
     templateString.indexOf('-get-dynamic-var') !== -1 ||
     containsWord(transformedTemplate, 'gxtGetOutletState')
@@ -12105,15 +11856,13 @@ export function precompileTemplate(
   // Block-param names for the `gxtDottedMustacheAssert` visitor (it must not flag
   // a `{{foo.bar}}` whose `foo` is brought into scope by an `as |foo|` block
   // param). Computed once on the post-transform source and threaded into the
-  // dialect transforms, matching the former pre-compile `findDottedMustaches`
-  // call site (which used `findBlockParamNames(transformedTemplate)`).
+  // dialect transforms.
   const _gxtDialectBlockParamNames = findBlockParamNames(transformedTemplate);
 
   // Ember-dialect assert findings, populated by the read-only assert-detection
   // visitors during the compile traverse and acted on immediately after the
   // compile call below (see GxtAssertFindings for why the throw cannot live in
-  // the visitor itself). Replaces the former pre-compile `hasTextAreaTag` /
-  // `findDottedMustaches` / `hasDynamicHelper` / `hasDynamicModifier` scans.
+  // the visitor itself).
   const _gxtDialectFindings: GxtAssertFindings = {
     textArea: false,
     dynamicHelper: false,
@@ -12125,47 +11874,22 @@ export function precompileTemplate(
   const compilationResult = gxtCompileTemplate(transformedTemplate, {
     moduleName: options?.moduleName || 'gxt-runtime-template',
     bindings: scopeBindings.size > 0 ? scopeBindings : undefined,
-    // P4 increment 3 (gxt >=0.0.72): first-class emission flags —
-    //   FORCE_SYNC_LIST: {{#each}} emits $_eachSync/$_eachSyncRecycled from
-    //     buildEach (classic Ember needs synchronous list DOM mutation).
-    //     NOTE the legacy `$_each(` -> `$_eachSync(` regex below is KEPT as a
-    //     belt for now: flag emission was verified byte-identical to the regex
-    //     output for every probed shape (the regex is a no-op and harmless),
-    //     but the migration debug session's bisects were confounded by HMR
-    //     staleness, so the belt stays until its removal is re-verified as its
-    //     own gated experiment — together with the native-path each blocker.
-    //     (gxt #246 additionally fixed templateToTypescript dropping the whole
-    //     flag set — a real gap, though on a path ember doesn't use.)
-    //   EMBER_ATTR_CONCAT: interpolated quoted attrs emit `$_qStr([...])`
-    //     with Ember string-coercion semantics incl. all-nullish -> null,
-    //     replacing the hand-rolled `].join("")` bracket-surgery rewrite (the
-    //     surgery + __gxtQuotedAttr injection are KEPT below as join-targeted
-    //     no-ops until their removal is gated separately).
-    // ⚠ The flag values themselves live in the `flags:` key FURTHER DOWN in
-    // this same object literal (after `transforms:`) — a second `flags:` key
-    // here would silently overwrite it (duplicate keys: later wins). That
-    // exact bug shipped the first landing of this increment: the flags never
-    // reached the compiler, every in-browser probe ran on flag-less emission,
-    // and the debug session chased phantom causes (the "HMR confounding"
-    // theory was wrong; the bisects faithfully showed the regex doing all the
-    // work because the flag was inert).
-    // P4 increment 2: thread scopeValues as native Function params when all
-    // keys are plain identifiers (gxt's scope-name validation throws
-    // otherwise). The native templateFn then resolves scope references
-    // directly; legacy-normalization cases pass undefined and keep riding the
-    // __gxtGetScope injections.
+    // The emission flags are set in the `flags:` key below (after
+    // `transforms:`). ⚠ Do not add a second `flags:` key to this object
+    // literal: duplicate keys silently overwrite (the later one wins), so the
+    // flags would never reach the compiler.
+    // scopeValues are passed as native Function params when all keys are plain
+    // identifiers (gxt's scope-name validation throws otherwise). The native
+    // templateFn then resolves scope references directly; legacy-normalization
+    // cases pass undefined and use the __gxtGetScope injections.
     scopeValues:
       options?.scopeValues && _gxtScopeValuesNativeSafe(options.scopeValues)
         ? options.scopeValues
         : undefined,
     // Ember dialect AST transforms (public `transforms` hook). These run on the
-    // parsed AST after preprocess / before codegen and replace the former
-    // string pre-rewrites for `{{outlet}}`, `{{#@arg}}` blocks, quoted-attribute
-    // bare-helper mustaches, `{{#each-in}}`, and (when not scope-shadowed)
-    // `{{on}}`→`{{on-ext}}`. See `buildGxtDialectTransforms` above. REQUIRES a
-    // glimmer-next build that exposes `CompileOptions.transforms` (PR #217 /
-    // next publish); the currently published 0.0.63 ignores this field — see
-    // the file-footer landing note.
+    // parsed AST after preprocess / before codegen — see
+    // `buildGxtDialectTransforms` (ast-transforms.ts). The `{{on}}`→`{{on-ext}}`
+    // rewrite is included only when the scope does not shadow `on`.
     transforms: [
       ...userAstPlugins,
       ...buildGxtDialectTransforms(
@@ -12182,50 +11906,33 @@ export function precompileTemplate(
       WITH_MODIFIER_MANAGER: true,
       WITH_CONTEXT_API: true,
       TRY_CATCH_ERROR_HANDLING: false,
-      // P4 increment 3 (gxt >=0.0.72) — see the doc block on this call above.
-      // ⚠ These MUST live in THIS object: an earlier landing added a second
-      // `flags:` key higher up in the same literal, and the duplicate silently
-      // overwrote it (later key wins) — the flags never reached the compiler.
+      // FORCE_SYNC_LIST: {{#each}} emits $_eachSync/$_eachSyncRecycled.
+      // Classic Ember's synchronous _gxtSyncDomNow/morph flush requires the row
+      // DOM mutated before the flush inspects it; async AsyncListComponent
+      // applies on a microtask and destroys keyed-row DOM identity. Async
+      // element destructors (the reason gxt defaults to async) only matter for
+      // row animations, which precompileTemplate templates never set up.
       FORCE_SYNC_LIST: true,
-      // EMBER_ATTR_CONCAT on since gxt 0.0.73: #247 fixed the lib build's
-      // terser-`unsafe` corrupting $_qStr's String() coercion (valueOf/Symbol),
-      // dist-verified here on bump. Quoted attrs now emit `$_qStr([...])`
-      // first-class; the join bracket-surgery + __gxtQuotedAttr/__qaNorm
-      // injection are deleted.
+      // EMBER_ATTR_CONCAT: interpolated quoted attrs emit `$_qStr([...])` with
+      // Ember string-coercion semantics (Symbol/no-toString coercion,
+      // all-nullish → null).
       EMBER_ATTR_CONCAT: true,
-      // gxt >=0.0.76 (#254): {{#in-element}} insertBefore semantics emit as
-      // $_inElement's 4th MODE arg (1=clear, 0=append, literal=dev-assert) —
-      // replaces the __ieSet signalling channel + the source pre-parse.
+      // EMBER_IN_ELEMENT: {{#in-element}} insertBefore semantics emit as
+      // $_inElement's 4th MODE arg (1=clear, 0=append, literal=dev-assert).
       EMBER_IN_ELEMENT: true,
-      // EMBER_TRUSTED_HTML (gxt >=0.0.80: #256 flag + #261 reactivity fix) — NOT
-      // enabled yet. Two attempt rounds narrowed the blockers (2026-07-04/05,
-      // gate-verified on 0.0.80). gxt #261 CLOSED the reactivity gaps: with the
-      // flag on the trusted-content suite is 149/149 (was 147/149) — absent-path +
-      // null-proto reactive updates work ($_html's formula now runs through the
-      // normal-text-binding host hooks). Two blockers remain:
-      //   • GAP 1 (classic-component empty render) — ROOT-CAUSED + FIXED (fix
-      //     saved in gxt-ember-trusted-html-attempt.patch, NOT applied here): the
-      //     native `$_html` range is bounded by empty `api.comment('')` anchors,
-      //     and ember's `removeGxtArtifacts` (manager.ts) strips empty comments as
-      //     artifacts → detaches the range → the next opcode run empties it. Fix =
-      //     register the carrier's boundary comments in a `_gxtHtmlRangeAnchors`
-      //     WeakSet (mirroring `_gxtListMarkers`) + skip them in cleanup.
-      //   • GAP 4 (REHYDRATION table-context) — the real remaining blocker: with
-      //     the flag on, 14 rehydration tests regress ("top-level unescaped tr/td
-      //     inside tr contextualElement"). $_html's create+insert range conflicts
-      //     with rehydration's claim-vs-write model for trusted table/select
-      //     content (measured with the earlier rehydration test delegate, which
-      //     kept rehydration templates on the legacy path).
-      // NET: LOW VALUE right now — `EmberHtmlRaw` must stay REGARDLESS (it backs
-      // HTML-comment preservation via gxtHtmlCommentTransform AND, per gap 4,
-      // rehydration), so enabling the flag deletes only the content-triple
-      // lowering (~40 lines), not the resolvedTag block/reparse. De-prioritized
-      // until gxt's $_html also handles rehydration (+ comments) so the whole
-      // EmberHtmlRaw block can delete. Then apply the gap-1 patch, enable this
-      // flag, and re-slim `gxtTripleMustacheTransform`.
+      // EMBER_TRUSTED_HTML stays off. With it on, the rehydration tests for
+      // top-level unescaped tr/td inside a tr contextualElement regress:
+      // `$_html`'s create+insert range conflicts with rehydration's
+      // claim-vs-write model for trusted table/select content. EmberHtmlRaw
+      // has to stay anyway (it also backs HTML-comment preservation via
+      // gxtHtmlCommentTransform), so the flag would only replace the
+      // content-position `{{{…}}}` lowering. Turning it on also needs
+      // `removeGxtArtifacts` (manager.ts) to keep the empty comment anchors
+      // that bound a native `$_html` range: stripping them as artifacts
+      // detaches the range and the next opcode run empties it (classic
+      // components render empty).
     },
     // Convert PascalCase component names to kebab-case for Ember registry lookup.
-    // This replaces the regex-based transformCapitalizedComponents() pre-processing.
     //
     // Strict-mode threaded bindings (from `scope: () => ({ Foo })`) must NOT
     // be lowered: when `Foo` is in `scopeBindings`, the GXT compiler emits
@@ -12245,9 +11952,8 @@ export function precompileTemplate(
   // transforms above; the throw/assert MUST happen here — a throw raised inside a
   // transform is swallowed into compilationResult.errors by the GXT compiler and
   // never re-thrown, so it would silently fail to abort. See GxtAssertFindings).
-  // Order mirrors the former pre-compile asserts: textarea → dotted-mustache →
-  // dynamic-helper → dynamic-modifier (the kept pre-compile string asserts —
-  // dotted-tags / attrs / this-attrs — already ran higher-priority, above).
+  // Order: textarea → dotted-mustache → dynamic-helper → dynamic-modifier (the
+  // source asserts for dotted tags / attrs / this.attrs already ran above).
   if (_gxtDialectFindings.textArea) {
     // Use getDebugFunction('assert') so expectAssertion's stub is the one called.
     const _assert = getDebugFunction('assert');
@@ -12277,45 +11983,23 @@ export function precompileTemplate(
     console.warn('[gxt-compile] Template:', transformedTemplate.slice(0, 200));
   }
 
-  // Always recreate the template function to:
-  // 1. Replace async $_each with synchronous $_eachSync
-  // 2. Inject $slots reference (globalThis.$slots) for {{yield}} support
-  // 3. Inject $a alias for @named args
-  // P4 increment 0: eligible templates keep gxt's OWN templateFn (built inside
-  // gxtCompileTemplate from the unmodified code) — the legacy assembly below is
-  // skipped entirely, none of its rewrites are needed for this template class.
+  // Eligible templates keep gxt's OWN templateFn (built inside
+  // gxtCompileTemplate from the unmodified code) and skip the legacy assembly
+  // below. Otherwise the template function is rebuilt around a rewritten copy
+  // of the code plus the legacy injections ($a alias for @named args,
+  // $slots/$fw accessors, helper and scope locals).
   const __gxtUseNativeTemplateFn =
     !!compilationResult.code && _gxtNativeTemplateEligible(compilationResult, options);
   if (__gxtUseNativeTemplateFn) {
     (compilationResult as any).__gxtNativePath = true;
   } else if (compilationResult.code) {
     let modifiedCode = compilationResult.code;
-    // NOTE: sync-{{#each}} is a first-class emission (FORCE_SYNC_LIST in the
-    // compile flags above; gxt >=0.0.72 buildEach + the #246 adapter fix) —
-    // the `$_each(` -> `$_eachSync(` belt regex that used to live here was
-    // retired after verifying flag emission is byte-identical to the regex
-    // output with the flags actually applying (the duplicate-flags-key bug
-    // fixed). WHY sync: classic Ember's synchronous _gxtSyncDomNow/morph
-    // flush requires the row DOM mutated before the flush inspects it; async
-    // AsyncListComponent applies on a microtask and destroys keyed-row DOM
-    // identity. Async element destructors (the reason gxt defaults to async)
-    // only matter for row animations, which precompileTemplate templates
-    // never set up.
-    // NOTE: __logSite ids arrive process-globally-unique since gxt 0.0.76
-    // (glimmer-next #252) — the per-compilation renumber that lived here is
-    // retired.
-
-    // NOTE: Ember quoted-attr concat semantics ($_qStr — Symbol/no-toString
-    // coercion + all-nullish -> null) are a first-class emission since gxt
-    // 0.0.72 — EMBER_ATTR_CONCAT is passed in the compile flags above
-    // (formerly a hand-rolled `].join("")` bracket-surgery walk here that
-    // rewrote to an injected __gxtQuotedAttr helper).
 
     // Post-process: When GXT emits $_maybeHelper("name", ...) with a string for a
     // name that is in scope bindings, replace the string with a variable reference.
     // The GXT compiler sometimes emits string-based lookups even for known bindings
     // (e.g., when WITH_HELPER_MANAGER path isn't taken). The scope injection later
-    // creates `const get = globalThis[scopeKey]["get"]`, but the compiled code
+    // creates `const get = __gxtGetScope(storeKey)["get"]`, but the compiled code
     // references the string "get" — this fix bridges that gap.
     //
     // Only keys the compiler reports are rewritten: a quoted lookup is listed in
@@ -12541,8 +12225,7 @@ export function precompileTemplate(
           // Read through the injected `__gxtGetScope` accessor parameter so
           // scope keys whose names collide with `globalThis` itself
           // (strict-mode allowed globals like `globalThis`, `Math`, `JSON`)
-          // don't TDZ-trap on the about-to-be-declared `const ${jsKey}` —
-          // and the per-template `__gxtScope_<hash>` globalThis keys die.
+          // don't TDZ-trap on the about-to-be-declared `const ${jsKey}`.
           scopeInjections.push(`const ${jsKey} = __gxtGetScope("${scopeStoreKey}")["${key}"];`);
         }
       }
@@ -12560,16 +12243,11 @@ export function precompileTemplate(
         for (const name of _GXT_LEGACY_HELPER_LOCALS) {
           // Skip if this name is provided in scope values (scope shadows built-in)
           if (scopeKeys.has(name)) continue;
-          // NOTE: unique-id is a first-class stable emission since gxt 0.0.76
-          // (glimmer-next #252: `$_uid(this, SITE)` + a per-ctx WeakMap) — the
-          // positional `_uid[N]` rewrite chain that lived here is retired.
           if (referenced.has(name)) {
             helperInjections.push(`const ${name} = __gxtBuiltinHelpers["${name}"];`);
           }
         }
       }
-      // (unique-id outer-scope array retired — $_uid owns stability since gxt
-      // 0.0.76.)
 
       // For strict-mode templates, shadow the global $_maybeHelper with a
       // resolver that throws "not in scope" for free identifiers instead of
@@ -12579,11 +12257,10 @@ export function precompileTemplate(
       // after the enclosing template.render() call returns.
       //
       // The shadow is inlined into the emitted Function() body, closing over
-      // `globalThis.$_maybeHelper` (the ember-wrapped delegate, stable after
-      // `installEmberWrappers()`), an inline allow-list object literal, and
-      // `globalThis.__EMBER_BUILTIN_HELPERS__` for the built-in bypass. The
-      // Function() body is cached, so the inlined block costs one compilation
-      // per unique template body.
+      // the `$_maybeHelper` symbol parameter (the ember-wrapped delegate), an
+      // inline allow-list object literal, and the `__gxtBuiltinHelpers`
+      // parameter for the built-in bypass. The Function() body is cached, so
+      // the inlined block costs one compilation per unique template body.
       const strictMaybeHelperInjection = __strictModeFlag
         ? `var $_maybeHelper_orig = $_maybeHelper;` +
           `var $_maybeHelper_allowed = ${_GXT_STRICT_ALLOWED_NAMES_JS_LITERAL};` +
@@ -12673,10 +12350,9 @@ export function precompileTemplate(
       // Inlined `__gxtAssertNotResolvedHelperAsNamedArg` definition declared at
       // the OUTER Function() scope. Reads the builtin-helper table and the
       // ambient owner through the injected `__gxtBuiltinHelpers` /
-      // `__gxtAmbientOwner` Function parameters (formerly
-      // `globalThis.__EMBER_BUILTIN_HELPERS__` / `globalThis.owner` — the
-      // owner mirror's last reader). Gated on `hasNamedArgHelperGuard` so
-      // templates without the bare-named-arg-helper pattern pay zero overhead.
+      // `__gxtAmbientOwner` Function parameters. Gated on
+      // `hasNamedArgHelperGuard` so templates without the bare-named-arg-helper
+      // pattern pay zero overhead.
       const namedArgHelperGuardInjection = hasNamedArgHelperGuard
         ? `function __gxtAssertNotResolvedHelperAsNamedArg(name, ctx) {` +
           `var BUILTIN = __gxtBuiltinHelpers;` +
@@ -12689,9 +12365,6 @@ export function precompileTemplate(
           `}`
         : '';
 
-      // (quoted-attr helper injection retired — $_qStr is emitted first-class
-      // by gxt >=0.0.72 under EMBER_ATTR_CONCAT and resolves through the
-      // runtime symbol table on both paths.)
       const templateFnCode = `
         "use strict";
         ${hasUnbound ? 'var __ubCache = Object.create(null);' : ''}
@@ -12713,15 +12386,12 @@ export function precompileTemplate(
       if (!_functionCodeCache) _functionCodeCache = new Map();
       let cachedFn = _functionCodeCache.get(templateFnCode);
       if (!cachedFn) {
-        // Pass the tracker accessors as Function() parameters so the inlined
+        // Function() parameters: first the tracker accessors, so the inlined
         // `__gxtUnboundEval` body (above) can suppress the GXT reactive tracker
-        // during `valueFn()` evaluation; bound to the module-local
-        // `_gxtGetTracker` / `_gxtSetTracker`. No-op when `hasUnbound` is false.
-        // (The former `__ieSet` in-element channel param is retired — the
-        // EMBER_IN_ELEMENT mode arg owns insertBefore since gxt 0.0.76.)
-        // §2e parameter injection: after the private hooks come the
-        // ember emitted-code hooks (`__gxtBuiltinHelpers` table,
-        // `__gxtGetTemplateThis` live-render accessor, `__gxtAmbientOwner`
+        // during `valueFn()` evaluation (bound to the module-local
+        // `_gxtGetTracker` / `_gxtSetTracker`; unused when `hasUnbound` is
+        // false); then the ember emitted-code hooks (`__gxtBuiltinHelpers`
+        // table, `__gxtGetTemplateThis` live-render accessor, `__gxtAmbientOwner`
         // bridge accessor) and the full GXT symbol table — a compile-time
         // snapshot of the ember-wrapped globals, so the compiled body's bare
         // `$_tag` / `$_maybeHelper` / … bind as parameters instead of
@@ -12913,18 +12583,18 @@ export function precompileTemplate(
           _captureFrame.forEach((c) => {
             _capturedDeps.add(c);
             if (_ambientTracker) _ambientTracker.add(c);
-            // Slice C (nested-object subscription, fine-grained only): the
-            // text effect subscribes to the cells `item()` READ (e.g.
-            // cellFor(context, 'nullObject') for `this.nullObject.message`),
-            // but the LEAF access (`.message`) is plain JS — no cell read —
-            // so mutating the leaf object (`set(nullObject,'message',...)`)
-            // doesn't dirty any cell this effect tracks. Register the held
-            // object as a value-owner of the captured cell so the SyncCore
-            // reverse-lookup (`_objectValueCellMap`) dirties this captured
-            // cell when a property on the held object changes. This is what
-            // makes null-proto objects + non-component nested paths reactive
-            // with the morph off. Guard with the cell's recorded owner
-            // (added in glimmer-next rawCellFor); skip when unavailable.
+            // Nested-object subscription: the text effect subscribes to the
+            // cells `item()` READ (e.g. cellFor(context, 'nullObject') for
+            // `this.nullObject.message`), but the LEAF access (`.message`) is
+            // plain JS — no cell read — so mutating the leaf object
+            // (`set(nullObject,'message',...)`) doesn't dirty any cell this
+            // effect tracks. Register the held object as a value-owner of the
+            // captured cell so the SyncCore reverse-lookup
+            // (`_objectValueCellMap`) dirties this captured cell when a
+            // property on the held object changes. This is what makes
+            // null-proto objects + non-component nested paths reactive. Guard
+            // with the cell's recorded owner (`_relatedObj`/`_relatedKey`, set
+            // by gxt's rawCellFor); skip when unavailable.
             try {
               const _v = (c as any)._value;
               const _ro = (c as any)._relatedObj;
@@ -13263,7 +12933,7 @@ export function precompileTemplate(
         let _currentContentNode: Node = textNode;
         let _isNodeContent = finalResult instanceof Node;
         try {
-          // The outer `item()` call at L16087 has already been issued — it
+          // The outer `item()` call above has already been issued — it
           // produced `finalResult` and we've synchronously written it into
           // the text node above. If the underlying helper has user-observable
           // side effects (e.g. `{{capture (hash …)}}` records each call into
@@ -13557,8 +13227,8 @@ export function precompileTemplate(
           // Use the context directly — don't wrap with Object.create()!
           // The context IS the Proxy from createRenderContext. Wrapping it would
           // bypass the Proxy's get handler, breaking cell-based reactive tracking.
-          // NOTE: Must be declared before first use (was previously in TDZ when
-          // referenced in the RENDERING_CONTEXT_PROPERTY block below).
+          // Declared before the RENDERING_CONTEXT_PROPERTY block below, which
+          // uses it.
           const renderContext = context;
 
           // Copy GXT rendering context from root to our render context.
@@ -13673,7 +13343,7 @@ export function precompileTemplate(
           // earlier classic-component render may have assigned a dangling custom id to
           // the same instance, leaving addToTree pointing into a void.
           //
-          // P4 NATIVE PATH EXCEPTION: a native-templateFn template calls
+          // NATIVE PATH EXCEPTION: a native-templateFn template calls
           // $_GET_ARGS itself, which mints the context its OWN fresh id
           // (`??= cId()`) and addToTree-registers it as a DISTINCT child of the
           // ambient gxtRoot — the root-id stamp above would instead make
@@ -13721,18 +13391,18 @@ export function precompileTemplate(
             renderContext['args'] = context['args'] || context.args || {};
           }
 
-          // P4 increment 1 (native path): gxt's own preamble resolves slots/fw
-          // via `$_GET_SLOTS/$_GET_FW(this, arguments)`, which (with no args
-          // passed at the call seam below) read `this['args'][$SLOTS_SYMBOL]` /
-          // `this['args'][$PROPS_SYMBOL]`. Ember historically stored slots on
-          // the context root (context.$slots / context[$SLOTS_SYMBOL]) and fw on
-          // context.$fw — which is exactly why the ambient
-          // _gxtCurrentSlots/_gxtCurrentFw module stack (+ the injected
-          // __gxtGetSlots/__gxtGetFw wrapper params) exists on the legacy path.
-          // Mirror the SAME values onto this['args'] under the shared
-          // registered symbols so the native preamble sees identical objects.
-          // (renderContext['args'] is the attrsProxy — a plain object with
-          // per-key defineProperty getters — so symbol writes are transparent.)
+          // Native path: gxt's own preamble resolves slots/fw via
+          // `$_GET_SLOTS/$_GET_FW(this, arguments)`, which (with no args passed
+          // at the call seam below) read `this['args'][$SLOTS_SYMBOL]` /
+          // `this['args'][$PROPS_SYMBOL]`. Ember stores slots on the context
+          // root (context.$slots / context[$SLOTS_SYMBOL]) and fw on
+          // context.$fw — which is why the ambient _gxtCurrentSlots/_gxtCurrentFw
+          // module stack (+ the injected __gxtGetSlots/__gxtGetFw wrapper
+          // params) exists on the legacy path. Mirror the SAME values onto
+          // this['args'] under the shared registered symbols so the native
+          // preamble sees identical objects. (renderContext['args'] is the
+          // attrsProxy — a plain object with per-key defineProperty getters —
+          // so symbol writes are transparent.)
           if (__gxtNativeTpl) {
             const __argsObj = renderContext['args'];
             if (__argsObj && typeof __argsObj === 'object') {
@@ -13827,7 +13497,7 @@ export function precompileTemplate(
               'toString',
             ]);
             // Use the raw target if render context is a Proxy (so cells are keyed
-            // to the same object that __gxtTriggerReRender uses).
+            // to the same object that `_gxtTriggerReRender` uses).
             const cellTarget = (renderContext as any).__gxtRawTarget || renderContext;
             let proto = cellTarget;
             // Walk prototype chain, stopping at Object.prototype
@@ -13884,7 +13554,7 @@ export function precompileTemplate(
           } catch {
             /* ignore */
           }
-          // Cell promotion handled by __gxtForceEmberRerender (full re-render)
+          // Cell promotion handled by `_gxtForceEmberRerender` (full re-render)
 
           // Call the compiled template function with the render context.
           // Enable isRendering so GXT formulas track cell dependencies.
@@ -13926,7 +13596,7 @@ export function precompileTemplate(
             // BELOW, after this `.call` returns. It is restored in the
             // itemToNode-loop `finally` instead (and in the catch above when
             // the template body throws).
-            // Stop blocking tracked setters from calling __gxtTriggerReRender,
+            // Stop blocking tracked setters from calling `_gxtTriggerReRender`,
             // but KEEP isRendering=true so that GXT formulas created during
             // itemToNode (e.g., gxtEffect for reactive text nodes) properly
             // track cell dependencies and register in GXT's relatedTags map.
@@ -14003,11 +13673,8 @@ export function precompileTemplate(
           // scope" diagnostics all need to surface to the host renderer's
           // try/catch (renderer.ts around `template.render(...)`), which
           // clears the partially-rendered DOM and re-throws to
-          // `assert.throws` / Ember's error recovery. The previous "swallow
-          // unless allowlisted" branch was a holdover from the
-          // `captureRenderError`/`__gxtRenderErrorCount` plumbing — with that
-          // signal removed, any swallow here turns user-visible failures
-          // into silent successes.
+          // `assert.throws` / Ember's error recovery. Swallowing here would
+          // turn user-visible failures into silent successes.
           throw err;
         }
       },
@@ -14089,14 +13756,12 @@ import {
 // so a host hook is the seam.
 _gxtRegisterHostHooks({
   registerObjectValueOwner,
-  // each/if delegation Step 3 (E-c). `registerHostHooks` merges per-key, so
-  // this does not clobber the `registerObjectValueOwner` above (or any later
-  // registration).
+  // `registerHostHooks` merges per-key, so this does not clobber the
+  // `registerObjectValueOwner` above (or any later registration).
   //
   // Flag each `{{#each}}` rowCtx (a plain object) as an association anchor and
   // register its pre-destroy destructor. Skip `{{#if}}`/`{{#unless}}` branch
-  // ctxs (IfCondition class instances) by the prototype discriminator — the
-  // if-branch helper delegation (I-a) is a separate follow-on.
+  // ctxs (IfCondition class instances) by the prototype discriminator.
   onRowContextCreated: (ctx: object) => {
     const isEachRow = Object.getPrototypeOf(ctx) === Object.prototype;
     if (!isEachRow) return; // IfCondition branch scope — branch-swap teardown rides onConditionBranchSwap below
@@ -14104,21 +13769,17 @@ _gxtRegisterHostHooks({
     _gxtRowCtxInstances.set(ctx, new Set());
     _gxtRegisterDestructor(ctx, () => _gxtFireRowPreDestroy(ctx));
   },
-  // each/if delegation Step 3 (I-a): {{#if}}/{{#unless}} branch class-helper
-  // teardown. New in gxt >=0.0.79 (glimmer-next #259). gxt fires this once per
+  // {{#if}}/{{#unless}} branch class-helper teardown. gxt fires this once per
   // branch RENDER with a fresh `branchCtx` and `meta = { if, value }`, and runs
   // that ctx's destructors at the START of the OUTGOING branch's teardown
   // (pre-DOM-removal) — so a destructor registered here reaps the branch's
-  // class-based helpers at the Ember-correct moment, replacing the retired
-  // `ifCondition.syncState` prevBool flip-tracking wrapper. The per-branch
+  // class-based helpers at the Ember-correct moment. The per-branch
   // helper-capture Sets are stashed on the IfCondition by `patchGlobalIf`; read
   // them LAZILY in the destructor (the initial-render hook can fire during
-  // `origIf(...)` construction, before the Sets are attached). Snapshot the
-  // class-helper cache at hook-fire time (before the branch body renders) so
-  // the destructor can also reap helpers created in deferred formulas outside
-  // `wrapBranch`'s dynamic scope — mirroring the old `destroyNewCacheEntriesSince`
-  // fallback, which the old wrapper applied only when tearing down the TRUE
-  // branch.
+  // `origIf(...)` construction, before the Sets are attached). For the TRUE
+  // branch, also snapshot the class-helper cache at hook-fire time (before the
+  // branch body renders) so the destructor can reap helpers created in
+  // deferred formulas outside `wrapBranch`'s dynamic scope.
   onConditionBranchSwap: (branchCtx: object, meta: { if?: object; value?: boolean }) => {
     const ifc = meta?.if as any;
     const isTrue = !!meta?.value;
@@ -14135,8 +13796,8 @@ installCompilePipelinePart({
   resetIntervalBudget: _gxtResetIntervalBudget,
   registerArrayOwner: registerArrayOwner,
   registerObjectValueOwner: registerObjectValueOwner,
-  // each/if delegation Step 3 (E-c): associate a new instance with the
-  // currently-rendering `{{#each}}` row (closure over `_gxtCurrentRowCtx`).
+  // Associate a new instance with the currently-rendering `{{#each}}` row
+  // (closure over `_gxtCurrentRowCtx`).
   captureRowInstance: _gxtCaptureRowInstance,
   // Canonical `triggerReRender` + the two chain-aware host-hook registration
   // methods (`addBeforeTriggerReRender` / `addAfterTriggerReRender`). The
@@ -14185,22 +13846,16 @@ installCompilePipelinePart({
   // per `_gxtSyncDomNow` flush by the intra-file `_gxtIncrementSyncCycleId`).
   getSyncCycleId: _gxtGetSyncCycleId,
   // Read predicate for the "sync is property-driven" flag, read by manager.ts's
-  // `__gxtDestroyUnclaimedPoolEntries` destroy-error capture gate.
+  // `_gxtDestroyUnclaimedPoolEntries` destroy-error capture gate.
   isSyncIsPropertyDriven: _gxtIsSyncIsPropertyDriven,
-  // Paired get/set for the "had pending sync" flag; cross-package readers/writers
-  // live in `glimmer/lib/renderer.ts` and manager.ts.
+  // Paired get/set for the "had pending sync" flag.
   getHadPendingSync: _gxtGetHadPendingSync,
   setHadPendingSync: _gxtSetHadPendingSync,
-  // Paired get/set for the "pending sync from property change" flag; cross-file/
-  // cross-package writers live in manager.ts, templates/root.ts, routing/router.ts,
-  // and the test helpers.
+  // Paired get/set for the "pending sync from property change" flag.
   getPendingSyncFromPropertyChange: _gxtGetPendingSyncFromPropertyChange,
   setPendingSyncFromPropertyChange: _gxtSetPendingSyncFromPropertyChange,
-  // Paired get/set for the master "DOM sync pending" flag. Intra-file
-  // writers/readers use the module-local helpers; cross-file/cross-package
-  // writers (manager.ts, glimmer, routing, internal-test-helpers) and the
-  // cross-package readers (the `_backburner` end gate, the runloop `onEnd` hook)
-  // route through the bridge.
+  // Paired get/set for the master "DOM sync pending" flag; module code uses the
+  // module-local helpers.
   getPendingSync: _gxtGetPendingSync,
   setPendingSync: _gxtSetPendingSync,
   getBlockParamsStack: () => blockParamsStack,
@@ -14231,9 +13886,8 @@ installCompilePipelinePart({
   // the `<ember-outlet>` `connectedCallback` guard.
   getDestroyReattachInProgress: _gxtGetDestroyReattachInProgress,
   setDestroyReattachInProgress: _gxtSetDestroyReattachInProgress,
-  // Get-only accessor for the engine-instance Map cache. Written via this method
-  // by `mount-element.ts`'s `<ember-mount>.renderEngine`; read directly by the
-  // intra-file between-test teardown.
+  // Get-only accessor for the engine-instance Map cache (`<ember-mount>` adds
+  // engines through it).
   getEngineInstances: _gxtGetEngineInstances,
   // Read predicate + TRUE-for-body save-restore wrapper for the
   // "suppress dirty in rcSet" flag. The reader is `validator.ts`'s
@@ -14301,28 +13955,22 @@ installCompilePipelinePart({
   getHelperInstances: _gxtGetHelperInstances,
   pushHelperInstance: _gxtPushHelperInstance,
   setHelperInstancePushHook: _gxtSetHelperInstancePushHook,
-  // Paired accessors for the module-local `_gxtRootContext` binding. Cross-file
-  // lazy-init writers/readers (renderer.ts, root.ts, mount-element.ts) route through
-  // these; intra-file consumers read the module-local directly.
+  // Paired accessors for the module-local `_gxtRootContext` binding; module
+  // code reads the binding directly.
   getRootContext: _getGxtRootContext,
   setRootContext: _setGxtRootContext,
-  // Phase 4.1 SSR consumer plumbing (RFC §7.1.1 step 2): synchronous per-root
-  // save/swap/restore runner. ADDITIVE — no browser-path caller; dormant until a
-  // FastBoot/SSR driver wraps each request in `withRootContext(freshCtx, () => …)`.
-  // Also dual-published on `globalThis.__gxtWithRootContext` so an
-  // out-of-package SSR driver that cannot import
-  // `@ember/-internals` can still reach it — a DELIBERATE external surface,
-  // kept alongside the debug toggles in the globalThis-retirement audit.
+  // SSR: the synchronous per-root save/swap/restore runner (see
+  // `withRootContext`); no browser-path caller. It is also published on
+  // `globalThis.__gxtWithRootContext` so an out-of-package SSR driver that
+  // cannot import `@ember/-internals` can reach it — a deliberate external
+  // surface.
   withRootContext: _gxtWithRootContext,
   // Get-only accessor (with internal lazy-init) for the canonical
-  // `_gxtComponentContexts` WeakMap. Cross-file lazy-init writers/readers
-  // (glimmer/lib/templates/root.ts, @ember/routing/route.ts) route through it;
-  // intra-file consumers (and the test-teardown reset via
-  // `_resetGxtComponentContexts`) call the module-local helpers directly.
+  // `_gxtComponentContexts` WeakMap; module code (and the test-teardown reset
+  // via `_resetGxtComponentContexts`) uses the module-local helpers.
   getComponentContextsMap: _getOrCreateGxtComponentContexts,
-  // The canonical sync-pipeline flush function. Cross-file readers route through
-  // `getGxtRenderer()?.compilePipeline.syncDomNow?.()`; the intra-file 16ms
-  // setInterval calls the module-local `_gxtSyncDomNow` directly.
+  // The canonical sync-pipeline flush function (the 16ms setInterval calls
+  // `_gxtSyncDomNow` directly).
   syncDomNow: _gxtSyncDomNow,
   // manager.ts and ember-gxt-wrappers.ts cannot import glimmer/lib/helper.ts
   // or the template-only module (both import the manager shim), so they read
@@ -14362,9 +14010,9 @@ installBacktrackingPart({
 // manager.ts.
 installViewUtilsPart({
   afterRebuildViewTreeFromDom: _afterRebuildViewTreeFromDom,
-  // Exposes `_wrapperIfUserFalse` to its sole cross-file reader in manager.ts
-  // (GXT compat: restore `isExpanded = false` on freshly-constructed component
-  // instances whose wrapper id was user-toggled false).
+  // Exposes `_wrapperIfUserFalse` to manager.ts (restores `isExpanded = false`
+  // on freshly-constructed component instances whose wrapper id was
+  // user-toggled false).
   getWrapperUserFalseSet: () => _wrapperIfUserFalse,
   // Host hook that runs AFTER manager.ts's `flushAfterInsertQueue` body
   // completes, dispatched by the `_gxtBridgeFlushAfterInsertQueue` adapter in

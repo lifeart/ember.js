@@ -34,7 +34,7 @@ const g = globalThis as any;
 // `_gxtMutContext` is the component render context (the `this` of the
 // template that invoked `(mut ...)` or `(__mutGet ...)`) while the
 // `$_maybeHelper` wrapper dispatches to the corresponding
-// `__EMBER_BUILTIN_HELPERS__` entry. The helpers in compile.ts read it (via
+// built-in helper entry. The helpers in compile.ts read it (via
 // the `getMutContext` bridge method) when they are created, so the closure
 // they return can later resolve the source getter for two-way binding without
 // re-threading the context through every `mut` argument. Writers save the

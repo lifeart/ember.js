@@ -386,7 +386,7 @@ function gxtEachInTransform(env: GxtAstEnv) {
  *   - A top-level (out-of-scope) or non-`outletState` `-get-dynamic-var` lowers
  *     to the `gxtGetOutletState` built-in helper call (mustache form
  *     `{{(gxtGetOutletState)}}`, subexpression form `(gxtGetOutletState)`),
- *     which reads `globalThis.__currentOutletState`.
+ *     which reads the current outlet state (`getCurrentOutletState()`).
  *
  * Scope discipline: the generated `VAR` must be in scope for the block's BODY
  * but NOT for the `outletState=EXPR` head itself (a `-get-dynamic-var` inside the
