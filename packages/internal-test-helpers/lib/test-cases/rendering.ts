@@ -1,10 +1,6 @@
 import type { Renderer } from '@ember/-internals/glimmer';
 import { _resetRenderers, helper, Helper } from '@ember/-internals/glimmer';
-import {
-  getGxtRenderer,
-  getAmbientOwner,
-  setAmbientOwner,
-} from '@ember/-internals/gxt-backend/gxt-bridge';
+import { getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
 import { EventDispatcher } from '@ember/-internals/views';
 import Component from '@ember/component';
 import type { EmberPrecompileOptions } from 'ember-template-compiler';
@@ -19,67 +15,17 @@ import buildOwner from '../build-owner';
 import { define } from '../module-for';
 import { runAppend, runDestroy, runTask } from '../run';
 import AbstractTestCase from './abstract';
+import { gxtHarness } from '../gxt-harness';
 
 const TextNode = window.Text;
 
-// GXT test-harness steps, `undefined` in classic builds. A module-level value
-// instead of bridge calls inside the test-case methods: rollup keeps every
-// binding a test-case method refers to (the classes escape into `moduleFor`),
-// even from a folded `__GXT_MODE__` branch, which would keep gxt-backend in the
-// classic test build.
-const gxtHarness = __GXT_MODE__
+// GXT steps of this test case beyond the shared harness (see gxt-harness.ts
+// for why they are a module-level value), `undefined` in classic builds.
+const gxtRenderingHarness = __GXT_MODE__
   ? {
-      cleanupActiveComponents() {
-        // Clean up GXT active components first.
-        getGxtRenderer()?.compilePipeline.cleanupActiveComponents?.();
-      },
-      teardownModifiers() {
-        // Destroy active custom modifier instances during teardown so
-        // willDestroyElement fires (matching Glimmer VM behavior).
-        // Only destroy each modifier class once (the LAST instance) to match
-        // Glimmer VM's behavior of one destroy per active modifier.
-        try {
-          const modMgr = getGxtRenderer()?.compilePipeline.getManagers?.()?.modifier;
-          if (modMgr?._updatedInstances?.size > 0) {
-            // Only destroy the LAST instance (most recently installed modifier).
-            // Multiple instances may exist due to GXT formula double-fires creating
-            // parallel cache entries. Only the last one is "active".
-            const instances = [...modMgr._updatedInstances];
-            const lastInst = instances[instances.length - 1];
-            if (
-              lastInst?.__gxtModManager?.destroyModifier &&
-              !lastInst.__gxtTeardownDestroyed &&
-              !lastInst.__gxtModDestroyed
-            ) {
-              try {
-                lastInst.__gxtModManager.destroyModifier(lastInst);
-                lastInst.__gxtTeardownDestroyed = true;
-                lastInst.__gxtModDestroyed = true;
-              } catch {
-                /* ignore */
-              }
-            }
-            modMgr._updatedInstances.clear();
-          }
-          // Clear pending destroys without processing (already handled above)
-          const pendingDestroys = getGxtRenderer()?.compilePipeline.getPendingModifierDestroys?.();
-          if (pendingDestroys) pendingDestroys.length = 0;
-        } catch {
-          /* ignore */
-        }
-
-        // Clear a stale ambient owner so subsequent tests don't see a destroyed owner
-        if (getAmbientOwner()?.isDestroyed || getAmbientOwner()?.isDestroying) {
-          setAmbientOwner(null);
-        }
-      },
-      resetAfterTeardown() {
-        // Reset the GXT pending-sync flags AFTER destroy
-        const _cpRC = getGxtRenderer()?.compilePipeline;
-        _cpRC?.setPendingSync?.(false);
-        _cpRC?.setPendingSyncFromPropertyChange?.(false);
-        // Replace #qunit-fixture element to drop accumulated event listeners
-        // (EventDispatcher.setup adds listeners that aren't always cleaned up)
+      // Replace #qunit-fixture to drop accumulated event listeners
+      // (EventDispatcher.setup adds listeners that aren't always cleaned up).
+      replaceFixture() {
         const fixture = document.getElementById('qunit-fixture');
         if (fixture) {
           const fresh = fixture.cloneNode(false) as HTMLElement;
@@ -176,7 +122,8 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
     } finally {
       _resetRenderers();
       if (__GXT_MODE__) {
-        gxtHarness!.resetAfterTeardown();
+        gxtHarness!.resetSyncFlags();
+        gxtRenderingHarness!.replaceFixture();
       }
     }
   }
@@ -207,7 +154,7 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
     if (__GXT_MODE__) {
       // Increment the render pass ID before starting a new render transaction
       // so all components in this render share the same pass ID.
-      gxtHarness!.incrementRenderPassId();
+      gxtRenderingHarness!.incrementRenderPassId();
     }
 
     runAppend(this.component);
@@ -216,7 +163,7 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
       // Property changes made during the initial render (e.g. from
       // EmberObject.create in modifier managers) must not trigger a fallback
       // re-sync; the DOM is already correct.
-      gxtHarness!.clearPendingSyncFromPropertyChange();
+      gxtRenderingHarness!.clearPendingSyncFromPropertyChange();
     }
   }
 
@@ -231,7 +178,7 @@ export default abstract class RenderingTestCase extends AbstractTestCase {
     this.#assertNotAwaiting('rerender');
     if (__GXT_MODE__) {
       // Increment render pass ID for re-renders too
-      gxtHarness!.incrementRenderPassId();
+      gxtRenderingHarness!.incrementRenderPassId();
     }
     this.component!.rerender();
   }

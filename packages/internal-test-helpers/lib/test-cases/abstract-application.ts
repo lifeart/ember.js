@@ -2,7 +2,7 @@ import type { EmberPrecompileOptions } from 'ember-template-compiler';
 import compile from '../compile';
 import AbstractTestCase from './abstract';
 import { runDestroy, runTask, runLoopSettled } from '../run';
-import { getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
+import { gxtHarness } from '../gxt-harness';
 import type { BootOptions } from '@ember/engine/instance';
 import type Application from '@ember/application';
 import type ApplicationInstance from '@ember/application/instance';
@@ -60,20 +60,15 @@ export default abstract class AbstractApplicationTestCase extends AbstractTestCa
   afterEach() {
     if (__GXT_MODE__) {
       try {
-        // Clean up GXT active components before application destroy.
-        getGxtRenderer()?.compilePipeline.cleanupActiveComponents?.();
+        gxtHarness!.cleanupActiveComponents();
 
         runDestroy(this.applicationInstance);
         runDestroy(this.application);
 
         super.teardown();
       } finally {
-        // Reset GXT sync state so it doesn't leak into the next test.
-        const _cpAA = getGxtRenderer()?.compilePipeline;
-        _cpAA?.setPendingSync?.(false);
-        _cpAA?.setPendingSyncFromPropertyChange?.(false);
-        // Clear stale render errors so they don't leak into the next test.
-        _cpAA?.clearRenderErrors?.();
+        gxtHarness!.resetSyncFlags();
+        gxtHarness!.clearRenderErrors();
       }
       return;
     }

@@ -1,6 +1,7 @@
 import { next, run, _getCurrentRunLoop, _hasScheduledTimers } from '@ember/runloop';
 import { destroy } from '@glimmer/destroyable';
 import { getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
+import { gxtHarness } from './gxt-harness';
 
 import { Promise } from 'rsvp';
 
@@ -44,17 +45,10 @@ function gxtRunAppend(view: any): void {
   if (!afterRenderChanged) {
     getGxtRenderer()?.compilePipeline.setPendingSyncFromPropertyChange?.(false);
   }
-  // In GXT mode, flush pending DOM updates synchronously after append
-  // so test assertions see the rendered DOM immediately.
-  getGxtRenderer()?.compilePipeline.resetManagedComponentCounters?.();
-  getGxtRenderer()?.compilePipeline.syncDomNow?.();
-  // Clear sync flags set during the sync itself so the 16ms fallback flusher
-  // does not run another sync that would re-evaluate each-formulas with stale
-  // values.
-  const _cpRA = getGxtRenderer()?.compilePipeline;
-  _cpRA?.setPendingSync?.(false);
-  _cpRA?.setPendingSyncFromPropertyChange?.(false);
-  _cpRA?.resetIntervalBudget?.();
+  // Flush pending DOM updates synchronously so test assertions see the
+  // rendered DOM immediately; the flags set during that sync are cleared so a
+  // fallback sync does not re-evaluate each-formulas with stale values.
+  gxtHarness!.syncAfterRun(false);
   // Render errors are rethrown by the renderer within the render cycle that
   // produced them, so no flush is needed here.
 }
@@ -122,21 +116,10 @@ function gxtRunTask<F extends () => any>(callback: F): ReturnType<F> {
   } finally {
     getGxtRenderer()?.compilePipeline.setRunTaskActive?.(false);
   }
-  // In GXT mode, flush pending DOM updates synchronously after the task
-  // so test assertions see the updated DOM immediately. Advance the
-  // managed-component generation first so slot counters reset.
-  getGxtRenderer()?.compilePipeline.resetManagedComponentCounters?.();
-  getGxtRenderer()?.compilePipeline.syncDomNow?.();
-  // The explicit sync above handled all pending updates; clear the flags so
-  // the 16ms fallback flusher does not run another sync.
-  const _cpRT = getGxtRenderer()?.compilePipeline;
-  _cpRT?.setPendingSync?.(false);
-  _cpRT?.setPendingSyncFromPropertyChange?.(false);
-  // Also clear tagsToRevalidate to prevent stale cells from re-evaluating
-  const clearTags = (globalThis as any).__gxtClearTagsToRevalidate;
-  if (typeof clearTags === 'function') clearTags();
-  // Reset interval sync budget after an explicit runTask sync
-  _cpRT?.resetIntervalBudget?.();
+  // Flush pending DOM updates synchronously so test assertions see the
+  // updated DOM immediately, then clear the sync state (including the tags
+  // queued for revalidation, so stale cells do not re-evaluate).
+  gxtHarness!.syncAfterRun(true);
   // Errors thrown while destroying components during the sync are rethrown
   // by `syncDomNow()` above, so no render-error flush is needed here.
   return result;
