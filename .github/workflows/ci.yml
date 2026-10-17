@@ -11,6 +11,7 @@ on:
       - lts*
       # nightly ci cron branches
       - cron*
+      - ci-scratch-heap-ember
     paths-ignore:
       - "CHANGELOG.md"
   pull_request:

@@ -1,6 +1,9 @@
 name: GXT Full (nightly)
 
 on:
+  push:
+    branches:
+      - ci-scratch-heap-ember
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
