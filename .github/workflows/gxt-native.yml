@@ -11,10 +11,15 @@ on:
     branches:
       - master
       - main
+      - ci-scratch-heap-gxt
   pull_request:
 
 permissions:
   contents: read
+
+# Scratch: @lifeart/gxt built from lifeart/glimmer-next@GXT_REF in every job.
+env:
+  GXT_REF: '7cf113b78789fb3c6b226410f20c3aaa724c8e57'
 
 jobs:
   modern-app:
@@ -28,6 +33,9 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           install-playwright: 'true'
+      - uses: ./.github/actions/gxt-from-ref
+        with:
+          ref: ${{ env.GXT_REF }}
       # First, so that the dist snapshots below already hold the
       # @glimmer/component .d.ts files it also emits (the package build
       # compares its glimmer-component output with that snapshot).
@@ -54,11 +62,11 @@ jobs:
           node scripts/build-gxt-native-package.mjs \
             --compare smoke-tests/modern-app/dist/ember-dist/gxt-native \
             --pack "$RUNNER_TEMP/tarballs"
-      - name: Pack the pinned @lifeart/gxt from npm
+      - name: Pack the @lifeart/gxt in use (built from GXT_REF)
         run: |
-          gxt_version="$(node -p "require('./package.json').devDependencies['@lifeart/gxt']")"
-          echo "@lifeart/gxt pinned in package.json devDependencies: $gxt_version"
-          npm pack "@lifeart/gxt@$gxt_version" --pack-destination "$RUNNER_TEMP/tarballs"
+          npm pack "$GXT_PKG" --pack-destination "$RUNNER_TEMP/tarballs"
+          tar -xzf "$RUNNER_TEMP"/tarballs/lifeart-gxt-*.tgz -C "$RUNNER_TEMP" package/dist
+          for f in "$RUNNER_TEMP"/package/dist/*.js; do cmp "$f" "$GXT_PKG/dist/$(basename "$f")"; done
       - name: Consumer app acceptance (npm install of both tarballs, prod + dev boot)
         run: |
           node smoke-tests/gxt-native-package/run.mjs \
@@ -98,6 +106,9 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           install-playwright: 'true'
+      - uses: ./.github/actions/gxt-from-ref
+        with:
+          ref: ${{ env.GXT_REF }}
       # runner.mjs exits 1 on any failing test, known reds included, so the
       # verdict comes from baseline-gate.mjs: no test of the shard's modules
       # red that the baseline lists green, no timeout or harness error. That

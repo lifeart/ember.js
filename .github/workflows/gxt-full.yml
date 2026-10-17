@@ -1,12 +1,19 @@
 name: GXT Full (nightly)
 
 on:
+  push:
+    branches:
+      - ci-scratch-heap-gxt
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Scratch: @lifeart/gxt built from lifeart/glimmer-next@GXT_REF in every shard.
+env:
+  GXT_REF: '7cf113b78789fb3c6b226410f20c3aaa724c8e57'
 
 # The suite runs in 5 shards in parallel (runner.mjs --shard i/5: every 5th
 # module of the sorted list). `GXT full suite` merges them into the
@@ -29,6 +36,9 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           install-playwright: 'true'
+      - uses: ./.github/actions/gxt-from-ref
+        with:
+          ref: ${{ env.GXT_REF }}
       # runner.mjs exits 1 on any failing test, known reds included, so the
       # verdict comes from baseline-gate.mjs: no test of the shard's modules
       # red that the baseline lists green, no timeout or harness error. That

@@ -1,0 +1,56 @@
+name: '@lifeart/gxt from a glimmer-next ref (scratch only)'
+description: >-
+  Builds @lifeart/gxt from lifeart/glimmer-next@<ref> (build-lib) and puts its
+  dist in place of the installed npm package's, then checks that the installed
+  dist is that build. Does nothing when ref is empty. Run after the setup action.
+inputs:
+  ref:
+    description: 'A lifeart/glimmer-next branch or SHA; empty = keep the npm package'
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Build @lifeart/gxt from lifeart/glimmer-next@ref and use it
+      if: inputs.ref != ''
+      shell: bash
+      env:
+        GXT_REF: ${{ inputs.ref }}
+      run: |
+        set -eo pipefail
+        ls node_modules/.pnpm | grep -E '^@lifeart\+gxt@' | tee "$RUNNER_TEMP/gxt-installs.txt"
+        test "$(wc -l < "$RUNNER_TEMP/gxt-installs.txt")" = 1
+        pkg="$(node -p "require('fs').realpathSync('node_modules/@lifeart/gxt')")"
+        echo "GXT_PKG=$pkg" >> "$GITHUB_ENV"
+        ls "$pkg/dist" | sort > "$RUNNER_TEMP/gxt-npm-files.txt"
+        src="$RUNNER_TEMP/gxt-src"
+        git clone --filter=blob:none --no-checkout https://github.com/lifeart/glimmer-next.git "$src"
+        git -C "$src" fetch --filter=blob:none origin "$GXT_REF"
+        git -C "$src" checkout --detach FETCH_HEAD
+        sha="$(git -C "$src" rev-parse HEAD)"
+        echo "glimmer-next $sha ($GXT_REF)"
+        (
+          cd "$src"
+          pnpm install --frozen-lockfile
+          # build-lib without its tsc type check and its local-copy postbuild hook
+          npm_lifecycle_script='vite build -- --lib' node_modules/.bin/vite build -- --lib
+          node scripts/write-build-meta.mjs
+        )
+        # A fresh directory: the pnpm store's hard links are removed, never written.
+        rm -rf "$pkg/dist"
+        cp -r "$src/dist" "$pkg/dist"
+        # The installed dist is that build: same files, its build meta names the
+        # commit, and its content-hashed chunk names are not the npm package's.
+        diff -r "$src/dist" node_modules/@lifeart/gxt/dist
+        node -e "
+          const m = require(process.argv[1]);
+          if (!process.argv[2].startsWith(m.gitHash) || m.gitDirty) {
+            throw new Error('gxt build meta ' + JSON.stringify(m) + ' is not ' + process.argv[2]);
+          }
+        " "$pkg/dist/.build-meta.json" "$sha"
+        cat node_modules/@lifeart/gxt/dist/.build-meta.json
+        ls "$pkg/dist" | sort > "$RUNNER_TEMP/gxt-ref-files.txt"
+        changed="$(comm -13 "$RUNNER_TEMP/gxt-npm-files.txt" "$RUNNER_TEMP/gxt-ref-files.txt" | { grep -E '\.js$' || true; } | tr '\n' ' ')"
+        echo "gxt dist chunks the npm package does not have: $changed"
+        test -n "$changed"
+        echo "::notice::@lifeart/gxt in use: lifeart/glimmer-next@$sha built here, not the npm package"
