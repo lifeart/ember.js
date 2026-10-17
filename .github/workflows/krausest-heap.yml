@@ -1,0 +1,198 @@
+name: Krausest heap (scratch)
+
+# SCRATCH ONLY — never lands. Measures the krausest benchmark app
+# (smoke-tests/krausest-app, scripts/krausest-bench.mjs) built from rollup
+# dists, all variants benched interleaved in one job:
+#   classic              this commit's classic dist
+#   gxt-native           this commit's gxt-native dist, npm @lifeart/gxt
+#   gxt-native-base      BASE_EMBER_REF's gxt-native dist, npm @lifeart/gxt
+#   gxt-native-gxt       this commit's gxt-native dist, @lifeart/gxt built from
+#                        lifeart/glimmer-next@GXT_REF (dist and app bundle)
+#   gxt-native-base-gxt  BASE_EMBER_REF's gxt-native dist, gxt from GXT_REF
+# (the *-base variants need BASE_EMBER_REF, the *-gxt ones GXT_REF).
+# Output (artifact krausest-heap): the 9 krausest timings and heapBase /
+# heap10k / heapAfterClear / leak slope per variant (bench.json, bench.txt), a
+# heap snapshot census after create10k (snapshot.json, snapshot.txt), the
+# modern-app bytes of each dist build, and the gxt build verification.
+
+on:
+  push:
+    branches:
+      - 'ci-scratch-heap-measure*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # An ember commit benched as the *-base variants ('' = none).
+  BASE_EMBER_REF: '658d4f88f5e383ce2a46ae339ab0acdbf8c9f16c'
+  # A lifeart/glimmer-next ref (branch or SHA) for the *-gxt variants ('' = none).
+  GXT_REF: '7cf113b78789fb3c6b226410f20c3aaa724c8e57'
+  # Optional text that must occur in the *-gxt bundles.
+  GXT_MARKER: ''
+  BENCH_REPS: '12'
+  LEAK_CYCLES: '5'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  bench:
+    name: krausest heap and timings
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      OUT: ${{ github.workspace }}/krausest-out
+      SNAPSHOTS: ${{ github.workspace }}/smoke-tests/modern-app/dist/ember-dist
+      BASE_DIR: ${{ github.workspace }}/../ember-base
+      GXT_SRC: ${{ github.workspace }}/../gxt-src
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          install-playwright: 'true'
+      - name: Environment
+        run: |
+          mkdir -p "$OUT"
+          node --version
+          nproc
+          free -m
+          ls node_modules/.pnpm | grep -E '^@lifeart\+gxt@' | tee "$OUT/gxt-installs.txt"
+          test "$(wc -l < "$OUT/gxt-installs.txt")" = 1
+          gxt_pkg="$(node -p "require('fs').realpathSync('node_modules/@lifeart/gxt')")"
+          echo "GXT_PKG=$gxt_pkg" >> "$GITHUB_ENV"
+          echo "npm @lifeart/gxt $(node -p "require('$gxt_pkg/package.json').version") at $gxt_pkg"
+          ls "$gxt_pkg/dist" | sort > "$OUT/gxt-npm-files.txt"
+          variants=classic
+          if [ -n "$BASE_EMBER_REF" ]; then variants="$variants,gxt-native-base"; fi
+          variants="$variants,gxt-native"
+          if [ -n "$GXT_REF" ] && [ -n "$BASE_EMBER_REF" ]; then variants="$variants,gxt-native-base-gxt"; fi
+          if [ -n "$GXT_REF" ]; then variants="$variants,gxt-native-gxt"; fi
+          echo "VARIANTS=$variants" >> "$GITHUB_ENV"
+          echo "variants: $variants; head $(git rev-parse HEAD)"
+
+      # rollup gxt-native + classic dists of this commit, snapshotted under
+      # $SNAPSHOTS/{gxt-native,classic}; the modern app built against each (bytes).
+      - name: Build the classic and gxt-native dists of this commit
+        run: |
+          node scripts/bundle-modern-app.mjs --from-dist --build-dists \
+            --json "$OUT/modern-app-head.json"
+
+      - name: Build the gxt-native dist of BASE_EMBER_REF
+        if: env.BASE_EMBER_REF != ''
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_EMBER_REF"
+          git worktree add --detach "$BASE_DIR" FETCH_HEAD
+          cd "$BASE_DIR"
+          echo "base $(git rev-parse HEAD)"
+          pnpm install --frozen-lockfile
+          node scripts/bundle-modern-app.mjs --from-dist --build-dists --variants gxt-native-dist \
+            --json "$OUT/modern-app-base.json"
+          cp -r smoke-tests/modern-app/dist/ember-dist/gxt-native "$SNAPSHOTS/gxt-native-base"
+
+      - name: Build the krausest app (npm @lifeart/gxt)
+        run: |
+          base=()
+          if [ -n "$BASE_EMBER_REF" ]; then
+            base=(--variant "gxt-native-base=gxt-native:$SNAPSHOTS/gxt-native-base")
+          fi
+          node scripts/krausest-bench.mjs build --variant classic --variant gxt-native "${base[@]}" \
+            --json "$OUT/krausest-bytes.json"
+          # informational for the npm build (the GXT_REF steps gate on it)
+          node scripts/krausest-bench.mjs gxt-files --variant gxt-native --dist "$GXT_PKG/dist" \
+            || echo "::warning::gxt-files found no npm gxt dist file in the gxt-native bundle's sourcemaps"
+
+      - name: Build @lifeart/gxt from lifeart/glimmer-next@GXT_REF
+        if: env.GXT_REF != ''
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/lifeart/glimmer-next.git "$GXT_SRC"
+          cd "$GXT_SRC"
+          git fetch --filter=blob:none origin "$GXT_REF"
+          git checkout --detach FETCH_HEAD
+          echo "gxt $(git rev-parse HEAD) ($GXT_REF)"
+          git rev-parse HEAD > "$OUT/gxt-ref-sha.txt"
+          pnpm install --frozen-lockfile
+          # build-lib without its tsc type check and its local-copy postbuild hook
+          npm_lifecycle_script='vite build -- --lib' node_modules/.bin/vite build -- --lib
+          node scripts/write-build-meta.mjs
+          tee "$OUT/gxt-ref-build-meta.json" < dist/.build-meta.json
+
+      # Swaps the built dist in for the installed one (a fresh directory: the
+      # pnpm store's hard links are removed, never written) and checks it.
+      - name: Use it in place of the npm package, here and in the base checkout
+        if: env.GXT_REF != ''
+        run: |
+          swap() {
+            local root="$1" pkg
+            pkg="$(cd "$root" && node -p "require('fs').realpathSync('node_modules/@lifeart/gxt')")"
+            rm -rf "$pkg/dist"
+            cp -r "$GXT_SRC/dist" "$pkg/dist"
+            diff -r "$GXT_SRC/dist" "$root/node_modules/@lifeart/gxt/dist"
+            node -e "
+              const m = require(process.argv[1]);
+              const sha = process.argv[2];
+              if (!sha.startsWith(m.gitHash) || m.gitDirty) throw new Error('gxt build meta ' + JSON.stringify(m) + ' is not ' + sha);
+              console.log(process.argv[3] + ': @lifeart/gxt dist = glimmer-next@' + m.gitHash);
+            " "$pkg/dist/.build-meta.json" "$(cat "$OUT/gxt-ref-sha.txt")" "$root"
+          }
+          swap "$GITHUB_WORKSPACE"
+          if [ -n "$BASE_EMBER_REF" ]; then swap "$BASE_DIR"; fi
+          ls "$GXT_PKG/dist" | sort > "$OUT/gxt-ref-files.txt"
+          echo "gxt dist chunks the npm package does not have:"
+          comm -13 "$OUT/gxt-npm-files.txt" "$OUT/gxt-ref-files.txt"
+
+      - name: Build the gxt-native dists and the krausest app with it
+        if: env.GXT_REF != ''
+        run: |
+          mv "$SNAPSHOTS/gxt-native" "$SNAPSHOTS/gxt-native-npm"
+          node scripts/bundle-modern-app.mjs --from-dist --build-dists --variants gxt-native-dist \
+            --json "$OUT/modern-app-gxt.json"
+          mv "$SNAPSHOTS/gxt-native" "$SNAPSHOTS/gxt-native-gxt"
+          variants=(--variant "gxt-native-gxt=gxt-native:$SNAPSHOTS/gxt-native-gxt")
+          if [ -n "$BASE_EMBER_REF" ]; then
+            (cd "$BASE_DIR" && node scripts/bundle-modern-app.mjs --from-dist --build-dists \
+              --variants gxt-native-dist --json "$OUT/modern-app-base-gxt.json")
+            cp -r "$BASE_DIR/smoke-tests/modern-app/dist/ember-dist/gxt-native" "$SNAPSHOTS/gxt-native-base-gxt"
+            variants+=(--variant "gxt-native-base-gxt=gxt-native:$SNAPSHOTS/gxt-native-base-gxt")
+          fi
+          node scripts/krausest-bench.mjs build "${variants[@]}" --json "$OUT/krausest-bytes-gxt.json"
+          # Each bundle is built from the branch's dist: every gxt file it names
+          # is in it, and some are not in the npm package (content-hashed names).
+          marker=()
+          if [ -n "$GXT_MARKER" ]; then marker=(--marker "$GXT_MARKER"); fi
+          for v in gxt-native-gxt $([ -n "$BASE_EMBER_REF" ] && echo gxt-native-base-gxt); do
+            node scripts/krausest-bench.mjs gxt-files --variant "$v" --dist "$GXT_PKG/dist" \
+              --npm-list "$OUT/gxt-npm-files.txt" --require-changed "${marker[@]}"
+          done
+
+      - name: Bench (interleaved, a fresh page per variant per rep)
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: |
+          node scripts/krausest-bench.mjs bench --variants "$VARIANTS" --reps "$BENCH_REPS" \
+            --leak-cycles "$LEAK_CYCLES" --json "$OUT/bench.json" | tee "$OUT/bench.txt"
+          { echo '```'; cat "$OUT/bench.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Heap snapshot census after create10k
+        if: ${{ !cancelled() }}
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: |
+          node scripts/krausest-bench.mjs snapshot --variants "$VARIANTS" \
+            --json "$OUT/snapshot.json" | tee "$OUT/snapshot.txt"
+          { echo '```'; cat "$OUT/snapshot.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: krausest-heap
+          path: |
+            krausest-out/
+            smoke-tests/krausest-app/dist/*.log
+            smoke-tests/modern-app/dist/*.log
+          if-no-files-found: warn
