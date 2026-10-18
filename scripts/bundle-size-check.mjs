@@ -116,6 +116,10 @@ const CLASSIC_LIVE_GXT_PATTERNS = [
   /\binstallBacktrackingPart\s*\(/,
   /\bsetGxtRenderer\s*\(/,
   /\bsetControllerOutletRerender\s*\(/,
+  // The glimmer host (gxt-bridge `getGxtGlimmerHost`): any call, as the
+  // glimmer call sites keep it in a local to assert it is installed.
+  /(?<!\bfunction\s+)\bgetGxtGlimmerHost\s*\(/,
+  /\bsetGxtGlimmerHost\s*\(/,
 ];
 
 // Strip `//…` line comments and `/* … */` block comments so doc-prose that

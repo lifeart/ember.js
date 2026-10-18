@@ -667,6 +667,8 @@ import {
 import { defineEmberMountElement } from './mount-element';
 // Also installs the route-outlet hooks route.ts / router.ts call (gxt-bridge).
 import { defineEmberOutletElement } from './outlet';
+// Installs the glimmer host that glimmer's renderer modules call (gxt-bridge).
+import './glimmer-host';
 
 // Typed capabilities bridge for destruction hooks. Populated by manager.ts at
 // its module init time.
@@ -3238,7 +3240,8 @@ const _gxtFlags = {
   // `_gxtTriggerReRender` saw a nested-object change; gates the force-rerender
   // full-tree fallback.
   hadNestedObjectChange: false,
-  // Inside root.ts's route-template render (the render tree's outlet hierarchy).
+  // Inside root-template.ts's route-template render (the render tree's outlet
+  // hierarchy).
   inOutletRender: false,
   // Inside renderer.ts's forced `classicRoot.render()`.
   forceRerender: false,
@@ -4269,7 +4272,7 @@ function _gxtWithInOutletRender<T>(fn: () => T): T {
 
 // Captured top-level outlet ref, exposed via a paired set/get bridge surface
 // (`setTopOutletRef` / `getTopOutletRef`). Written after the outlet-render
-// block in `glimmer/lib/templates/root.ts` (capturing the freshly-created
+// block in `root-template.ts` (capturing the freshly-created
 // top-level outlet ref so downstream consumers can walk the outlet hierarchy on
 // demand). Two readers:
 //
@@ -4309,7 +4312,7 @@ function _gxtWithForceRerender<T>(fn: () => T): T {
   return _gxtWithFlag('forceRerender', true, fn);
 }
 
-// Root outlet-rerender dispatcher. root.ts registers the `(outletRef) => void`
+// Root outlet-rerender dispatcher. root-template.ts registers the `(outletRef) => void`
 // dispatcher (`setRootOutletRerender`) and manager.ts a `render.outlet`
 // instrumentation wrap (`setRootOutletRerenderWrap`), applied when the
 // dispatcher is set; readers fetch it with `getRootOutletRerender()`. The wrap
@@ -4331,8 +4334,9 @@ function _gxtSetRootOutletRerenderWrap(wrap: (fn: any) => any): void {
   _gxtRootOutletRerenderWrap = wrap;
   // Re-wrap the currently stored dispatcher so a late-registered wrap applies
   // to an already-set dispatcher. In practice manager.ts's IIFE registers the
-  // wrap BEFORE root.ts ever registers a dispatcher (manager.ts loads as part of
-  // gxt-backend index init; root.ts only writes during first `factory.render`),
+  // wrap BEFORE root-template.ts ever registers a dispatcher (manager.ts loads as
+  // part of gxt-backend index init; root-template.ts only writes during first
+  // `factory.render`),
   // so this branch is dead in practice — it exists to cover the late-wrap order.
   if (_gxtRootOutletRerenderRaw !== null) {
     _gxtRootOutletRerenderRaw = wrap(_gxtRootOutletRerenderRaw);
@@ -4601,7 +4605,7 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
     // Controller-set outlet rerender bridge.
     // When `obj` is a Controller (marker `isController === true`) AND the
     // changed key is `model`, run the outlet rerender registered for it
-    // (`getControllerOutletRerender()`, installed by root.ts). This closes the
+    // (`getControllerOutletRerender()`, installed by root-template.ts). This closes the
     // cell→DOM propagation gap for `set(controller, 'model', x)`: SyncCore +
     // _walkRenderContexts update the cells on the renderContext
     // (Object.create(controller)), but the outlet template's text-binding
@@ -4619,7 +4623,7 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
     // the outletState model reference is unchanged too. QP keys are an
     // explicitly declared set, so generic `@tracked` properties stay out.
     //
-    // The hook itself contains the re-entrancy guard (toggled in root.ts),
+    // The hook itself contains the re-entrancy guard (toggled in root-template.ts),
     // so nested `set()` calls inside the rerender body don't re-trigger.
     const _isControllerKey = obj && typeof obj === 'object' && (obj as any).isController === true;
     let _isQpKey = false;

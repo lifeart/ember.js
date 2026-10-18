@@ -795,8 +795,8 @@ export interface GxtCompilePipelineCapabilities {
 
   /**
    * Register (or clear, with `null`) the root-outlet rerender dispatcher owned
-   * by glimmer's templates/root.ts. It is stored already wrapped by the wrap
-   * set with `setRootOutletRerenderWrap`.
+   * by the GXT root template (root-template.ts). It is stored already wrapped by
+   * the wrap set with `setRootOutletRerenderWrap`.
    */
   setRootOutletRerender?(fn: ((ref: any) => void) | null): void;
 
@@ -1157,9 +1157,9 @@ export function setRouteOutletHooks(hooks: GxtRouteOutletHooks | null): void {
   _routeOutletHooks = hooks;
 }
 
-// Re-renders the outlets bound to a controller. Installed by glimmer's
-// templates/root.ts; compile.ts calls it when a controller's model or query
-// params change.
+// Re-renders the outlets bound to a controller. Installed by the GXT root
+// template (root-template.ts); compile.ts calls it when a controller's model or
+// query params change.
 let _controllerOutletRerender: ((controller: object, keyName?: string) => void) | null = null;
 
 export function getControllerOutletRerender():
@@ -1172,6 +1172,42 @@ export function setControllerOutletRerender(
   fn: ((controller: object, keyName?: string) => void) | null
 ): void {
   _controllerOutletRerender = fn;
+}
+
+/**
+ * The GXT side of glimmer's root template (templates/root.ts). gxt-backend's
+ * glimmer-host.ts installs it when compile.ts (the GXT
+ * `@ember/template-compilation`) loads it. The glimmer module reaches it only
+ * through `getGxtGlimmerHost()`, from code gated on `__GXT_MODE__`, so
+ * classic builds never load it. The members are typed structurally, so this
+ * module stays a leaf.
+ */
+export interface GxtGlimmerHost {
+  /**
+   * The root template (`template:-root`) of a renderer, called with the owner
+   * as a template factory is: it renders a classic component a rendering test
+   * appends, or the outlet state of an application (gxt-backend
+   * root-template.ts).
+   */
+  createRootTemplate(owner: object): unknown;
+}
+
+let _glimmerHost: GxtGlimmerHost | null = null;
+
+/** Install the glimmer host. Called once, by gxt-backend's glimmer-host.ts. */
+export function setGxtGlimmerHost(host: GxtGlimmerHost): void {
+  _glimmerHost = host;
+}
+
+/**
+ * The installed glimmer host, or `null`. Always `null` in classic builds, as
+ * `getGxtRenderer()` is.
+ */
+export function getGxtGlimmerHost(): GxtGlimmerHost | null {
+  if (!__GXT_MODE__) {
+    return null;
+  }
+  return _glimmerHost;
 }
 
 // The curried-component factory. manager.ts registers the implementation and

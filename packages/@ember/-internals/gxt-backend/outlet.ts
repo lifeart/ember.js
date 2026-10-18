@@ -12,7 +12,7 @@
 //   - `EmberRouter#_setOutlets` hands the active route infos to `setOutlets`,
 //     which links the recorded render states into a chain and drives the
 //     top-level `GxtOutletView`;
-//   - the root template (glimmer/lib/templates/root.ts) renders the
+//   - the root template (root-template.ts) renders the
 //     application route, and the `<ember-outlet>` element below renders each
 //     nested level (GXT compiles `{{outlet}}` to `<ember-outlet />`).
 //
@@ -287,7 +287,7 @@ export function defineEmberOutletElement(): void {
 // The `-outlet` template: a route template that renders only `{{outlet}}` —
 // the top-level view's template and the template of a route that has none.
 // This is a simplified outlet that just renders nested templates - no GXT
-// primitives needed. root.ts recognizes it by its `template:-outlet`
+// primitives needed. root-template.ts recognizes it by its `template:-outlet`
 // moduleName and renders the nested level directly.
 export function createOutletTemplate(_owner: any) {
   // The outlet template factory
@@ -314,7 +314,7 @@ export function createOutletTemplate(_owner: any) {
   // Add render method for runtime gxt rendering
   // This is the main entry point - it just delegates to the nested template
   (factory as any).render = (context: any, parentElement: Element) => {
-    // The outlet state comes from the context - root.ts passes outletState directly
+    // The outlet state comes from the context - root-template.ts passes outletState directly
     const outletState = context?.outletState || context?.state || context;
 
     // The outlet state has the CURRENT route's info in .render
@@ -527,7 +527,7 @@ export class GxtOutletView {
     setCurrentOutletState(this.ref);
 
     // Trigger re-render of the root outlet content first. The root render
-    // function handles the top-level route (the one that root.ts renders
+    // function handles the top-level route (the one that root-template.ts renders
     // directly, skipping the -outlet template).
     const rootRenderFn = getGxtRenderer()?.compilePipeline.getRootOutletRerender?.() ?? null;
     if (typeof rootRenderFn === 'function') {
@@ -625,7 +625,7 @@ function buildRenderState(route: ClassicRouteLike): GxtRenderState {
       // carries none of the gxt wrapper brands (`__gxtCompiled` /
       // `__gxtFactory`). Calling it as `factory(owner)` here would crash
       // because no GXT root context or args exist yet, so store it uninvoked:
-      // the outlet root template (`templates/root.ts`) sets up the owner, root
+      // the outlet root template (`root-template.ts`) sets up the owner, root
       // context and args before calling it. Ember `TemplateFactory`s and
       // wrapped gxt factories still go through `factory(owner)`.
       let candidate = templateFactoryOrComponent as unknown as Record<string, unknown>;
