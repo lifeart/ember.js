@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-17T21:10:54.457Z",
-    "gxtVersion": "0.0.85",
-    "emberCommit": "0e46f9b991",
-    "totalTests": 7191,
-    "totalModules": 683,
+    "capturedAt": "2026-10-18T04:11:05.624Z",
+    "gxtVersion": "0.0.86",
+    "emberCommit": "6b8675867f",
+    "totalTests": 7195,
+    "totalModules": 684,
     "quarantinedTests": 0,
-    "totalAssertions": 35847,
-    "totalAssertionsPassing": 35805
+    "totalAssertions": 35877,
+    "totalAssertionsPassing": 35835
   },
   "modules": {
     "<LinkTo /> component (URL sanitization of forwarded attributes)": {
@@ -4774,6 +4774,13 @@
       "passing": 5,
       "assertionsTotal": 9,
       "assertionsPassing": 9,
+      "failingTests": []
+    },
+    "gxt-native | retained call-site shapes": {
+      "total": 4,
+      "passing": 4,
+      "assertionsTotal": 30,
+      "assertionsPassing": 30,
       "failingTests": []
     },
     "gxt-native | runtime template()": {

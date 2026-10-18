@@ -1,15 +1,15 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-10-17T21:10:55.160Z",
-    "gxtVersion": "0.0.85",
-    "emberCommit": "0e46f9b991",
+    "capturedAt": "2026-10-18T04:11:11.837Z",
+    "gxtVersion": "0.0.86",
+    "emberCommit": "6b8675867f",
     "totalTests": 10273,
     "totalModules": 1028,
     "quarantinedTests": 0,
     "totalAssertions": 61365,
     "totalAssertionsPassing": 61044,
-    "note": "Compat full run on #21340 (gxt 0.0.85) after the gxt 0.0.85 consumption: a revalidation pass that a binding aborts ended by gxt, a bound style written as its text, argument labels for helper and modifier references in DEBUG compiles, {{debugger}} calling Glimmer's debugger callback, a keyed {{#each}} row re-bound by the object it was bound to last, the content between named blocks not being a default block, and Glimmer's template text in compat templates; written by runner.mjs in the GitHub Actions GXT full workflow (run 39069769817, merged from 5 shards, on the code of 0e46f9b991). 10027/10273 green (was 9993/10261), 1028 modules, no timeouts, no harness errors, no green->red. 22 tests turned green. The new tests pass: GXT template text (4/4), GXT argument labels (2/2), GXT {{debugger}} (2/2), GXT errors: {{#if}} conditions (2/2), GXT in-place updates (12/12), GXT Integration - AngleBracket Invocation (14/14), GXT {{#each}} rows (4/4)."
+    "note": "Compat full run on #21340 (gxt 0.0.86) after pinning @lifeart/gxt 0.0.86 (no leaked ops entries, const modifiers keeping only their destructor, one-element ops arrays without a pool, the content binding as one scope with two closures, the Cell/MergedCell slot trim); written by runner.mjs in the GitHub Actions GXT full workflow (run 39096142388, merged from 5 shards, on the code of 6b8675867f). 10027/10273 green (unchanged from 0.0.85), 1028 modules, no timeouts, no harness errors, no green->red, no red->green."
   },
   "modules": {
     "<LinkTo /> component (URL sanitization of forwarded attributes)": {
