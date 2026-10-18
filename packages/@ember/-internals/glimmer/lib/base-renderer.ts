@@ -3,6 +3,11 @@ import type { InternalOwner } from '@ember/-internals/owner';
 import { assert } from '@ember/debug';
 import { _backburner, _getCurrentRunLoop } from '@ember/runloop';
 import {
+  getGxtGlimmerHost,
+  getGxtRenderer,
+  installCompilePipelinePart,
+} from '@ember/-internals/gxt-backend/gxt-bridge';
+import {
   associateDestroyableChild,
   destroy,
   isDestroyed,
@@ -25,13 +30,25 @@ import { RuntimeOpImpl } from '@glimmer/program/lib/opcode';
 import { clientBuilder } from '@glimmer/runtime/lib/vm/element-builder';
 import { inTransaction, runtimeOptions } from '@glimmer/runtime/lib/environment';
 import { renderComponent as glimmerRenderComponent } from '@glimmer/runtime/lib/render';
-import { CURRENT_TAG, validateTag, valueForTag } from '@glimmer/validator/lib/validators';
+// The @glimmer/validator BARREL specifier below is load-bearing for the GXT
+// dual backend: the rollup GXT alias map (scripts/gxt-alias-map.mjs) redirects
+// the exact barrel key to the gxt-backend shim, while deep lib/* paths would
+// resolve to the real vendored VM source and fork the reactive runtime in GXT
+// builds. Do not convert it to a deep import.
+// eslint-disable-next-line ember-local/no-barrel-imports
+import { CURRENT_TAG, validateTag, valueForTag } from '@glimmer/validator';
 import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
 import { hasDOM } from '../../browser-environment';
 import { EmberEnvironmentDelegate } from './environment';
 import ResolverImpl from './resolver';
 import { renderers } from './renderers';
 import { EvaluationContextImpl } from '@glimmer/opcode-compiler/lib/program-context';
+
+// GXT-only: Glimmer's `isArgumentError` for the arguments a debug render tree
+// capture could not read (the environment's `isArgumentCaptureError`).
+function gxtIsArgumentCaptureError(value: unknown): boolean {
+  return getGxtRenderer()?.debugRenderTree?.isArgumentCaptureError(value) ?? false;
+}
 
 /**
  * The parts of this module, in the order that they appear:
@@ -129,6 +146,18 @@ export class ComponentRootState implements RendererRoot {
      * An error in either one stops all later renders of this root.
      */
     this.#render = errorLoopTransaction(() => {
+      // In GXT mode `renderComponent` escape-hatches to `_renderComponentGxt`
+      // BEFORE constructing a ComponentRootState, so this class is
+      // classic-only. The gate makes the VM bindings (`glimmerRenderComponent`,
+      // `state.context`, `state.builder` / `state.env`) statically dead in the
+      // GXT dist so the VM render loop tree-shakes out.
+      if (__GXT_MODE__) {
+        throw new Error(
+          '[gxt] ComponentRootState reached in GXT mode; the GXT backend renders ' +
+            'via _renderComponentGxt and ships no Glimmer VM render loop — no fallback.'
+        );
+      }
+
       let result = this.#result;
 
       if (result === undefined) {
@@ -294,7 +323,7 @@ export class RendererState {
        * If it stays invalid, `loopEnd` starts one more run loop,
        * and that run loop throws the same error again.
        */
-      if (!completedWithoutError) {
+      if (!completedWithoutError && !__GXT_MODE__) {
         this.#lastRevision = valueForTag(CURRENT_TAG);
       }
       this.#inRenderTransaction = false;
@@ -317,11 +346,23 @@ export class RendererState {
     let roots = this.#roots;
     let removedRoots = this.#removedRoots;
     let initialRootsLength: number;
+    let _renderIterations = 0;
 
     do {
+      if (__GXT_MODE__) {
+        // GXT safety limit against infinite render loops.
+        if (++_renderIterations > 20) {
+          break;
+        }
+        // GXT test-harness loop guard (DEBUG only, so it tree-shakes out of
+        // the production dist).
+        if (DEBUG && typeof (globalThis as any).__gxtOpCheck === 'function') {
+          (globalThis as any).__gxtOpCheck();
+        }
+      }
       initialRootsLength = roots.length;
 
-      inTransaction(this.context.env, () => {
+      const renderRootsPass = () => {
         /**
          * `roots.length` is read on each iteration, because a render can
          *
@@ -340,10 +381,35 @@ export class RendererState {
           if (i >= initialRootsLength) continue;
 
           root.render();
+
+          // In GXT mode, lifecycle errors during re-render (destroy, didInsertElement)
+          // are deferred to avoid disabling errorLoopTransaction. Re-throw them here
+          // so they propagate to assert.throws() in tests.
+          if (__GXT_MODE__ && (root as any).__gxtDeferredError) {
+            const err = (root as any).__gxtDeferredError;
+            (root as any).__gxtDeferredError = null;
+            throw err;
+          }
         }
 
-        this.#lastRevision = valueForTag(CURRENT_TAG);
-      });
+        // GXT: `isValid` does not compare revisions (gxt renders the updates),
+        // and reading `CURRENT_TAG` would subscribe the formula a nested
+        // `renderComponent` call runs in (a helper that renders a component
+        // and adds its root) to every tag: the formula would run again on any
+        // change, and render the component again.
+        if (!__GXT_MODE__) {
+          this.#lastRevision = valueForTag(CURRENT_TAG);
+        }
+      };
+
+      if (__GXT_MODE__) {
+        // GXT roots never enqueue VM-transaction work (no opcodes run), and
+        // the GXT renderer has no VM environment to open a transaction on
+        // (see the BaseRenderer constructor). Run the pass directly.
+        renderRootsPass();
+      } else {
+        inTransaction(this.context.env, renderRootsPass);
+      }
     } while (roots.length > initialRootsLength);
 
     while (removedRoots.length) {
@@ -391,10 +457,33 @@ export class RendererState {
    * Each root then finds out for itself if the change applies to it.
    */
   isValid(): boolean {
+    // In GXT mode, rendering is handled by GXT's reactivity system,
+    // not by the Ember renderer's revalidation loop. Always report valid
+    // to prevent infinite revalidation loops in loopEnd().
+    if (__GXT_MODE__) {
+      return true;
+    }
+
     return this.#roots.length === 0 || validateTag(CURRENT_TAG, this.#lastRevision);
   }
 
   revalidate(): void {
+    // In GXT mode, isValid() returns true to prevent infinite revalidation.
+    // But explicit .rerender() calls (which mark the component through
+    // `compilePipeline.forceRerender`) still need a sync pass to flush the
+    // hooks.
+    //
+    // The sync runs here, in the run loop's render queue, as Glimmer's
+    // revalidation renders the roots there: an error of the update it renders
+    // (the sync throws it) is thrown to the code that ran the run loop. Inside
+    // `runTask` / `runAppend` (the test helpers), the helper syncs after its
+    // run loop instead.
+    if (__GXT_MODE__) {
+      const pipeline = getGxtRenderer()?.compilePipeline;
+      pipeline?.setPendingSync?.(true);
+      if (!pipeline?.getRunTaskActive?.()) pipeline?.syncDomNow?.();
+      return;
+    }
     if (this.isValid()) {
       return;
     }
@@ -420,6 +509,19 @@ export class RendererState {
  * ----------------------------------------------------------------------------
  */
 
+// Default element builder for the classic VM render loop. Under __GXT_MODE__
+// the Glimmer VM element-builder is never invoked (renderMain /
+// glimmerRenderComponent are gated off and the GXT render path never touches a
+// VM builder), so resolving the literal `clientBuilder` here would needlessly
+// retain the VM element-builder module. Gate it behind `!__GXT_MODE__` so the
+// `clientBuilder` reference is statically dead in the GXT dist; the GXT branch
+// is a thrower (fail loud, no VM fallback) that is never reached at runtime.
+export const defaultClientBuilder: IBuilder = __GXT_MODE__
+  ? (((): never => {
+      throw new Error('[gxt] Glimmer VM element builder requested in GXT mode; no VM fallback.');
+    }) as unknown as IBuilder)
+  : clientBuilder;
+
 export class BaseRenderer {
   /**
    * Creates a renderer that has no router.
@@ -437,7 +539,7 @@ export class BaseRenderer {
       { hasDOM: hasDOM, ...options },
       document as SimpleDocument,
       new ResolverImpl(),
-      clientBuilder
+      defaultClientBuilder
     );
   }
 
@@ -450,6 +552,34 @@ export class BaseRenderer {
     resolver: ClassicResolver,
     builder: IBuilder
   ) {
+    if (__GXT_MODE__) {
+      // The GXT backend never executes Glimmer VM opcodes, so it builds no VM
+      // evaluation context: the program heap behind one is a 4MB ArrayBuffer
+      // per renderer (one renderer per test exhausted the V8 ArrayBuffer cage
+      // across the cumulative GXT test run), and leaving the constructors
+      // below unreferenced lets the opcode-eval core tree-shake out of the
+      // GXT dist. `RendererState` only reads `context.env.isInteractive`.
+      //
+      // The environment has a debug render tree when `ENV._DEBUG_RENDER_TREE`
+      // is on as it is created (DEBUG builds, Ember Inspector), as Glimmer's
+      // environment builds one (see `_renderComponentGxt`), with the check for
+      // the arguments its capture could not read.
+      let debugRenderTree = ENV._DEBUG_RENDER_TREE;
+      let context = {
+        env: {
+          isInteractive: envOptions.isInteractive,
+          gxtDebugRenderTree: debugRenderTree,
+          isArgumentCaptureError: debugRenderTree ? gxtIsArgumentCaptureError : undefined,
+        },
+      };
+      this.state = new RendererState(this, {
+        owner,
+        context: context as unknown as EvaluationContext,
+        builder,
+      });
+      return;
+    }
+
     let sharedArtifacts = artifacts();
 
     /**
@@ -471,6 +601,17 @@ export class BaseRenderer {
   }
 
   get debugRenderTree(): DebugRenderTree {
+    if (__GXT_MODE__) {
+      // The classic debugRenderTree lives on the Glimmer VM environment, which
+      // the GXT backend does not build. Return a minimal DebugRenderTree whose
+      // `.capture()` delegates to gxt's `captureRenderTree` instead (consumed by
+      // `@ember/debug`'s `captureRenderTree(owner)`, e.g. for Ember Inspector),
+      // built by gxt-backend's render-component.ts.
+      const host = getGxtGlimmerHost();
+      assert('[gxt] the glimmer host is not installed (gxt-backend/glimmer-host.ts)', host);
+      return host.debugRenderTree(this.state);
+    }
+
     let { debugRenderTree } = this.state.env;
 
     assert(
@@ -571,8 +712,49 @@ function loopEnd() {
   resolveRenderPromise();
 }
 
-_backburner.on('begin', loopBegin);
-_backburner.on('end', loopEnd);
+// In GXT mode, don't hook into backburner's begin/end events for render
+// revalidation. GXT handles rendering via its own reactivity system; pending
+// DOM syncs are flushed at the end of the outermost run loop (and explicitly
+// by the test helpers).
+if (!__GXT_MODE__) {
+  _backburner.on('begin', loopBegin);
+  _backburner.on('end', loopEnd);
+} else {
+  // Backburner fires 'end' event listeners BEFORE the onEnd option. Thus
+  // we must flush GXT's pending DOM sync here (not rely on runloop.onEnd)
+  // so that renderSettled()'s promise resolves AFTER the DOM is up-to-date.
+  // Only flush on the outermost runloop end (nextInstance == null) and when
+  // not inside runTask (which performs its own explicit sync).
+  //
+  // What the sync throws (an error of the update it renders) reaches the code
+  // that ran the run loop, as a render error of the run loop's render queue
+  // does. Thrown from this listener, it would skip the runloop's `onEnd` (the
+  // reset of the current run loop, the observer flush), so it is kept here and
+  // `onEnd`, the run loop's last step, throws it (`takeRunLoopEndError`).
+  let endError: { error: unknown } | null = null;
+  installCompilePipelinePart({
+    takeRunLoopEndError() {
+      const taken = endError;
+      endError = null;
+      return taken;
+    },
+  });
+  _backburner.on('end', (_curr: unknown, nextInstance: unknown) => {
+    loops = 0;
+    const _cpBB = getGxtRenderer()?.compilePipeline;
+    if (nextInstance == null && _cpBB?.getPendingSync?.() && !_cpBB?.getRunTaskActive?.()) {
+      const syncNow = _cpBB?.syncDomNow;
+      if (typeof syncNow === 'function') {
+        try {
+          syncNow();
+        } catch (error) {
+          endError = { error };
+        }
+      }
+    }
+    resolveRenderPromise();
+  });
+}
 
 interface RenderSettledDeferred {
   promise: Promise<void>;
@@ -802,6 +984,16 @@ export function renderComponent(
     args?: Record<string, unknown>;
   }
 ): RenderResult {
+  // GXT escape hatch: bypass Glimmer VM entirely for GXT mode.
+  // This avoids bytecode compilation which crashes with GXT templates.
+  // gxt-backend's render-component.ts renders; it calls `rendererFor` when the
+  // render adds its root to the owner's renderer.
+  if (__GXT_MODE__) {
+    const host = getGxtGlimmerHost();
+    assert('[gxt] the glimmer host is not installed (gxt-backend/glimmer-host.ts)', host);
+    return host.renderComponent(component, into, owner, args, () => rendererFor(owner, env));
+  }
+
   let renderer = rendererFor(owner, env);
   let element = isCursor(into) ? into.element : into;
 

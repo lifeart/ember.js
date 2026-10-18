@@ -2,6 +2,11 @@ import { privatize as P } from '@ember/-internals/container/lib/registry';
 import type { InternalOwner } from '@ember/-internals/owner';
 import { getOwner } from '@ember/-internals/owner';
 import { getViewElement, getViewId } from '@ember/-internals/views/lib/system/utils';
+import { getGxtGlimmerHost, getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
+// Side-effect-only imports, where the GXT-only code that moved to
+// gxt-backend/classic-roots.ts imported from these modules, so the classic dist
+// keeps its module graph (also the two after the @glimmer/reference import).
+import '@ember/-internals/utils/lib/guid';
 import { sendCoreViewEvent } from '@ember/-internals/views/lib/views/core-view-utils';
 import { assert } from '@ember/debug';
 import {
@@ -19,13 +24,21 @@ import type {
   TemplateFactory,
   EvaluationContext,
   CurriedComponent,
+  Tag,
 } from '@glimmer/interfaces';
 
 import type { Nullable } from '@ember/-internals/utility-types';
 import type { Reference } from '@glimmer/reference/lib/reference';
-import { createConstRef, UNDEFINED_REFERENCE, valueForRef } from '@glimmer/reference/lib/reference';
+// The @glimmer/reference and @glimmer/validator BARREL specifiers below are
+// load-bearing for the GXT dual backend: the rollup GXT alias map
+// (scripts/gxt-alias-map.mjs) redirects the exact barrel key to the gxt-backend
+// shim, while deep lib/* paths would resolve to the real vendored VM source and
+// fork the reactive runtime in GXT builds. Do not convert them to deep imports.
+// eslint-disable-next-line ember-local/no-barrel-imports
+import { createConstRef, UNDEFINED_REFERENCE, valueForRef } from '@glimmer/reference';
+import '@glimmer/validator';
+import '@ember/-internals/metal/lib/tags';
 import type { CurriedValue } from '@glimmer/runtime/lib/curried-value';
-import { clientBuilder } from '@glimmer/runtime/lib/vm/element-builder';
 import { curry } from '@glimmer/runtime/lib/curried-value';
 import { inTransaction } from '@glimmer/runtime/lib/environment';
 import { renderMain } from '@glimmer/runtime/lib/render';
@@ -38,7 +51,7 @@ import { RootComponentDefinition } from './component-managers/root';
 import RouterResolver from './router-resolver';
 import type { OutletState } from '../../routing/route-managers/outlet-state';
 import type { IBuilder, RendererRoot } from './base-renderer';
-import { BaseRenderer, errorLoopTransaction } from './base-renderer';
+import { BaseRenderer, defaultClientBuilder, errorLoopTransaction } from './base-renderer';
 
 export {
   type IBuilder,
@@ -98,6 +111,19 @@ class ClassicRootState implements RendererRoot {
   public destroyed: boolean;
   public render: () => void;
   readonly env: Environment;
+  public isGxt: boolean = false; // Track if this root uses GXT templates
+  public isOutletView: boolean = false; // Track if this root is an OutletView
+  // True while the most recent render() attempt threw before completing.
+  // Such a root never wired its reactivity (gxtComponentTag stays unset), so
+  // the tag-based dirty selection in _gxtForceEmberRerender cannot see it;
+  // the flag makes the next force pass retry the full root render. Classic
+  // production recovers after an initial-render error this way ("it
+  // rerenders after error in production"); in DEBUG errorLoopTransaction has
+  // already nooped the render fn, so the retry is a warn-noop and dev keeps
+  // its "does not rerender after error" behavior.
+  public gxtRenderIncomplete: boolean = false;
+  public gxtComponentTag: Tag | null = null; // Track component's dirty tag for GXT reactivity
+  public gxtLastTagValue: number = 0; // Last known tag value for comparison
 
   constructor(
     public root: Component,
@@ -118,6 +144,25 @@ class ClassicRootState implements RendererRoot {
     this.result = undefined;
     this.destroyed = false;
     this.env = context.env;
+
+    // Two separate `errorLoopTransaction` calls, not one callback branching on
+    // `__GXT_MODE__`: rollup keeps every binding a callback passed there refers
+    // to (the helper reassigns its parameter), even in a folded branch, so a
+    // shared callback would keep the GXT helpers in the classic build.
+    if (__GXT_MODE__) {
+      const host = getGxtGlimmerHost();
+      assert('[gxt] the glimmer host is not installed (gxt-backend/glimmer-host.ts)', host);
+      // gxt-backend's classic-roots.ts renders the root, with this root state as
+      // `this`.
+      this.render = errorLoopTransaction(() =>
+        host.renderClassicRoot.call(
+          this,
+          { root, owner, template, self, parentElement },
+          errorLoopTransaction
+        )
+      );
+      return;
+    }
 
     this.render = errorLoopTransaction(() => {
       let layout = unwrapTemplate(template).asLayout();
@@ -159,6 +204,16 @@ class ClassicRootState implements RendererRoot {
     this.render = undefined as any;
 
     if (result !== undefined) {
+      if (__GXT_MODE__) {
+        // GXT teardown: `result` is the minimal gxt result object, which
+        // gxt-backend's classic-roots.ts destroys. There is no Glimmer VM
+        // transaction to open (the GXT renderer has no VM environment).
+        const host = getGxtGlimmerHost();
+        assert('[gxt] the glimmer host is not installed (gxt-backend/glimmer-host.ts)', host);
+        host.destroyClassicRoot(result);
+        return;
+      }
+
       /*
        Handles these scenarios:
 
@@ -203,7 +258,7 @@ export class Renderer extends BaseRenderer {
     env: { isInteractive: boolean; hasDOM: boolean },
     rootTemplate: TemplateFactory,
     viewRegistry: ViewRegistry,
-    builder = clientBuilder,
+    builder = defaultClientBuilder,
     resolver = new RouterResolver()
   ) {
     super(owner, env, document, resolver, builder);
@@ -282,11 +337,32 @@ export class Renderer extends BaseRenderer {
   }
 
   get _context() {
+    // In GXT mode there is no real EvaluationContext (see the BaseRenderer
+    // constructor). Callers such as the runtime-resolver cache tests only read
+    // `_context.constants.{component,helper,modifier}DefinitionCount`, so
+    // serve those counts from the GXT resolver-cache tracker instead.
+    if (__GXT_MODE__) {
+      const counters = getGxtRenderer()?.compilePipeline.getResolverCacheCounters?.();
+      return {
+        constants: {
+          componentDefinitionCount: counters?.componentDefinitionCount || 0,
+          helperDefinitionCount: counters?.helperDefinitionCount || 0,
+          modifierDefinitionCount: counters?.modifierDefinitionCount || 0,
+        },
+      } as unknown as EvaluationContext;
+    }
     return this.state.context;
   }
 
   register(view: any): void {
     let id = getViewId(view);
+    // In GXT mode, view registration can conflict during a forced rerender
+    // or when views aren't fully cleaned up between test runs. Silently
+    // overwrite the existing entry instead of asserting.
+    if (__GXT_MODE__) {
+      this._viewRegistry[id] = view;
+      return;
+    }
     assert(
       'Attempted to register a view with an id already in use: ' + id,
       !this._viewRegistry[id]
@@ -314,6 +390,20 @@ export class Renderer extends BaseRenderer {
     lastNode: SimpleNode;
   } {
     let bounds: Bounds | null = component[BOUNDS];
+
+    // In GXT mode, BOUNDS may not be set on the component. gxt-backend's
+    // classic-roots.ts then synthesizes them from the component's element
+    // (wrapper or tagless).
+    if (__GXT_MODE__) {
+      if (!bounds) {
+        const host = getGxtGlimmerHost();
+        assert('[gxt] the glimmer host is not installed (gxt-backend/glimmer-host.ts)', host);
+        const gxtBounds = host.componentBounds(component);
+        if (gxtBounds !== null) {
+          return gxtBounds;
+        }
+      }
+    }
 
     assert('object passed to getBounds must have the BOUNDS symbol as a property', bounds);
 
