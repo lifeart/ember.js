@@ -17,10 +17,7 @@ import type Component from '@ember/-internals/glimmer/lib/component';
 import type { View } from '@ember/-internals/glimmer/lib/renderer';
 import type { RendererState } from '@ember/-internals/glimmer/lib/base-renderer';
 import { renderers } from '@ember/-internals/glimmer/lib/renderers';
-import {
-  isGxtTemplate,
-  unwrapTemplate,
-} from '@ember/-internals/glimmer/lib/component-managers/unwrap-template';
+import { unwrapTemplate } from '@ember/-internals/glimmer/lib/component-managers/unwrap-template';
 import { getViewElement, setViewElement } from '@ember/-internals/views/lib/system/utils';
 import { guidFor } from '@ember/-internals/utils/lib/guid';
 import { tagForObject } from '@ember/-internals/metal/lib/tags';
@@ -45,6 +42,7 @@ import {
   GXT_VIEW_SKIP_KEYS,
 } from './gxt-bridge';
 import { _gxtLib, destroyElementSync, ensureGxtContext, gxtRenderPass } from './render-component';
+import { isGxtTemplate } from './template-adapter';
 
 // Re-entrancy guard for `_gxtForceEmberRerender`.
 let _gxtForceRerenderInProgress = false;

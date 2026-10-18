@@ -12,7 +12,12 @@
  * the renderer exists. In classic builds `getGxtRenderer()` returns `null`, so
  * callers use optional chaining: `getGxtRenderer()?.compilePipeline.foo?.()`.
  */
-import type { CapturedRenderNode, DebugRenderTree } from '@glimmer/interfaces';
+import type {
+  CapturedRenderNode,
+  DebugRenderTree,
+  Template,
+  TemplateOk,
+} from '@glimmer/interfaces';
 import type { SimpleElement, SimpleNode } from '@simple-dom/interface';
 
 /**
@@ -1190,12 +1195,13 @@ export interface GxtClassicRoot {
 }
 
 /**
- * The GXT side of glimmer's renderers and root template (base-renderer.ts,
- * renderer.ts, templates/root.ts). gxt-backend's glimmer-host.ts installs it
- * when compile.ts (the GXT `@ember/template-compilation`) loads it. The glimmer
- * modules reach it only through `getGxtGlimmerHost()`, from code gated on
- * `__GXT_MODE__`, so classic builds never load it. The members are typed
- * structurally, so this module stays a leaf.
+ * The GXT side of glimmer's renderers, root template and template unwrapping
+ * (base-renderer.ts, renderer.ts, templates/root.ts,
+ * component-managers/unwrap-template.ts). gxt-backend's glimmer-host.ts
+ * installs it when compile.ts (the GXT `@ember/template-compilation`) loads it.
+ * The glimmer modules reach it only through `getGxtGlimmerHost()`, from code
+ * gated on `__GXT_MODE__`, so classic builds never load it. The members are
+ * typed structurally, so this module stays a leaf.
  */
 export interface GxtGlimmerHost {
   /**
@@ -1255,6 +1261,13 @@ export interface GxtGlimmerHost {
   componentBounds(
     component: object
   ): { parentElement: SimpleElement; firstNode: SimpleNode; lastNode: SimpleNode } | null;
+
+  /**
+   * `unwrapTemplate` (component-managers/unwrap-template.ts): a gxt-compiled
+   * template, which has no `asLayout`, adapted to `TemplateOk`; a compile error
+   * throws (gxt-backend template-adapter.ts).
+   */
+  unwrapTemplate(template: Template): TemplateOk;
 }
 
 let _glimmerHost: GxtGlimmerHost | null = null;
