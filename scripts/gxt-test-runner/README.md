@@ -8,7 +8,11 @@ A Playwright + QUnit runner for the Ember.js GXT test pages (compat
 1. **`QUnit.on('runEnd', ...)` (or `QUnit.done`) is the only completion
    signal.** No stuck-detection. Hangs are recorded as timeouts and never
    enter the baseline.
-2. **Per-module isolation.** Every module runs in its own browser context.
+2. **Per-module isolation.** One browser and one tab run every module, one
+   at a time. Each module loads the test page anew (`?module=<name>`), so it
+   runs in a fresh document and JS realm, and the runner clears the page's
+   web storage after it. The tab is replaced when a module times out or its
+   page fails, and every 50 modules to bound the renderer's memory.
 3. **Deterministic ordering.** Modules are sorted lexicographically; shard
    N of M runs every Mth module of the sorted list, starting at the Nth.
 4. **Retries at the QUnit level.** `--retries` controls how many additional
@@ -37,9 +41,11 @@ on exit.
 node scripts/gxt-test-runner/runner.mjs --smoke
 ```
 
-Expected on the session baseline: 333/333 tests, 2365/2365 assertions across
-14 modules. The runner reports both counts on the summary line; failures in
-either dimension gate the run.
+The smoke modules (`smoke-modules.json`) hold 277 tests and 1,814 assertions.
+Five tests of `Components test: curly components` are known reds in
+`test-results/gxt-baseline.json`, so a run on the baseline reports 272/277
+tests and 1,809/1,814 assertions. The runner prints both counts on its summary
+line; see [Baseline gating](#baseline-gating) for the verdict.
 
 ### Full run
 
