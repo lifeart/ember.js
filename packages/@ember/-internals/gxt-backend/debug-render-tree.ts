@@ -10,7 +10,7 @@
  *
  * - a render whose renderer has the debug render tree (its environment was
  *   created with `ENV._DEBUG_RENDER_TREE`, as Glimmer's) renders with its root
- *   node as the current node (base-renderer.ts `_renderComponentGxt`);
+ *   node as the current node (render-component.ts `_renderComponentGxt`);
  * - a component's template renders with the component's node as the current
  *   node (manager.ts `renderTemplateWithParentView`), and a modifier is a node
  *   of the component whose template renders its element;

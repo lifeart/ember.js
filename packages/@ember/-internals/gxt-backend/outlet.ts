@@ -509,7 +509,7 @@ export class GxtOutletView {
     };
 
     // The renderer renders this view as a root (glimmer/lib/renderer.ts
-    // ClassicRootState): its GXT branch renders the root template with this
+    // ClassicRootState, classic-roots.ts): it renders the root template with this
     // view's `ref` and `template`, so no root component definition is needed.
     schedule('render', renderer, '_appendDefinition', this, null, target);
   }

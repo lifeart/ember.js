@@ -189,7 +189,7 @@ function renderTemplateWithContext(tpl: any, target: Element, ctx: any, owner: a
 
   // PRIORITY 1: If it has a render method, use it directly.
   // NOTE: throws from `tpl.render` (init-phase user errors, assertion
-  // failures, etc.) propagate up to `renderer.ts`'s try/catch around
+  // failures, etc.) propagate up to classic-roots.ts's try/catch around
   // `template.render(...)`, which clears the partially-rendered DOM and
   // re-throws. Do not swallow them here.
   if (typeof tpl?.render === 'function') {
@@ -468,7 +468,7 @@ export function createRootTemplate(_owner: any) {
               // Only install a cell if the component doesn't already have
               // an own descriptor for this key. If the key is already on
               // the component (with a value or as a cell-backed
-              // getter/setter), renderer.ts's earlier pass has handled it.
+              // getter/setter), classic-roots.ts's earlier pass has handled it.
               const existing = Object.getOwnPropertyDescriptor(renderContext, key);
               if (existing) continue;
               // Walk the prototype chain of the COMPONENT to detect
@@ -480,7 +480,7 @@ export function createRootTemplate(_owner: any) {
               // component[key]` would re-read the CP's getter through the
               // prototype chain, recursing without bound (`cell.value →
               // __fn() → component[key] → cell.value → ...`). Matches the
-              // same guard in renderer.ts. `properties[key]` holds the
+              // same guard in classic-roots.ts. `properties[key]` holds the
               // ComputedProperty itself, so the proto descriptor is the
               // reliable signal.
               let hasAccessor = false;

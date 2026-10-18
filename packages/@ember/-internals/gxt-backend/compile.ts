@@ -1218,8 +1218,8 @@ function _gxtSetIsRendering(on: boolean): void {
 }
 
 // Save-restore wrapper around the render-pass depth counter, contributed to
-// the bridge as `compilePipeline.withRendering`. Used by the cross-package
-// renderComponent wraps in `glimmer/lib/renderer.ts`.
+// the bridge as `compilePipeline.withRendering`. Used by the renderComponent
+// render in `render-component.ts`.
 //
 // Balanced semantics: increment on entry, decrement on exit. The in-element
 // deferred-render drain is already gated on the depth-1→0 TRANSITION inside
@@ -3182,7 +3182,7 @@ function _pushIfWatcherNotification(obj: object, keyName: string): void {
 // it without wrapping it:
 //   - `_beforeTriggerReRender`: manager.ts (dirtied-objects set) and
 //     ember-gxt-wrappers.ts (tracked-set-since-rerender flag);
-//   - `_afterTriggerReRender`: glimmer/lib/renderer.ts (ArrayProxy
+//   - `_afterTriggerReRender`: classic-roots.ts (ArrayProxy
 //     content-array owner dirtying).
 // An empty chain costs one length check per call.
 type _TriggerReRenderHook = (obj: object, keyName: string) => void;
@@ -4706,7 +4706,7 @@ const _gxtTriggerReRender = function (obj: object, keyName: string, value?: unkn
       }
     }
   } finally {
-    // The hook (glimmer/lib/renderer.ts) updates the cells of the components
+    // The hook (classic-roots.ts) updates the cells of the components
     // holding an ArrayProxy whose content array changed.
     if (_afterTriggerReRender.length > 0) {
       for (let i = 0; i < _afterTriggerReRender.length; i++) {

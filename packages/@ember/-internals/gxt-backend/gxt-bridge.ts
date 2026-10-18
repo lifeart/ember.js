@@ -12,7 +12,8 @@
  * the renderer exists. In classic builds `getGxtRenderer()` returns `null`, so
  * callers use optional chaining: `getGxtRenderer()?.compilePipeline.foo?.()`.
  */
-import type { CapturedRenderNode } from '@glimmer/interfaces';
+import type { CapturedRenderNode, DebugRenderTree } from '@glimmer/interfaces';
+import type { SimpleElement, SimpleNode } from '@simple-dom/interface';
 
 /**
  * Render-context key for the named args of the root, outlet, engine-mount and
@@ -1175,12 +1176,26 @@ export function setControllerOutletRerender(
 }
 
 /**
- * The GXT side of glimmer's root template (templates/root.ts). gxt-backend's
- * glimmer-host.ts installs it when compile.ts (the GXT
- * `@ember/template-compilation`) loads it. The glimmer module reaches it only
- * through `getGxtGlimmerHost()`, from code gated on `__GXT_MODE__`, so
- * classic builds never load it. The members are typed structurally, so this
- * module stays a leaf.
+ * The fields of glimmer's `ClassicRootState` (renderer.ts) that its GXT render
+ * (`GxtGlimmerHost.renderClassicRoot`) reads and writes.
+ */
+export interface GxtClassicRoot {
+  result: unknown;
+  render: () => void;
+  isGxt: boolean;
+  isOutletView: boolean;
+  gxtRenderIncomplete: boolean;
+  gxtComponentTag: unknown;
+  gxtLastTagValue: number;
+}
+
+/**
+ * The GXT side of glimmer's renderers and root template (base-renderer.ts,
+ * renderer.ts, templates/root.ts). gxt-backend's glimmer-host.ts installs it
+ * when compile.ts (the GXT `@ember/template-compilation`) loads it. The glimmer
+ * modules reach it only through `getGxtGlimmerHost()`, from code gated on
+ * `__GXT_MODE__`, so classic builds never load it. The members are typed
+ * structurally, so this module stays a leaf.
  */
 export interface GxtGlimmerHost {
   /**
@@ -1190,6 +1205,56 @@ export interface GxtGlimmerHost {
    * root-template.ts).
    */
   createRootTemplate(owner: object): unknown;
+
+  /**
+   * `renderComponent` (base-renderer.ts): render `component` into `into` as a
+   * root of the owner's renderer, which `rendererFor` finds or creates when
+   * the render adds its root (gxt-backend render-component.ts).
+   */
+  renderComponent(
+    component: object,
+    into: object,
+    owner: object,
+    args: Record<string, unknown> | undefined,
+    rendererFor: () => object
+  ): { destroy(): void };
+
+  /**
+   * The debug render tree of a renderer (`BaseRenderer#debugRenderTree`):
+   * only its `capture()` does something, the trees of the renderer's roots
+   * (gxt-backend render-component.ts).
+   */
+  debugRenderTree(state: { readonly roots: readonly object[] }): DebugRenderTree;
+
+  /**
+   * The render of a classic root, called as its `render` with the root state
+   * as `this`, inside the root's `errorLoopTransaction`, which it is given to
+   * wrap the render that replaces it once the root rendered (gxt-backend
+   * classic-roots.ts).
+   */
+  renderClassicRoot(
+    this: GxtClassicRoot,
+    input: {
+      root: object;
+      owner: object;
+      template: unknown;
+      self: unknown;
+      parentElement: unknown;
+    },
+    errorLoopTransaction: (fn: () => void) => () => void
+  ): void;
+
+  /** Destroy the render result of a classic root (`ClassicRootState#destroy`). */
+  destroyClassicRoot(result: object): void;
+
+  /**
+   * The bounds of a component rendered without Glimmer's `BOUNDS`
+   * (`Renderer#getBounds`): its element, or a tagless component's recorded
+   * bounds; `null` when it has neither.
+   */
+  componentBounds(
+    component: object
+  ): { parentElement: SimpleElement; firstNode: SimpleNode; lastNode: SimpleNode } | null;
 }
 
 let _glimmerHost: GxtGlimmerHost | null = null;
