@@ -3243,7 +3243,7 @@ const _gxtFlags = {
   // Inside root-template.ts's route-template render (the render tree's outlet
   // hierarchy).
   inOutletRender: false,
-  // Inside renderer.ts's forced `classicRoot.render()`.
+  // Inside classic-roots.ts's forced `classicRoot.render()`.
   forceRerender: false,
   // A DOM sync is scheduled.
   pendingSync: false,
@@ -4733,7 +4733,7 @@ function _gxtWithTriggerSuppressed<T>(fn: () => T): T {
 // pathological chains.
 function _isCustomManagedComponent(obj: object): boolean {
   // Read via the gxt-bridge `rootComponent` namespace; the writer is
-  // `glimmer/lib/renderer.ts`.
+  // `classic-roots.ts`.
   const isRoot = getGxtRenderer()?.rootComponent.isRootComponent;
   if (typeof isRoot === 'function' && isRoot(obj)) {
     return true;

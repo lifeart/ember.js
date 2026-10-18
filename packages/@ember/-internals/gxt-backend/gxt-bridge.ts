@@ -200,7 +200,7 @@ export interface GxtBacktrackingCapabilities {
 
 /**
  * Parent-view stack and view/element registry helpers. Implemented by
- * manager.ts; compile.ts and glimmer's renderer.ts contribute members via
+ * manager.ts; compile.ts and classic-roots.ts contribute members via
  * `installViewUtilsPart`. Push/pop are paired in `try/finally`.
  */
 export interface GxtViewUtilsCapabilities {
@@ -264,7 +264,7 @@ export interface GxtViewUtilsCapabilities {
 
   /**
    * The render-pass id, advanced once per top-level render; gxt-backend uses
-   * it to reset per-pass caches. Contributed by glimmer's renderer.ts; callers
+   * it to reset per-pass caches. Contributed by classic-roots.ts; callers
    * default to `0` when it is not installed.
    */
   getRenderPassId?(): number;
@@ -276,7 +276,7 @@ export interface GxtViewUtilsCapabilities {
 /**
  * Compile/sync-pipeline hooks and shared render state. Seeded by manager.ts and
  * extended through `installCompilePipelinePart` by the module that owns each piece
- * (compile.ts, ember-gxt-wrappers.ts, ember-template-compiler.ts, renderer.ts, metal).
+ * (compile.ts, ember-gxt-wrappers.ts, ember-template-compiler.ts, classic-roots.ts, metal).
  */
 export interface GxtCompilePipelineCapabilities {
   /**
@@ -639,7 +639,7 @@ export interface GxtCompilePipelineCapabilities {
   /**
    * Re-render the GXT roots whose tag changed during this sync, or every root
    * after a nested-object change. Re-entrant calls are ignored. Contributed by
-   * glimmer's renderer.ts.
+   * classic-roots.ts.
    */
   forceEmberRerender?(): void;
 
@@ -877,8 +877,8 @@ export interface GxtRenderPassCapabilities {
 }
 
 /**
- * Root-component state owned by glimmer's renderer.ts, which contributes it via
- * `installRootComponentPart`. compile.ts reads it while syncing.
+ * Root-component state owned by classic-roots.ts (the GXT side of glimmer's
+ * renderer.ts), which contributes it via `installRootComponentPart`. compile.ts reads it while syncing.
  */
 export interface GxtRootComponentCapabilities {
   /**
