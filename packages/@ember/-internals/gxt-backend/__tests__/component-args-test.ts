@@ -46,7 +46,7 @@ function recordingModifier(calls: string[]): object {
     createModifier() {
       return {};
     }
-    installModifier(_state: object, _element: Element, args: { positional: unknown[] }) {
+    installModifier(_state: object, _element: Element, args: { positional: readonly unknown[] }) {
       calls.push(`install ${args.positional[0]}`);
     }
     updateModifier() {}
@@ -76,10 +76,12 @@ moduleFor(
       this.assertText('foobar');
 
       runTask(() => (rows[0]!.value = 'qux'));
-      this.assertText('quxbar', 'the first row updates');
+      // the first row updates
+      this.assertText('quxbar');
 
       runTask(() => (rows[1]!.value = 'derp'));
-      this.assertText('quxderp', 'the second row updates');
+      // the second row updates
+      this.assertText('quxderp');
     }
 
     ['@test an argument of each of two template-only components updates']() {
@@ -102,10 +104,12 @@ moduleFor(
       this.assertText('[a][b]');
 
       runTask(() => (first.value = 'c'));
-      this.assertText('[c][b]', 'the first component updates');
+      // the first component updates
+      this.assertText('[c][b]');
 
       runTask(() => (second.value = 'd'));
-      this.assertText('[c][d]', 'the second component updates');
+      // the second component updates
+      this.assertText('[c][d]');
     }
 
     ['@test a modifier argument of a component invoked through a path is installed']() {

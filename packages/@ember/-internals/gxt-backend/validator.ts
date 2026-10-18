@@ -25,7 +25,7 @@ import {
 import { getGxtRenderer, getEmberAssertDirect } from './gxt-bridge';
 
 // Create cell-like functionality using storage primitives
-const createCell = (initialValue: any, name?: string) => {
+const createCell = (initialValue: any, _name?: string) => {
   const s = storage.createStorage(initialValue, Object.is);
   return {
     get value() {
@@ -39,7 +39,7 @@ const createCell = (initialValue: any, name?: string) => {
 const cell = createCell;
 
 // Create formula using cache
-const formula = <T>(fn: () => T, name?: string) => {
+const formula = <T>(fn: () => T, _name?: string) => {
   const cache = caching.createCache(fn);
   return {
     get value() {
@@ -1526,7 +1526,7 @@ export function untrack<T>(cb: () => T): T {
   const outside = _outsideCacheFrames(frame);
   if (outside !== frame) _gxtSetTracker(outside);
   try {
-    return gxtUntrack(cb);
+    return gxtUntrack(cb) as T;
   } finally {
     if (outside !== frame) _gxtSetTracker(frame);
     _localUntrackDepth--;
@@ -1684,7 +1684,8 @@ export function dirtyTag(tag: any) {
 
 // Debug utility for tags
 export function debug(tag: any, label?: string) {
-  if (process.env.NODE_ENV !== 'production') {
+  if (DEBUG) {
+    // eslint-disable-next-line no-console -- a debugging utility that logs a tag
     console.log(`[Tag Debug${label ? `: ${label}` : ''}]`, tag);
   }
 }
@@ -1697,7 +1698,7 @@ export function debug(tag: any, label?: string) {
 // backtracking bugs.
 let _debugTransactionConsumed: Set<any> | null = null;
 let _debugTransactionLabelForTag: WeakMap<any, string> | null = null;
-export function runInTrackingTransaction<T>(fn: () => T, debuggingContext?: string): T {
+export function runInTrackingTransaction<T>(fn: () => T, _debuggingContext?: string): T {
   const prevConsumed = _debugTransactionConsumed;
   const prevLabels = _debugTransactionLabelForTag;
   _debugTransactionConsumed = new Set<any>();

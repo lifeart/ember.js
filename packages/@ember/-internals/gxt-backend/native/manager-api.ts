@@ -355,14 +355,14 @@ export function getComponentTemplate(obj: object): any {
 
 // VM capability bitmask checks (`@glimmer/manager` surface; pure functions).
 export function hasCapability(capabilities: number, capability: number): boolean {
-  return !!(capabilities & capability);
+  return Boolean(capabilities & capability);
 }
 export function managerHasCapability(
   _manager: unknown,
   capabilities: number,
   capability: number
 ): boolean {
-  return !!(capabilities & capability);
+  return Boolean(capabilities & capability);
 }
 
 // ---------------------------------------------------------------- custom tags

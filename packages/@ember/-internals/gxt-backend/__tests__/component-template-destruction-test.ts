@@ -25,12 +25,12 @@ moduleFor(
     // `modifier:record`: records the name (its first positional argument) of
     // each modifier it installs and destroys.
     registerRecord(installed: unknown[], destroyed: unknown[]) {
-      this.registerModifier(
-        'record',
+      this.owner.register(
+        'modifier:record',
         setModifierManager(
           () => ({
             capabilities: modifierCapabilities('3.22'),
-            createModifier(_factory: unknown, args: { positional: unknown[] }) {
+            createModifier(_factory: unknown, args: { positional: readonly unknown[] }) {
               return { name: args.positional[0] };
             },
             installModifier(state: { name: unknown }) {

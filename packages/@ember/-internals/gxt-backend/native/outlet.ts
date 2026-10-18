@@ -191,7 +191,6 @@ type GxtNode = Record<PropertyKey, unknown> & object;
  * `{{outlet}}` appears in.
  */
 export function Outlet(this: GxtNode): unknown {
-  // eslint-disable-next-line prefer-rest-params
   $_GET_ARGS(this as never, arguments);
   const outlet = this;
   OUTLET_NODES.add(outlet);
@@ -300,7 +299,6 @@ export function Outlet(this: GxtNode): unknown {
  * top level, and every route without a template of its own.
  */
 const OutletTemplate = $_tpl(function OutletTemplate(this: GxtNode): unknown {
-  // eslint-disable-next-line prefer-rest-params
   $_GET_ARGS(this as never, arguments);
   return $_fin([$_outlet(this as never)], this as never);
 });

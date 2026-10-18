@@ -31,12 +31,12 @@ export function setupNativeRendering(hooks) {
   });
 }
 
-/** textContent with whitespace collapsed (gxt control flow leaves comment anchors). */
+// textContent with whitespace collapsed (gxt control flow leaves comment anchors).
 export function textOf(element) {
   return element.textContent.replace(/\s+/g, ' ').trim();
 }
 
-/** innerHTML without comment nodes (gxt `{{#if}}` / `{{#each}}` anchors). */
+// innerHTML without comment nodes (gxt `{{#if}}` / `{{#each}}` anchors).
 export function htmlOf(element) {
   return element.innerHTML.replace(/<!--[\s\S]*?-->/g, '');
 }

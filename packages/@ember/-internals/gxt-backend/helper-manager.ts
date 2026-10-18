@@ -64,6 +64,7 @@ function argsProxyForCustom(capturedArgs: any): { positional: any; named: any } 
     get(target: any, prop: string | symbol) {
       if (prop === 'length') return target.length;
       if (prop === Symbol.iterator) {
+        // eslint-disable-next-line disable-features/disable-generator-functions -- the proxy's iterator
         return function* () {
           for (let i = 0; i < target.length; i++) {
             yield unwrapValue(target[i]);
@@ -438,6 +439,7 @@ export class CustomHelperManager {
     return (capturedArgs: any, owner: any): any => {
       const manager = this.getDelegateFor(owner);
       if (!manager || typeof manager.createHelper !== 'function') {
+        // eslint-disable-next-line no-console -- reports a helper manager without createHelper
         console.warn('[CustomHelperManager] No createHelper on manager:', manager);
         return UNDEFINED_REFERENCE;
       }
@@ -526,6 +528,7 @@ export class CustomHelperManager {
   create(owner: any, helper: any, args: any) {
     const manager = this.getDelegateFor(owner);
     if (!manager || typeof manager.createHelper !== 'function') {
+      // eslint-disable-next-line no-console -- reports a helper manager without createHelper
       console.warn('[CustomHelperManager] No createHelper on manager for create:', manager);
       return null;
     }

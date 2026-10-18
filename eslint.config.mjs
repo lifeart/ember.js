@@ -32,10 +32,6 @@ export default [
       'packages/@handlebars/parser/lib/parser.js',
       'packages/@handlebars/parser/src/**',
       'tracerbench-testing/',
-      'packages/@ember/-internals/gxt-backend/**',
-      // Excluded from the root tsconfig project (like gxt-backend), so the
-      // typed-lint parserOptions.project cannot parse it.
-      'packages/@glimmer/component-gxt/**',
       'scripts/gxt-test-runner/**',
       // Assembled ember-source-gxt package output (git-ignored build artifact;
       // scripts/build-gxt-package.mjs) — lint the sources, not the dist.
@@ -221,6 +217,9 @@ export default [
       'packages/@ember/*/tests/**/*.[jt]s',
       'packages/@ember/-internals/*/tests/**/*.[jt]s',
       'packages/internal-test-helpers/**/*.[jt]s',
+      // The QUnit tests of the GXT backends.
+      'packages/@ember/-internals/gxt-backend/**/__tests__/**/*.[jt]s',
+      'packages/@glimmer/component-gxt/__tests__/**/*.[jt]s',
     ],
 
     languageOptions: {
@@ -533,6 +532,41 @@ export default [
     ignores: ['packages/@ember/**/tests/**', 'packages/@glimmer/**/test/**'],
     rules: {
       'ember-local/no-barrel-imports': 'error',
+    },
+  },
+  {
+    files: [
+      'packages/@ember/-internals/gxt-backend/**/*.{ts,js}',
+      'packages/@glimmer/component-gxt/**/*.ts',
+    ],
+    rules: {
+      // The GXT builds alias exact barrel specifiers (`@glimmer/validator`,
+      // `@glimmer/manager`, ...; scripts/gxt-alias-map.mjs): a deep import
+      // would bypass the alias and load the classic module. The tests import
+      // the public modules, as an app does.
+      'ember-local/no-barrel-imports': 'off',
+      // A catch block handles, reports or rethrows what it caught; a block with
+      // no statements (empty or comment-only) would hide the error.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'CatchClause > BlockStatement[body.length=0]',
+          message: 'Handle, report or rethrow the caught error.',
+        },
+      ],
+    },
+  },
+  {
+    // These tests assert on whichever build- or compile-dependent shape they
+    // find: a debug-only export, a template's compiled form.
+    files: [
+      'packages/@ember/-internals/gxt-backend/__tests__/destroyable-test.ts',
+      'packages/@ember/-internals/gxt-backend/__tests__/integration-test.ts',
+    ],
+    rules: {
+      'qunit/no-assert-logical-expression': 'off',
+      'qunit/no-conditional-assertions': 'off',
+      'qunit/no-early-return': 'off',
     },
   },
   {

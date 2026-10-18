@@ -55,7 +55,8 @@ import { instanceOfNode, OWNER, resolveComponentName } from './managers';
 import { commitModifiers, debugModifierNodes, INTERACTIVE } from './modifier-manager';
 import { commitComponents } from './component-lifecycle';
 import { documentedDrop } from './not-implemented';
-import OutletView, { Outlet, OUTLET_STATE, outletNodeKind } from './outlet';
+import type OutletView from './outlet';
+import { Outlet, OUTLET_STATE, outletNodeKind } from './outlet';
 import { RootOutlet } from './root-outlet';
 import { renderers } from '@ember/-internals/glimmer/lib/renderers';
 

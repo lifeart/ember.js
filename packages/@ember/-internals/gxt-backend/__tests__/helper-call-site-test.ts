@@ -184,7 +184,8 @@ moduleFor(
       assert.strictEqual(instances.length, 2, 'one instance per call site');
 
       runTask(() => set(this.context, 'b', 'c'));
-      this.assertText('[a1][c2]', 'only the site whose argument changed re-computes');
+      // only the site whose argument changed re-computes
+      this.assertText('[a1][c2]');
       assert.strictEqual(instances.length, 2, 'no new instance');
       assert.deepEqual(destroyed, [], 'nothing destroyed');
     }
@@ -207,11 +208,13 @@ moduleFor(
       assert.false(second!.isDestroyed, 'the "b" instance is alive');
 
       runTask(() => set(this.context, 'b', 'c'));
-      this.assertText('[c2]', 'the remaining site keeps its state');
+      // the remaining site keeps its state
+      this.assertText('[c2]');
       assert.false(second!.isDestroyed, 'the "b" instance is still alive');
 
       runTask(() => set(this.context, 'showA', true));
-      this.assertText('[a1][c2]', 'a re-rendered site gets a fresh instance');
+      // a re-rendered site gets a fresh instance
+      this.assertText('[a1][c2]');
       assert.strictEqual(instances.length, 3);
     }
 
@@ -349,7 +352,8 @@ moduleFor(
       assert.strictEqual(created.length, 2, 'one helper per component');
 
       runTask(() => set(this.context, 'y', 'z'));
-      this.assertText('[h1x][h2z]', 'each component keeps its helper');
+      // each component keeps its helper
+      this.assertText('[h1x][h2z]');
       assert.strictEqual(created.length, 2, 'no new helper');
     }
 
@@ -370,7 +374,8 @@ moduleFor(
       assert.strictEqual(instances.length, 2, 'one instance per component');
 
       runTask(() => set(this.context, 'b', 'c'));
-      this.assertText('[a1][c2]', 'only the component whose argument changed re-computes');
+      // only the component whose argument changed re-computes
+      this.assertText('[a1][c2]');
       assert.strictEqual(instances.length, 2, 'no new instance');
       assert.deepEqual(destroyed, [], 'nothing destroyed');
     }

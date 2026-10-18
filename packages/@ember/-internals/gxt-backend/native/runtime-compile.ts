@@ -142,7 +142,6 @@ function evaluateWithScope(scope: Record<string, unknown>): Evaluator {
     const shadowed = new Set(scopeNames);
     const runtimeNames = names.filter((name) => !shadowed.has(name));
     const runtimeVals = values.filter((_, i) => !shadowed.has(names[i]!));
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const make = new Function(...runtimeNames, ...scopeNames, `"use strict";\nreturn ${source};`);
     return make(...runtimeVals, ...scopeValues) as GxtTemplate;
   };
@@ -241,7 +240,6 @@ export function template(templateString: string, options: TemplateOptions = {}):
     const self = explicitThis.value;
     compiled = $_tpl(function ExplicitThisTemplate(this: Record<symbol, unknown>): unknown {
       this[$SELF] = self;
-      // eslint-disable-next-line prefer-rest-params
       return inner.apply(this, arguments as unknown as unknown[]);
     }) as GxtTemplate;
   }

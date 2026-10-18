@@ -17,9 +17,9 @@ module('gxt-native | runtime template()', function (hooks) {
   setupNativeRendering(hooks);
 
   test('strict-mode template() with an explicit scope, class templates, yield', function (assert) {
-    const shout = (s) => String(s).toUpperCase();
-    const Inner = template('<i>{{shout @word}}</i>', { scope: () => ({ shout }) });
-    const Outer = template('<Inner @word={{@w}} /><span>{{yield}}</span>', {
+    let shout = (s) => String(s).toUpperCase();
+    let Inner = template('<i>{{shout @word}}</i>', { scope: () => ({ shout }) });
+    let Outer = template('<Inner @word={{@w}} /><span>{{yield}}</span>', {
       scope: () => ({ Inner }),
     });
     let root;
@@ -46,8 +46,8 @@ module('gxt-native | runtime template()', function (hooks) {
       @service greeter;
     }
     template('<b>{{this.greeter.greeting}}</b>', { component: NeedsOwner });
-    const Wrapper = template('<div class="w">{{yield}}</div>');
-    const Root = template('<Wrapper><NeedsOwner /></Wrapper>', {
+    let Wrapper = template('<div class="w">{{yield}}</div>');
+    let Root = template('<Wrapper><NeedsOwner /></Wrapper>', {
       scope: () => ({ Wrapper, NeedsOwner }),
     });
     this.render(Root);
@@ -55,8 +55,8 @@ module('gxt-native | runtime template()', function (hooks) {
   });
 
   test('implicit scope through eval', function (assert) {
-    const label = 'from-eval';
-    const Tpl = template('<em>{{label}}</em>', {
+    let label = 'from-eval';
+    let Tpl = template('<em>{{label}}</em>', {
       eval() {
         return eval(arguments[0]);
       },
@@ -66,8 +66,8 @@ module('gxt-native | runtime template()', function (hooks) {
   });
 
   test('scope: () => ({ this: state }) shadows the template self', function (assert) {
-    const state = { name: 'shadow' };
-    const Tpl = template('<u>{{this.name}}</u>', { scope: () => ({ this: state }) });
+    let state = { name: 'shadow' };
+    let Tpl = template('<u>{{this.name}}</u>', { scope: () => ({ this: state }) });
     this.render(Tpl);
     assert.strictEqual(textOf(this.element), 'shadow');
   });
@@ -77,7 +77,7 @@ module('gxt-native | runtime template()', function (hooks) {
   });
 
   test('runtime template(): an empty <X></X> passes only its named arguments, has-block is true', function (assert) {
-    const keys = [];
+    let keys = [];
     class Probe extends Component {
       constructor(owner, args) {
         super(owner, args);
@@ -85,14 +85,14 @@ module('gxt-native | runtime template()', function (hooks) {
       }
     }
     template('{{#if (has-block)}}B{{else}}-{{/if}}', { component: Probe });
-    const Root = template(
+    let Root = template(
       '<Probe @a="1"></Probe><Probe /><foo-bar></foo-bar><foo-bar data-x="1"></foo-bar>',
       { scope: () => ({ Probe }) }
     );
     this.render(Root);
     assert.deepEqual(keys, ['a', '']);
     assert.strictEqual(textOf(this.element), 'B-');
-    const names = [...this.element.querySelectorAll('foo-bar')].map((el) => el.getAttributeNames());
+    let names = [...this.element.querySelectorAll('foo-bar')].map((el) => el.getAttributeNames());
     assert.deepEqual(names, [[], ['data-x']]);
   });
 });

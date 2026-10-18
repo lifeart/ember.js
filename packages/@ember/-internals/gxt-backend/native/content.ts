@@ -83,7 +83,6 @@ export function eachInEntries(source: object): Pair[] {
     // Not an arrow: `arguments.length` tells a (value, key) forEach from a
     // (value) one (Glimmer ObjectIterator.fromForEachable).
     forEach.call(obj, function (value: unknown, key: unknown) {
-      // eslint-disable-next-line prefer-rest-params
       isMapLike = isMapLike || arguments.length >= 2;
       if (isMapLike) keys.push(key);
       values.push(value);

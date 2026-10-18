@@ -113,12 +113,15 @@ moduleFor(
           class extends ClassicComponent {
             tagName = '';
             declare label: string;
+            // @ts-expect-error -- the classic hook is typed to return this; Ember ignores its return value
             willDestroyElement() {
               hooks.push([this.label, 'willDestroyElement']);
             }
+            // @ts-expect-error -- the classic hook is typed to return this; Ember ignores its return value
             willClearRender() {
               hooks.push([this.label, 'willClearRender']);
             }
+            // @ts-expect-error -- the classic hook is typed to return this; Ember ignores its return value
             didDestroyElement() {
               hooks.push([this.label, 'didDestroyElement']);
             }

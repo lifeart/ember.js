@@ -61,7 +61,6 @@ export interface CapturedArguments {
 export type InternalHelper = ((
   args: CapturedArguments,
   owner: object | undefined
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Reference<T> is invariant
 ) => Reference<any>) & {
   /**
    * A direct form (native/helper-manager.ts): the helper's value for a call
@@ -260,32 +259,26 @@ function expectTwo(name: string, count: number): void {
 }
 
 export function eq(left: unknown, right: unknown): boolean {
-  // eslint-disable-next-line prefer-rest-params
   if (DEBUG) expectTwo('eq', arguments.length);
   return left === right;
 }
 export function neq(left: unknown, right: unknown): boolean {
-  // eslint-disable-next-line prefer-rest-params
   if (DEBUG) expectTwo('neq', arguments.length);
   return left !== right;
 }
 export function gt(left: unknown, right: unknown): boolean {
-  // eslint-disable-next-line prefer-rest-params
   if (DEBUG) expectTwo('gt', arguments.length);
   return (left as number) > (right as number);
 }
 export function gte(left: unknown, right: unknown): boolean {
-  // eslint-disable-next-line prefer-rest-params
   if (DEBUG) expectTwo('gte', arguments.length);
   return (left as number) >= (right as number);
 }
 export function lt(left: unknown, right: unknown): boolean {
-  // eslint-disable-next-line prefer-rest-params
   if (DEBUG) expectTwo('lt', arguments.length);
   return (left as number) < (right as number);
 }
 export function lte(left: unknown, right: unknown): boolean {
-  // eslint-disable-next-line prefer-rest-params
   if (DEBUG) expectTwo('lte', arguments.length);
   return (left as number) <= (right as number);
 }

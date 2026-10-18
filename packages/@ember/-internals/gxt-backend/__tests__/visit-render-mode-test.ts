@@ -28,6 +28,7 @@ moduleFor(
       let rootElement = document.createElement('div');
 
       await assert.rejects(
+        // @ts-expect-error -- BootOptions types rootElement as a SimpleElement; a DOM element is one at run time
         this.application.visit('/', { isBrowser: false, rootElement, _renderMode: 'serialize' }),
         /`_renderMode: 'serialize'` is not supported by the GXT renderer/
       );
@@ -44,6 +45,7 @@ moduleFor(
       rootElement.innerHTML = SERVER_HTML;
 
       await assert.rejects(
+        // @ts-expect-error -- BootOptions types rootElement as a SimpleElement; a DOM element is one at run time
         this.application.visit('/', { isBrowser: false, rootElement, _renderMode: 'rehydrate' }),
         /`_renderMode: 'rehydrate'` is not supported by the GXT renderer/
       );

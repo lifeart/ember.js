@@ -1,10 +1,8 @@
-export function unwrapTemplate(tpl) {
+export function unwrapTemplate(tpl: unknown) {
   return {
     asLayout() {
       return {
         compile() {
-          // debugger;
-          console.log('as-layout compile', ...arguments);
           return tpl;
         },
       };

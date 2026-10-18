@@ -202,7 +202,7 @@ export function compile(templateString: string, options?: any) {
 
   // Pass 1: legacy block-form rewrite for `{{#input}}...{{/input}}` etc.
   for (const [name, alias] of Object.entries(GXT_LOWERED_KEYWORDS_MAP)) {
-    const inScopeValues = !!(
+    const inScopeValues = Boolean(
       originalScopeValues && Object.prototype.hasOwnProperty.call(originalScopeValues, name)
     );
     const inLocals = Array.isArray(options?.locals) && (options.locals as string[]).includes(name);

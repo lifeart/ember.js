@@ -18,7 +18,7 @@ import { ApplicationTestCase, RenderingTestCase, moduleFor, runTask } from 'inte
 // gxt records a render node's tree id, rendered nodes and args on the
 // NODE — never on the template's self.
 function assertNotARenderNode(assert, self) {
-  const own = (key) => Object.prototype.hasOwnProperty.call(self, key);
+  let own = (key) => Object.prototype.hasOwnProperty.call(self, key);
   assert.false(own(COMPONENT_ID_PROPERTY), 'no gxt tree id on the self');
   assert.false(own(RENDERED_NODES_PROPERTY), 'no gxt rendered nodes on the self');
   assert.false(own('args'), 'no gxt args on the self');
@@ -56,7 +56,7 @@ moduleFor(
     }
 
     ['@test notifyPropertyChange on an untracked property re-renders']() {
-      const pojo = { value: 'before' };
+      let pojo = { value: 'before' };
       this.render('{{this.pojo.value}}', { pojo });
       this.assertText('before');
 
@@ -67,7 +67,7 @@ moduleFor(
     }
 
     ['@test unknownProperty is honoured (Glimmer getProp)']() {
-      const proxyish = EmberObject.extend({
+      let proxyish = EmberObject.extend({
         unknownProperty(key) {
           return `<${key}>`;
         },
@@ -120,7 +120,7 @@ moduleFor(
       class State {
         @tracked count = 1;
       }
-      const state = new State();
+      let state = new State();
       this.render('{{this.state.count}}', { state });
       this.assertText('1');
       runTask(() => state.count++);
@@ -129,7 +129,7 @@ moduleFor(
 
     ['@test teardown destroys the context with the owner'](assert) {
       this.render('{{this.x}}', { x: 1 });
-      const context = this.context;
+      let context = this.context;
       this.afterEach();
       assert.true(isDestroyed(context), 'context destroyed');
       assert.strictEqual(this.element.textContent, '', 'DOM removed');
@@ -168,7 +168,7 @@ moduleFor(
       assert.strictEqual(this.element.querySelector('h1').textContent, 'Index');
       assert.strictEqual(this.element.querySelector('p').textContent, '2 2');
 
-      const controller = this.applicationInstance.lookup('controller:index');
+      let controller = this.applicationInstance.lookup('controller:index');
       runTask(() => set(controller, 'title', 'Changed'));
       assert.strictEqual(this.element.querySelector('h1').textContent, 'Changed');
       runTask(() => set(controller, 'model.count', 3));
@@ -200,7 +200,7 @@ moduleFor(
       await this.visit('/about');
       assert.notOk(this.element.querySelector('#i'), 'index torn down');
       assert.strictEqual(this.element.querySelector('#a').textContent, 'about guest');
-      const session = this.applicationInstance.lookup('service:session');
+      let session = this.applicationInstance.lookup('service:session');
       runTask(() => set(session, 'user', 'tomster'));
       assert.strictEqual(this.element.querySelector('#a').textContent, 'about tomster');
       assert.strictEqual(get(session, 'user'), 'tomster');

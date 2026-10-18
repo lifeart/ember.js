@@ -24,7 +24,7 @@ export default function compileWithScope(
   // classic harness passes them to `precompileJSON`: without a module name,
   // compile errors name 'an unknown module', as Glimmer's do.
   return gxtCompile(templateSource, {
-    strictMode: options.strictMode ?? false,
+    strictMode: options['strictMode'] ?? false,
     ...options,
     scopeValues: Object.keys(_scopeValues).length > 0 ? _scopeValues : undefined,
   });

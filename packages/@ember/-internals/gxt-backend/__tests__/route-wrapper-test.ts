@@ -60,10 +60,12 @@ moduleFor(
       this.assertText('app:wrap(post:1)');
 
       await this.visit('/post/2');
-      this.assertText('app:wrap(post:2)', 'the wrapper received the new model');
+      // the wrapper received the new model
+      this.assertText('app:wrap(post:2)');
 
       await this.visit('/post/1');
-      this.assertText('app:wrap(post:1)', 'and the first one again');
+      // and the first one again
+      this.assertText('app:wrap(post:1)');
     }
 
     async ['@test a wrapped route template renders with its controller as this'](assert: any) {
@@ -90,13 +92,15 @@ moduleFor(
       this.assertText('app:wrap(bumpa:0)');
 
       runTask(() => (this.element!.querySelector('#bump') as HTMLButtonElement).click());
-      this.assertText('app:wrap(bumpa:1)', 'an action of the template updates the controller');
+      // an action of the template updates the controller
+      this.assertText('app:wrap(bumpa:1)');
 
       const controller = this.applicationInstance!.lookup('controller:index') as IndexController;
       assert.strictEqual(controller.count, 1, 'the action ran with the controller as this');
 
       runTask(() => set(controller, 'name', 'b'));
-      this.assertText('app:wrap(bumpb:1)', 'a controller property set with set() re-renders');
+      // a controller property set with set() re-renders
+      this.assertText('app:wrap(bumpb:1)');
     }
 
     async ['@test a wrapped route without a template renders the next level']() {
@@ -104,7 +108,7 @@ moduleFor(
       this.add('template:application', precompileTemplate('app:{{outlet}}'));
       this.add('template:parent.child', precompileTemplate('child'));
       this.router.map(function (this: any) {
-        this.route('parent', function () {
+        this.route('parent', function (this: any) {
           this.route('child');
         });
       });
@@ -113,7 +117,8 @@ moduleFor(
       this.assertText('app:wrap(child)');
 
       await this.visit('/parent');
-      this.assertText('app:wrap()', 'the child level tore down');
+      // the child level tore down
+      this.assertText('app:wrap()');
     }
 
     async ['@test a classic route template renders the next level with <@outlet />']() {

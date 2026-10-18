@@ -134,6 +134,7 @@ QUnit.module('GXT correctness: compile pipeline errors', function () {
 
   QUnit.test('precompileTemplate throws the error of an AST plugin', function (assert: any) {
     assert.throws(
+      // @ts-expect-error -- precompileTemplate's options type has no plugins; the runtime compile applies them
       () => precompileTemplate('<p></p>', { plugins: { ast: [failingPlugin] } }),
       /plugin failed/
     );
@@ -252,6 +253,7 @@ moduleFor(
         'controller:application',
         Controller.extend({
           count: 0,
+          // @ts-expect-error -- action is typed as a decorator; classic extend() passes it a function
           bump: action(function (this: any) {
             this.incrementProperty('count');
           }),

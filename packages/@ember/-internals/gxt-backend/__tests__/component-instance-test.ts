@@ -16,6 +16,7 @@ import { precompileTemplate } from '@ember/template-compilation';
 import { setComponentTemplate } from '@glimmer/manager';
 import Component from '@glimmer/component';
 import ClassicComponent from '@ember/component';
+import type Owner from '@ember/owner';
 
 moduleFor(
   'GXT a component instance belongs to its invocation',
@@ -28,7 +29,7 @@ moduleFor(
         setComponentTemplate(
           precompileTemplate('[{{this.value}}]'),
           class extends Component<{ value: string }> {
-            constructor(owner: object, args: { value: string }) {
+            constructor(owner: Owner, args: { value: string }) {
               super(owner, args);
               instances.push(this);
             }
@@ -393,11 +394,13 @@ moduleFor(
             tagName = '';
             init(properties?: object) {
               super.init(properties);
+              // @ts-expect-error -- the class overrides a classic hook (see below), so it is not typed as a Component
               instances.push(this);
             }
             didUpdateAttrs() {
               hooks.push(`didUpdateAttrs ${this.get('value')}`);
             }
+            // @ts-expect-error -- the classic hook is typed to return this; Ember ignores its return value
             didInsertElement() {
               hooks.push(`didInsertElement ${this.get('value')}`);
             }
@@ -428,7 +431,7 @@ moduleFor(
         setComponentTemplate(
           precompileTemplate('[{{@value}}]'),
           class extends Component<{ value: string }> {
-            constructor(owner: object, args: { value: string }) {
+            constructor(owner: Owner, args: { value: string }) {
               super(owner, args);
               instances.push(this);
             }
@@ -486,7 +489,7 @@ moduleFor(
         setComponentTemplate(
           precompileTemplate('[{{@value}}]'),
           class extends Component<{ value: string }> {
-            constructor(owner: object, args: { value: string }) {
+            constructor(owner: Owner, args: { value: string }) {
               super(owner, args);
               instances.push(this);
               hooks.push(`constructor ${args.value}`);

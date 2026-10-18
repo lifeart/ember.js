@@ -302,7 +302,6 @@ export function trackedMap<K = unknown, V = unknown>(
       return vals.size;
     }
     [Symbol.iterator](): MapIterator<[K, V]> {
-      // eslint-disable-next-line @typescript-eslint/no-this-alias
       const self = this;
       const keys = this.keys();
       return {

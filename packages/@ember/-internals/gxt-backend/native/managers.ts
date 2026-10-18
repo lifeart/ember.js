@@ -149,6 +149,7 @@ function EMPTY_TEMPLATE(this: object): unknown {
 function DEFAULT_TEMPLATE(this: object): unknown {
   $_GET_ARGS(this as never, arguments);
   const slots = $_GET_SLOTS(this, arguments);
+  // @ts-expect-error -- gxt types $_slot's result outside the roots $_fin takes
   return $_fin([$_slot('default', () => [], slots, this as never)], this as never);
 }
 

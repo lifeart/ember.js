@@ -462,7 +462,7 @@ export function dirtyTagFor(obj: object, key: PropertyKey, meta?: TagMeta): void
   }
   const tag = meta === undefined ? peekTagFor(obj, key) : meta.get(key);
   if (tag === undefined) return;
-  if (DEBUG) debug.assertTagNotConsumed!(tag, obj, key);
+  if (DEBUG) debug.assertTagNotConsumed!(tag, obj, key as string | symbol);
   dirtyCell(tag);
 }
 

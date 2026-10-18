@@ -43,10 +43,10 @@ function recordingModifier(calls: string[]): object {
     createModifier() {
       return {};
     }
-    installModifier(_state: object, _element: Element, args: { positional: unknown[] }) {
+    installModifier(_state: object, _element: Element, args: { positional: readonly unknown[] }) {
       calls.push(`install ${args.positional[0]}`);
     }
-    updateModifier(_state: object, args: { positional: unknown[] }) {
+    updateModifier(_state: object, args: { positional: readonly unknown[] }) {
       calls.push(`update ${args.positional[0]}`);
     }
     destroyModifier() {
@@ -194,19 +194,19 @@ moduleFor(
       // Glimmer's args proxy reads the current argument values.
       class KeepArgsManager {
         capabilities = modifierCapabilities('3.22');
-        createModifier(_definition: object, args: { positional: unknown[] }) {
+        createModifier(_definition: object, args: { positional: readonly unknown[] }) {
           return { args };
         }
-        installModifier(state: { args: { positional: unknown[] } }) {
+        installModifier(state: { args: { positional: readonly unknown[] } }) {
           seen.push(state.args.positional[0]);
         }
-        updateModifier(state: { args: { positional: unknown[] } }) {
+        updateModifier(state: { args: { positional: readonly unknown[] } }) {
           seen.push(state.args.positional[0]);
         }
         destroyModifier() {}
       }
-      this.registerModifier(
-        'keep-args',
+      this.owner.register(
+        'modifier:keep-args',
         setModifierManager(() => new KeepArgsManager(), class {})
       );
       let state = new State();

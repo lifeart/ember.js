@@ -329,7 +329,6 @@ export interface GxtCompilePipelineCapabilities {
   withTemplateThis?<T>(context: unknown, fn: () => T): T;
 
   /** GXT's `cellFor(obj, key)`: the reactive cell backing a property. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   cellFor(obj: object, key: string | symbol, debug?: boolean): any;
 
   /**
@@ -537,20 +536,16 @@ export interface GxtCompilePipelineCapabilities {
   setPendingSync?(value: boolean): void;
 
   /** compile.ts's block-params stack, by reference. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getBlockParamsStack?(): any[][];
   /** compile.ts's slots-context stack, by reference. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getSlotsContextStack?(): any[];
   /** compile.ts's table of Ember built-in helpers, by reference. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getBuiltinHelpers?(): Record<string, any>;
   /** Read the cell for `obj[key]` so the active formula depends on it. */
   subscribeCell?(obj: object, key: string): void;
   /** The raw object behind an `{{#each}}` item proxy, or `undefined`. */
   eachItemRawFor?(maybeProxy: unknown): unknown;
   /** manager.ts's `$_MANAGERS` table, by reference. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getManagers?(): { component: any; modifier: any; helper: any };
   /** Advance the managed-component generation (called by the test run loop). */
   resetManagedComponentCounters?(): void;
@@ -935,20 +930,14 @@ export interface GxtRenderer {
    * The parts of the `@lifeart/gxt` runtime used outside gxt-backend, provided
    * by manager.ts so glimmer code does not import the GXT runtime itself.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly gxtLib: any;
 
   /** manager.ts's template and manager registries, by reference. */
   readonly registries: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     readonly componentTemplates: WeakMap<object, any>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     readonly componentManagers: WeakMap<object, any>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     readonly internalManagers: WeakMap<object, any>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     readonly internalHelperManagers: WeakMap<object, any>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     readonly internalModifierManagers: WeakMap<object, any>;
   };
   readonly renderPass: GxtRenderPassCapabilities;
@@ -1059,12 +1048,9 @@ export function installViewUtilsPart(part: Partial<GxtViewUtilsCapabilities>): v
 // The current outlet state and the set of connected `<ember-outlet>` elements,
 // shared by glimmer's outlet/root templates and OutletView and by gxt-backend's
 // `<ember-outlet>`, manager.ts and compile.ts.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _currentOutletState: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _activeOutletElements = new Set<any>();
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getCurrentOutletState(): any {
   return _currentOutletState;
 }
@@ -1074,7 +1060,6 @@ export function setCurrentOutletState(state: unknown): void {
 }
 
 /** The connected `<ember-outlet>` elements; callers add, delete and iterate this Set. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getActiveOutletElements(): Set<any> {
   return _activeOutletElements;
 }
@@ -1084,10 +1069,8 @@ export function getActiveOutletElements(): Set<any> {
 // read it through an injected `__gxtAmbientOwner` parameter bound to
 // `getAmbientOwner`.
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _ambientOwner: any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getAmbientOwner(): any {
   return _ambientOwner;
 }
@@ -1099,10 +1082,8 @@ export function setAmbientOwner(owner: unknown): void {
 // The `componentGetter` of the dynamic component currently being rendered.
 // ember-gxt-wrappers.ts sets and restores it around nested renders, manager.ts
 // reads it to build latest-args getters, and compile.ts resets it between tests.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _dcComponentGetter: any = null;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getDcComponentGetter(): any {
   return _dcComponentGetter;
 }
@@ -1197,7 +1178,6 @@ export function setControllerOutletRerender(
 // ember-gxt-wrappers.ts a wrapper around it (resolver-cache counting).
 // `getCreateCurriedComponent` composes them lazily; both setters reset the
 // cached composition, so registration order does not matter.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CurriedFactory = (nameOrComp: any, args: any, positionals: any[]) => any;
 let _createCurriedComponentImpl: CurriedFactory | null = null;
 let _createCurriedComponentWrapper: ((inner: CurriedFactory) => CurriedFactory) | null = null;

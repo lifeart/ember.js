@@ -18,6 +18,7 @@ import Component from '@ember/component';
 import Controller from '@ember/controller';
 import templateOnly from '@ember/component/template-only';
 import RoutingService from '@ember/routing/lib/routing-service';
+import type Route from '@ember/routing/route';
 import { precompileTemplate } from '@ember/template-compilation';
 import { setComponentTemplate } from '@glimmer/manager';
 import GlimmerComponent from '@glimmer/component';
@@ -170,12 +171,12 @@ moduleFor(
       let counting = false;
       this.add(
         'service:-routing',
-        class extends RoutingService {
-          isActiveForRoute(...args: Parameters<RoutingService['isActiveForRoute']>) {
+        class extends RoutingService<Route> {
+          isActiveForRoute(...args: Parameters<RoutingService<Route>['isActiveForRoute']>) {
             if (counting) calls.push('isActiveForRoute');
             return super.isActiveForRoute(...args);
           }
-          generateURL(...args: Parameters<RoutingService['generateURL']>) {
+          generateURL(...args: Parameters<RoutingService<Route>['generateURL']>) {
             if (counting) calls.push('generateURL');
             return super.generateURL(...args);
           }
@@ -190,9 +191,10 @@ moduleFor(
       );
 
       await this.visit('/');
-      let link = this.element.querySelector('#about-link') as HTMLAnchorElement;
+      let link = this.element!.querySelector('#about-link') as HTMLAnchorElement;
       assert.strictEqual(link.getAttribute('href'), '/about');
 
+      // @ts-expect-error -- the classic EmberObject.create type rejects properties the class does not declare
       let other = EmberObject.create({ value: 1 });
       let inSet: string[] = [];
       runTask(() => {
@@ -221,6 +223,7 @@ moduleFor(
           layout: this.compile('<p>{{this.label}}</p>'),
           label: 'ok',
           init() {
+            // @ts-expect-error -- classic extend() does not type this._super
             this._super(...arguments);
             defineProperty(
               this,

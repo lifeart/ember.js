@@ -217,6 +217,7 @@ moduleFor(
       this.owner.register(
         'helper:service-count',
         class extends Helper {
+          // @ts-expect-error -- decorator on a class expression (Babel accepts it, experimentalDecorators not)
           @service declare counter: any;
 
           compute() {
@@ -353,7 +354,7 @@ moduleFor(
         }
 
         get doubled() {
-          return this.args.value * 2;
+          return this.args['value'] * 2;
         }
       }
       this.register('parent', '<Child @value={{this.value}} @other={{this.other}} />', Parent);
@@ -384,11 +385,11 @@ moduleFor(
         @tracked count = 0;
       }
       const state = new State();
-      this.registerCustomHelper(
-        'bump',
+      this.owner.register(
+        'helper:bump',
         class extends TestHelper {
           value() {
-            state.count;
+            void state.count;
             state.count = state.count + 1;
             return '';
           }
@@ -400,6 +401,7 @@ moduleFor(
           this.render('{{bump}}');
         },
         backtrackingMessageFor('count', 'State', {
+          // @ts-expect-error -- debug-stack.js's inferred options type lacks renderTree
           renderTree: ['\\(result of a `TEST_HELPER` helper\\)'],
         })
       );
@@ -449,7 +451,7 @@ moduleFor(
       this.register(
         'x-child',
         'child',
-        class extends GlimmerComponent {
+        class extends GlimmerComponent<{ Args: { wrapper: object } }> {
           constructor(owner: any, args: any) {
             super(owner, args);
             set(this.args.wrapper, 'content', 'two');
@@ -509,7 +511,7 @@ moduleFor(
       this.register(
         'x-child',
         'child',
-        class extends GlimmerComponent {
+        class extends GlimmerComponent<{ Args: { wrapper: object } }> {
           constructor(owner: any, args: any) {
             super(owner, args);
             set(this.args.wrapper, 'other', 'b');
@@ -632,7 +634,7 @@ moduleFor(
       class Child extends GlimmerComponent<any> {
         @cached
         get doubled() {
-          return this.args.value * 2;
+          return this.args['value'] * 2;
         }
       }
       this.register('parent', '<Child @value={{this.value}} />', Parent);
@@ -786,7 +788,7 @@ moduleFor(
 
       class PersonComponent extends GlimmerComponent<any> {
         get person() {
-          return new Person(this.args.first, this.args.last);
+          return new Person(this.args['first'], this.args['last']);
         }
       }
 
@@ -1075,8 +1077,8 @@ moduleFor(
 
       class ChildComponent extends GlimmerComponent<any> {
         updatePerson = () => {
-          this.args.person.first = 'Kris';
-          this.args.person.last = 'Selden';
+          this.args['person'].first = 'Kris';
+          this.args['person'].last = 'Selden';
         };
       }
 
@@ -1198,7 +1200,7 @@ moduleFor(
       class OuterComponent extends GlimmerComponent<any> {
         get count() {
           outerRenderCount++;
-          return this.args.count;
+          return this.args['count'];
         }
       }
 
@@ -1207,7 +1209,7 @@ moduleFor(
 
         get combinedCounts() {
           innerRenderCount++;
-          return this.args.count + this.count;
+          return this.args['count'] + this.count;
         }
 
         updateInnerCount = () => {
@@ -1314,10 +1316,10 @@ moduleFor(
     '@test nested tracked properties rerender when updated'(assert: QUnit['assert']) {
       let computeCount = 0;
 
-      let Person = class extends EmberObject {
+      class Person extends EmberObject {
         @tracked
         name = 'bob';
-      };
+      }
 
       this.registerHelper('hello-world', ([value]: any[]) => {
         computeCount++;
@@ -1400,7 +1402,7 @@ moduleFor(
     ) {
       let computeCount = 0;
 
-      let Person = class extends EmberObject {
+      class Person extends EmberObject {
         @tracked
         first = 'Rob';
         @tracked
@@ -1409,7 +1411,7 @@ moduleFor(
         get full() {
           return `${this.first} ${this.last}`;
         }
-      };
+      }
 
       this.registerHelper('hello-world', ([value]: any[]) => {
         computeCount++;
@@ -1449,6 +1451,7 @@ moduleFor(
       this.registerService(
         'current-user',
         class extends Service {
+          // @ts-expect-error -- decorator on a class expression (Babel accepts it, experimentalDecorators not)
           @tracked
           name = 'bob';
 
@@ -1464,6 +1467,7 @@ moduleFor(
         setComponentTemplate(
           precompileTemplate('{{hello-world this.currentUser}}'),
           class extends GlimmerComponent {
+            // @ts-expect-error -- decorator on a class expression (Babel accepts it, experimentalDecorators not)
             @service('current-user')
             declare currentUser: any;
           }
@@ -1497,10 +1501,10 @@ moduleFor(
     '@test class based helpers are autotracked'(assert: QUnit['assert']) {
       let computeCount = 0;
 
-      let TrackedClass = class extends EmberObject {
+      class TrackedClass extends EmberObject {
         @tracked
         value = 'bob';
-      };
+      }
 
       let trackedInstance = TrackedClass.create();
 
@@ -1539,16 +1543,17 @@ moduleFor(
     }
 
     '@test custom helpers give a helpful assertion when reading then mutating a tracked value within constructor'() {
-      this.registerCustomHelper(
-        'hello',
+      this.owner.register(
+        'helper:hello',
         class extends TestHelper {
+          // @ts-expect-error -- decorator on a class expression (Babel accepts it, experimentalDecorators not)
           @tracked foo = 123;
 
           constructor(owner: any, args: unknown) {
             super(owner, args);
 
             // first read the tracked property
-            this.foo;
+            void this.foo;
 
             // then attempt to update the tracked property
             this.foo = 456;
@@ -1566,14 +1571,15 @@ moduleFor(
     }
 
     '@test custom helpers give a helpful assertion when reading then mutating a tracked value within value'() {
-      this.registerCustomHelper(
-        'hello',
+      this.owner.register(
+        'helper:hello',
         class extends TestHelper {
+          // @ts-expect-error -- decorator on a class expression (Babel accepts it, experimentalDecorators not)
           @tracked foo = 123;
 
           value() {
             // first read the tracked property
-            this.foo;
+            void this.foo;
 
             // then attempt to update the tracked property
             this.foo = 456;
@@ -1586,6 +1592,7 @@ moduleFor(
           this.render('{{hello}}');
         },
         backtrackingMessageFor('foo', '.*', {
+          // @ts-expect-error -- debug-stack.js's inferred options type lacks renderTree
           renderTree: ['\\(result of a `TEST_HELPER` helper\\)'],
         })
       );
@@ -1712,7 +1719,7 @@ moduleFor(
 
     '@test a field initializer can read this'() {
       class Counter extends GlimmerComponent<any> {
-        @tracked count = this.args.start * 10;
+        @tracked count = this.args['start'] * 10;
 
         increment = () => {
           this.count++;

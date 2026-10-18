@@ -101,7 +101,6 @@ import {
   valueForRef as _valueForRefForManager,
   REFERENCE as _REFERENCE_FOR_MANAGER,
 } from '@glimmer/reference';
-// @ts-ignore - direct path to share the same module instance as compile.ts
 import {
   runDestructors as _gxtRunDestructors,
   formula as _gxtFormula,
@@ -1753,7 +1752,7 @@ function getCachedOrCreateInstance(
     // Strict `pool.length === 1` keeps this away from View tree tests where
     // multiple siblings share a factory pool.
     if (!poolEntry && pool.length === 1) {
-      const only = pool[0];
+      const only = pool[0]!;
       if (isAlive(only) && only.instance?.__elementIdFromId) {
         poolEntry = only;
       }
@@ -1938,11 +1937,11 @@ function createComponentInstance(
   factory: ComponentFactory,
   args: any,
   parentView: any,
-  owner: any
+  _owner: any
 ): any {
   const props: Record<string, any> = {};
   const attrs: Record<string, any> = {};
-  const argGetters: Record<string, Function> = {};
+  const argGetters: Record<string, () => any> = {};
   const lastArgValues: Record<string, any> = {};
   const readonlyKeys = new Set<string>();
   const mutCellKeys = new Set<string>();
@@ -2024,7 +2023,7 @@ function createComponentInstance(
         get value() {
           return getter ? getter() : resolved;
         },
-        update(newValue: any) {
+        update(_newValue: any) {
           // This will be replaced with a proper updater in createRenderContext
         },
       };
@@ -2051,15 +2050,15 @@ function createComponentInstance(
     }
   }
 
-  props.attrs = attrs;
-  props.parentView = parentView;
-  props.__argGetters = argGetters;
-  props.__lastArgValues = lastArgValues;
+  props['attrs'] = attrs;
+  props['parentView'] = parentView;
+  props['__argGetters'] = argGetters;
+  props['__lastArgValues'] = lastArgValues;
 
   // Map 'id' arg to 'elementId' for Ember component initialization
-  if ('id' in props && props.id !== undefined) {
-    props.elementId = props.id;
-    props.__elementIdFromId = true; // Flag: elementId was mapped from id, not explicit
+  if ('id' in props && props['id'] !== undefined) {
+    props['elementId'] = props['id'];
+    props['__elementIdFromId'] = true; // Flag: elementId was mapped from id, not explicit
   }
   // Create the instance — let init errors propagate naturally so they
   // reach assert.throws in tests (GXT dist has no try-catch wrapper).
@@ -2184,7 +2183,7 @@ function createComponentInstance(
     // subsequent clicks toggle from the user's last known state. What the
     // property's setter throws propagates.
     const userFalseSet = getGxtRenderer()?.viewUtils.getWrapperUserFalseSet?.();
-    const elId = props.elementId;
+    const elId = props['elementId'];
     if (userFalseSet && elId && userFalseSet.has(elId) && instance && 'isExpanded' in instance) {
       instance.isExpanded = false;
     }
@@ -2749,7 +2748,7 @@ function updateInstanceWithNewArgs(instance: any, args: any): boolean {
         // local value). The render-context's own effect/closure already handles
         // arg-getter propagation — we only need to update argGetters[key] above.
         const existingDesc_u = Object.getOwnPropertyDescriptor(instance, key);
-        const hasPreservedDesc = !!(
+        const hasPreservedDesc = Boolean(
           existingDesc_u && (existingDesc_u.get as any)?.__gxtRenderCtxArgGetter
         );
         // Reinstall the reactive property descriptor with the new getter,
@@ -3276,7 +3275,7 @@ export function checkBacktracking(targetObj: any, key: string): void {
 
   // Build indented tree
   const isInOutlet =
-    !!getCurrentOutletState() && renderTreeParts.some((p) => p.startsWith('{{outlet}}'));
+    Boolean(getCurrentOutletState()) && renderTreeParts.some((p) => p.startsWith('{{outlet}}'));
   // In outlet context, base indent is 6 (matching Glimmer VM's outlet nesting).
   // In component context, base indent is 4 (matching Glimmer VM's component nesting).
   const baseIndent = isInOutlet ? 3 : 2; // multiplied by 2 below
@@ -3426,8 +3425,9 @@ function isInteractiveMode(): boolean {
   if (owner && !owner.isDestroyed && !owner.isDestroying) {
     const env = owner.lookup?.('-environment:main');
     if (env && typeof env.isInteractive === 'boolean') {
-      _isInteractiveCached = env.isInteractive;
-      return _isInteractiveCached;
+      const isInteractive: boolean = env.isInteractive;
+      _isInteractiveCached = isInteractive;
+      return isInteractive;
     }
   }
   // Default to true (interactive) if we can't determine
@@ -3808,8 +3808,11 @@ function syncWrapperElement(
     wrapper.setAttribute('role', ariaRole);
   } else {
     // Remove if it was previously set via ariaRole binding (proto, class, or arg)
-    const ariaRoleInProto = componentDef?.prototype?.hasOwnProperty('ariaRole');
-    const ariaRoleInClass = componentDef?.hasOwnProperty?.('ariaRole');
+    const ariaRoleInProto =
+      componentDef?.prototype != null &&
+      Object.prototype.hasOwnProperty.call(componentDef.prototype, 'ariaRole');
+    const ariaRoleInClass =
+      componentDef != null && Object.prototype.hasOwnProperty.call(componentDef, 'ariaRole');
     const ariaRoleInArgs = instance?.__argGetters?.ariaRole;
     if (ariaRoleInProto || ariaRoleInClass || ariaRoleInArgs) {
       wrapper.removeAttribute('role');
@@ -3848,7 +3851,17 @@ const trackedWrapperInstances = new Set<any>();
 interface TrackedArgEntry {
   cells: Record<
     string,
-    { cell: any; getter: () => any; initOverridden?: boolean; lastArgValue?: any }
+    {
+      cell: any;
+      getter: () => any;
+      initOverridden?: boolean;
+      lastArgValue?: any;
+      // The attrsProxy cell of the same argument, updated with `cell`.
+      extraCell?: any;
+      // The key is a tracked property of the instance: the sync leaves
+      // `instance[key]` alone.
+      skipInstanceAssign?: boolean;
+    }
   >;
   instance?: any; // component instance for lifecycle hooks
 }
@@ -4719,8 +4732,8 @@ function _gxtPostRenderHooks(): boolean {
   // pending-sync flags live in compile.ts; we save/read/clear them through the
   // bridge getters/setters.
   const _cpPRH = getGxtRenderer()?.compilePipeline;
-  const savedPending = !!_cpPRH?.getPendingSync?.();
-  const savedPendingPC = !!_cpPRH?.getPendingSyncFromPropertyChange?.();
+  const savedPending = Boolean(_cpPRH?.getPendingSync?.());
+  const savedPendingPC = Boolean(_cpPRH?.getPendingSyncFromPropertyChange?.());
   _cpPRH?.setPendingSync?.(false);
   _cpPRH?.setPendingSyncFromPropertyChange?.(false);
 
@@ -4736,7 +4749,7 @@ function _gxtPostRenderHooks(): boolean {
   _drainPendingRerenderInstrumentFinalizers();
 
   // Whether a lifecycle hook scheduled a property change (via `this.set(...)`).
-  const hookProducedChanges = !!_cpPRH?.getPendingSync?.();
+  const hookProducedChanges = Boolean(_cpPRH?.getPendingSync?.());
   // Restore the outer pending flags if the hooks didn't contribute new changes;
   // otherwise OR the saved values back in so nothing is lost.
   if (!hookProducedChanges) {
@@ -4744,9 +4757,9 @@ function _gxtPostRenderHooks(): boolean {
     _cpPRH?.setPendingSyncFromPropertyChange?.(savedPendingPC);
   } else {
     // OR the outer pending flags back in so nothing is lost
-    const _curPending = !!_cpPRH?.getPendingSync?.();
+    const _curPending = Boolean(_cpPRH?.getPendingSync?.());
     _cpPRH?.setPendingSync?.(_curPending || savedPending);
-    const _curPC = !!_cpPRH?.getPendingSyncFromPropertyChange?.();
+    const _curPC = Boolean(_cpPRH?.getPendingSyncFromPropertyChange?.());
     _cpPRH?.setPendingSyncFromPropertyChange?.(_curPC || savedPendingPC);
   }
   return hookProducedChanges;
@@ -4865,6 +4878,7 @@ function _detachElements(elements: readonly HTMLElement[]): void {
 // view-registry entry removed.
 function _clearViewForDestroy(instance: any, viewRegistry: any): void {
   if (instance._transitionTo) instance._transitionTo('destroying');
+  // @ts-expect-error -- setViewElement is typed for an Element; null clears the entry
   setViewElement(instance, null);
   if (viewRegistry) {
     const viewId = getViewId(instance);
@@ -5684,14 +5698,19 @@ function _gxtSyncWrapper(obj: any, keyName: string): void {
  * - id: from elementId or auto-generated
  * - class: 'ember-view' + component classNames + invocation classes
  */
-function buildWrapperElement(instance: any, args: any, componentDef: any, fw?: any): HTMLElement {
+function buildWrapperElement(
+  instance: any,
+  args: any,
+  componentDef: any,
+  fw?: any
+): HTMLElement | DocumentFragment {
   const instanceTagName = instance?.tagName;
   const tagName = instanceTagName === '' ? null : instanceTagName || 'div';
 
   if (!tagName) {
     _assertTaglessComponent(instance, componentDef?.prototype, args);
     // Tagless component - return a fragment marker
-    return document.createDocumentFragment() as any;
+    return document.createDocumentFragment();
   }
 
   const wrapper = document.createElement(tagName);
@@ -5759,8 +5778,11 @@ function buildWrapperElement(instance: any, args: any, componentDef: any, fw?: a
   // 2. It was part of the component's class definition (prototype)
   // Setting ariaRole via instance.set() after render should NOT cause binding
   const ariaRoleInArgs = args && 'ariaRole' in args;
-  const ariaRoleInProto = componentDef?.prototype?.hasOwnProperty('ariaRole');
-  const ariaRoleInClass = componentDef?.hasOwnProperty?.('ariaRole');
+  const ariaRoleInProto =
+    componentDef?.prototype != null &&
+    Object.prototype.hasOwnProperty.call(componentDef.prototype, 'ariaRole');
+  const ariaRoleInClass =
+    componentDef != null && Object.prototype.hasOwnProperty.call(componentDef, 'ariaRole');
 
   if (ariaRoleInArgs || ariaRoleInProto || ariaRoleInClass) {
     const ariaRole = instance?.ariaRole;
@@ -5884,7 +5906,7 @@ function wrapNestedObjectForTracking(obj: any): any {
           cell._value = value;
         }
         // Read cell.value to register with GXT's currentTracker
-        cell.value;
+        void cell.value;
       }
       return value;
     },
@@ -5908,7 +5930,7 @@ function wrapNestedObjectForTracking(obj: any): any {
  * - Methods on the prototype are accessible via 'this'
  * - We can add getters for reactive arg access
  */
-function createRenderContext(instance: any, args: any, fw: any, owner: any): any {
+function createRenderContext(instance: any, args: any, fw: any, _owner: any): any {
   // Use the instance directly — don't use Object.create(instance).
   // Object.create creates a new object with instance as prototype, which breaks
   // getters: @tracked, computed properties, etc. run with `this = renderContext`
@@ -5968,7 +5990,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
 
   // Add __gxtSelfString__ getter for {{this}} support
   // Ember's {{this}} calls toString() on the component instance
-  if (!renderContext.hasOwnProperty('__gxtSelfString__')) {
+  if (!Object.prototype.hasOwnProperty.call(renderContext, '__gxtSelfString__')) {
     Object.defineProperty(renderContext, '__gxtSelfString__', {
       get() {
         return this.toString();
@@ -6022,7 +6044,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
   }
 
   // Set up attrs proxy for this.attrs.argName.value / this.args.argName access
-  const attrsProxy: Record<string, any> = {};
+  const attrsProxy: Record<string | symbol, any> = {};
   // Owner of the argument value slots this context reads through (see
   // `_argValueSlot`): the instance's arg getters, else this args proxy.
   const argSlotOwner: object = instance?.__argGetters ?? attrsProxy;
@@ -6299,7 +6321,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
   // forwards property reads back to attrsProxy. This keeps Ember's
   // deprecated-but-supported `{{this.attrs.foo}}` rendering in classic
   // curly components.
-  if (!attrsProxy.this) {
+  if (!attrsProxy['this']) {
     const attrsShim = new Proxy(
       {},
       {
@@ -6440,7 +6462,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
       // time (cellFor with skipDefine=false reads the current value).
       if (instance) {
         const _crcExistingDesc = Object.getOwnPropertyDescriptor(renderContext, key);
-        const _crcAlreadyInstalled = !!(
+        const _crcAlreadyInstalled = Boolean(
           _crcExistingDesc && (_crcExistingDesc.get as any)?.__gxtRenderCtxArgGetter
         );
         if (_crcAlreadyInstalled) {
@@ -6484,7 +6506,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
       // @computed/@tracked/get-with-setter keep the original probe (they may
       // legitimately be overridden).
       const _plainNativeCollisionRc =
-        !!instance && _isPlainNativeGetterCollision(Object.getPrototypeOf(instance), key);
+        Boolean(instance) && _isPlainNativeGetterCollision(Object.getPrototypeOf(instance), key);
       // Check if the instance overrode this property in init()
       // If so, we should use the init-set value, not the arg value.
       // Also check __gxtInitOverrides which persists across re-renders.
@@ -6502,7 +6524,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
       const freshOverride = instance && instanceVal !== argVal && instanceVal !== undefined;
       // Check if this was flagged as init-overridden on a previous render pass
       const savedOverride = instance?.__gxtInitOverrides?.[key];
-      const overriddenInInit = freshOverride || !!savedOverride;
+      const overriddenInInit = freshOverride || Boolean(savedOverride);
 
       // Save the init override flag on the instance for future re-renders
       if (freshOverride && instance) {
@@ -6525,7 +6547,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
         // to see if the arg value actually changed from the parent's perspective.
         renderCtxArgCells[key] = { cell, getter, initOverridden: true };
         const rcInitGet: any = function () {
-          if (cell) cell.value;
+          if (cell) void cell.value;
           return useLocal ? localVal : getter();
         };
         rcInitGet.__gxtRenderCtxArgGetter = true;
@@ -6589,7 +6611,8 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
           }
         }
         // Treat as a plain-native collision so the cached native getter is used.
-        const _useCachedNativeGetter = protoGetterIsPlainNative && !!protoGetterFn && !!instance;
+        const _useCachedNativeGetter =
+          protoGetterIsPlainNative && Boolean(protoGetterFn) && Boolean(instance);
         if (hasComputedGetter) {
           // Property has a computed getter — install a cell-backed
           // descriptor manually. cellFor(skipDefine=false) would read
@@ -6674,7 +6697,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
             // its deps dirty). Read cell.value too so the arg-cell
             // dependency is still tracked by the ambient formula.
             if (_nativeGetterWrapper) {
-              cell.value;
+              void cell.value;
               return _nativeGetterWrapper.value;
             }
             return cell.value;
@@ -6741,7 +6764,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
           state.currentGetter = getter;
           if (!existingState && instance) _setRcArgState(instance, key, state);
           const rcGet: any = function () {
-            cell.value;
+            void cell.value;
             _classicConsumeTagHook(_classicTagForHook(renderContext, key));
             if (state.useLocal) return state.localVal;
             const g = state.currentGetter || getter;
@@ -7020,7 +7043,7 @@ function createRenderContext(instance: any, args: any, fw: any, owner: any): any
       while (obj) {
         const desc = Object.getOwnPropertyDescriptor(obj, prop);
         if (desc) {
-          hasGetter = !!desc.get;
+          hasGetter = Boolean(desc.get);
           foundDesc = desc;
           break;
         }
@@ -9012,7 +9035,7 @@ const $_MANAGERS = {
       // through `owner.factoryFor('modifier:...')` — still require the
       // owner and short-circuit below.
       const isBuiltinModifierName =
-        typeof modifier === 'string' && !!self._builtinModifiers?.[modifier];
+        typeof modifier === 'string' && Boolean(self._builtinModifiers?.[modifier]);
       // Modifier definitions registered directly via `setModifierManager(factory, obj)`
       // (strict-mode shadowed `on` modifiers, RFC 757 modifiers in test contexts,
       // etc.) carry their factory on `INTERNAL_MODIFIER_MANAGERS`. They
@@ -9093,6 +9116,7 @@ const $_MANAGERS = {
             }
             if (prop === 'length') return rawPositional.length;
             if (prop === Symbol.iterator) {
+              // eslint-disable-next-line disable-features/disable-generator-functions -- the proxy's iterator
               return function* () {
                 for (let i = 0; i < rawPositional.length; i++) {
                   yield unwrapGxtArg(rawPositional[i]);
@@ -9509,6 +9533,7 @@ const $_MANAGERS = {
             // Intercept Symbol.iterator to track which indices are accessed during destructuring
             if (prop === Symbol.iterator) {
               const innerIter = Reflect.get(target, prop, receiver);
+              // eslint-disable-next-line disable-features/disable-generator-functions -- the proxy's iterator
               return function* () {
                 let idx = 0;
                 for (const val of { [Symbol.iterator]: innerIter }) {
@@ -9811,6 +9836,7 @@ function _gxtInvocationArgs(invocation: any, fw: any): any {
       isReadingArgumentReference() ? invocation[key] : argumentValue(invocation[key]);
   }
   const slots = _gxtInvocationSlots(invocation?.[$SLOTS_SYMBOL] || invocation?.$slots);
+  // @ts-expect-error -- gxt types $_args slots as render functions; these are the invocation's slots
   const args = _gxtArgs(named, slots, fw);
   setCustomTagFor(args, _gxtNamedArgTag);
   return args;
@@ -9953,6 +9979,7 @@ function _hasClassBodyTemplate(component: any): boolean {
 function _gxtDefaultComponentTemplate(this: any): unknown {
   _gxtGetArgs(this, arguments as any);
   const slots = _gxtGetSlots(this, arguments as any);
+  // @ts-expect-error -- gxt types $_slot's result outside the roots $_fin takes
   return _gxtFin([_gxtSlot('default', () => [], slots, this)], this);
 }
 
@@ -10192,7 +10219,7 @@ function handleStringComponent(
       const posSourceGetters = args.__posSourceGetters || [];
       const mutArgSources: Record<string, Function> = {};
       for (let i = 0; i < positionalParams.length && i < count; i++) {
-        const paramName = positionalParams[i];
+        const paramName: string = positionalParams[i];
         const posKey = `__pos${i}__`;
         // Capture the getter if available (for reactivity), otherwise use the value directly
         const posDesc = Object.getOwnPropertyDescriptor(args, posKey);
@@ -11303,7 +11330,7 @@ function buildCustomManagedArgs(args: any) {
  * Render an unknown dash-cased tag name as a plain HTML custom element.
  * Applies named args as attributes and renders block children as innerHTML.
  */
-function renderCustomElement(tagName: string, args: any, fw: any, ctx: any): () => any {
+function renderCustomElement(tagName: string, args: any, fw: any, _ctx: any): () => any {
   return () => {
     const el = document.createElement(tagName);
     const gxtEffect = _gxtEffect;
@@ -11741,7 +11768,7 @@ function _collectAllArgGetters(args: any, fw: any): Record<string, () => any> {
 // wrapper and the mutable slot map to rewrite later.
 function _argsForInternalManagerWithSlots(
   args: any,
-  fw: any
+  _fw: any
 ): {
   capture: () => { positional: any[]; named: Record<string, any> };
   namedRefSlots: Record<string, { getter: () => any }>;
@@ -11814,7 +11841,7 @@ function _refreshManagedSlotArgs(slot: _ManagedSlot, args: any, fw: any): void {
     if (!(key in fresh)) delete slot.argGetters[key];
   }
   for (const key of Object.keys(fresh)) {
-    slot.argGetters[key] = fresh[key];
+    slot.argGetters[key] = fresh[key]!;
   }
   // Redirect each existing named-arg ref to the freshest upstream getter.
   // Add new keys that were absent at creation. (`args.named` is the plain
@@ -11833,7 +11860,7 @@ function _refreshManagedSlotArgs(slot: _ManagedSlot, args: any, fw: any): void {
   const liveNamed = slot.instance?.args?.named;
   for (const key of Object.keys(slot.namedRefSlots)) {
     if (key in freshNamed) {
-      slot.namedRefSlots[key].getter = freshNamed[key];
+      slot.namedRefSlots[key]!.getter = freshNamed[key]!;
     } else {
       // Arg missing in new invocation: drop the key so `X in args.named`
       // guards reflect the new template's arg shape accurately.
@@ -11845,10 +11872,10 @@ function _refreshManagedSlotArgs(slot: _ManagedSlot, args: any, fw: any): void {
   }
   for (const key of Object.keys(freshNamed)) {
     if (slot.namedRefSlots[key]) continue;
-    slot.namedRefSlots[key] = { getter: freshNamed[key] };
+    slot.namedRefSlots[key] = { getter: freshNamed[key]! };
     const named = slot.instance?.args?.named;
     if (named && typeof named === 'object' && !(key in named)) {
-      const refSlot = slot.namedRefSlots[key];
+      const refSlot = slot.namedRefSlots[key]!;
       const ref: any = {
         get value() {
           const v = refSlot.getter();
@@ -11871,7 +11898,7 @@ function _refreshManagedSlotArgs(slot: _ManagedSlot, args: any, fw: any): void {
   // What an argument's getter throws reaches the render.
   for (const key of Object.keys(slot.argGetters)) {
     if (!_INPUT_SYNC_KEYS.has(key)) continue;
-    slot.lastArgValues[key] = slot.argGetters[key]();
+    slot.lastArgValues[key] = slot.argGetters[key]!();
   }
 }
 
@@ -12087,7 +12114,7 @@ function handleManagedComponent(
     gxtEffect(() => {
       const checked = instance.checked;
       if (checked !== undefined) {
-        (el as HTMLInputElement).checked = !!checked;
+        (el as HTMLInputElement).checked = Boolean(checked);
       }
     });
 
@@ -12410,7 +12437,7 @@ function handleManagedComponent(
     // sync).
     for (const key of Object.keys(argGetters)) {
       if (!_INPUT_SYNC_KEYS.has(key)) continue;
-      slotRef.lastArgValues[key] = argGetters[key]();
+      slotRef.lastArgValues[key] = argGetters[key]!();
     }
     const lastArgValues = slotRef.lastArgValues;
 
@@ -12423,7 +12450,7 @@ function handleManagedComponent(
       // template args transparently without re-creating the syncCallback.
       for (const key of Object.keys(slotRef.argGetters)) {
         if (!_INPUT_SYNC_KEYS.has(key)) continue;
-        const newVal = slotRef.argGetters[key]();
+        const newVal = slotRef.argGetters[key]!();
         if (newVal !== lastArgValues[key]) {
           lastArgValues[key] = newVal;
           changedKeys.add(key);
@@ -12457,7 +12484,7 @@ function handleManagedComponent(
       if (changedKeys.has('checked')) {
         const checked = instance.checked;
         if (checked !== undefined) {
-          (el as HTMLInputElement).checked = !!checked;
+          (el as HTMLInputElement).checked = Boolean(checked);
         }
       }
 
@@ -12616,7 +12643,7 @@ function renderClassicComponent(
   // since the component already went through its initial render lifecycle.
   const isReused = instance && instance.__gxtReusedFromPool;
   const isForceRerender = getGxtRenderer()?.compilePipeline.isForceRerender?.() ?? false;
-  const reusedWithChanges = isReused && !!instance.__gxtPoolHasArgChanges;
+  const reusedWithChanges = isReused && Boolean(instance.__gxtPoolHasArgChanges);
   if (isReused) {
     delete instance.__gxtReusedFromPool;
     delete instance.__gxtPoolHasArgChanges;
@@ -13010,7 +13037,7 @@ export function capabilityFlagsFrom(capabilities: Record<string, boolean>): numb
   return flags;
 }
 
-function assertManagerTarget(target: any, kind: string): void {
+function assertManagerTarget(target: any, _kind: string): void {
   if (
     target === null ||
     target === undefined ||
@@ -13139,9 +13166,9 @@ export function componentCapabilities(_version: string, capabilities?: Record<st
     return caps;
   }
   const caps = {
-    asyncLifecycleCallbacks: Boolean(capabilities.asyncLifecycleCallbacks),
-    destructor: Boolean(capabilities.destructor),
-    updateHook: Boolean(capabilities.updateHook),
+    asyncLifecycleCallbacks: Boolean(capabilities['asyncLifecycleCallbacks']),
+    destructor: Boolean(capabilities['destructor']),
+    updateHook: Boolean(capabilities['updateHook']),
   } as Record<string, boolean>;
   FROM_CAPABILITIES.add(caps);
   return caps;
@@ -13350,7 +13377,7 @@ export function setInternalModifierManager(manager: any, modifier: any, _skipGua
       Object.getPrototypeOf(manager) || manager,
       'counters'
     );
-    const hasCountersGetter = !!(desc && typeof desc.get === 'function');
+    const hasCountersGetter = Boolean(desc && typeof desc.get === 'function');
     if (debugName === 'on' && hasCountersGetter) {
       __gxtInstallOnElementPatch();
       // Create a proxied manager that forwards everything to the original
@@ -13842,6 +13869,7 @@ function _modifierArgsProxyFor(capturedArgs: any): { positional: any; named: any
     get(target: any, prop: string | symbol) {
       if (prop === 'length') return target.length;
       if (prop === Symbol.iterator) {
+        // eslint-disable-next-line disable-features/disable-generator-functions -- the proxy's iterator
         return function* () {
           for (let i = 0; i < target.length; i++) {
             yield _unwrapMaybeRef(target[i]);
@@ -14121,6 +14149,7 @@ setGxtRenderer({
     // tagless, so compile.ts's `syncWrapper?.(…)` callers no-op when this is
     // undefined. Folding to undefined in a native build leaves _gxtSyncWrapper
     // (and syncWrapperElement) unreferenced so rollup tree-shakes them.
+    // @ts-expect-error -- classic-only: undefined in a native build, and its callers use syncWrapper?.()
     syncWrapper: __GXT_CLASSIC_COMPONENTS__ ? _gxtSyncWrapper : undefined,
     snapshotLiveInstances: _gxtSnapshotLiveInstances,
     syncAllWrappers: _gxtSyncAllWrappers,

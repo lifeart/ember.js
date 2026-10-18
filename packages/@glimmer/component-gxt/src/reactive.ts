@@ -12,7 +12,7 @@
  * and the `@tracked` / `@cached` decorators reachable "through
  * `@glimmer/component-gxt`" are IDENTITY-EQUAL (`===`) to the ones the rest of
  * the GXT build uses. That is the property the identity test
- * (`__tests__/identity.test.ts`) asserts: the reactive fork is closed on the
+ * (`__tests__/identity-test.ts`) asserts: the reactive fork is closed on the
  * GXT side.
  *
  * Note on the named-symbol surface: of the four symbols whose identity forks
@@ -26,10 +26,8 @@
  *
  * These imports use bare `@ember/-internals/*` specifiers — the alias
  * contract the GXT build provides — rather than relative paths, so the wiring
- * is honest about the shipping form. The package is excluded from
- * the classic root `tsconfig.json` type-check for the same reason the
- * `gxt-backend` shims themselves are: it is GXT-build-only machinery and the
- * specifiers only resolve under the GXT alias map (see `rollup.config.mjs`).
+ * is honest about the shipping form. The root `tsconfig.json` maps them to the
+ * same source files (its `paths`) for type-checking.
  */
 
 // Tag-related reactive primitives (the forking symbols reachable via the

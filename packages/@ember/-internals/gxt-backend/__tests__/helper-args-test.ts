@@ -142,11 +142,12 @@ moduleFor(
       this.registerHelper('foo', () => 'Hello, world!');
       this.registerComponent('bar', precompileTemplate('[{{is-string @content}}][{{@content}}]'));
 
+      class Root extends GlimmerComponent {
+        @tracked other = 'a';
+      }
       const root = await this.render(
         precompileTemplate('<Bar @content={{(foo)}} />{{this.other}}'),
-        class extends GlimmerComponent {
-          @tracked other = 'a';
-        }
+        Root
       );
       assertHTML('[true][Hello, world!]a');
 
@@ -168,12 +169,13 @@ moduleFor(
       this.registerHelper('call-it', ([fn]) => (fn as () => string)());
       this.registerComponent('baz', precompileTemplate('[{{call-it @fn}}][{{@other}}]'));
 
+      class Root extends GlimmerComponent {
+        fn = greet;
+        @tracked other = 'a';
+      }
       const root = await this.render(
         precompileTemplate('<Baz @fn={{this.fn}} @other={{this.other}} />'),
-        class extends GlimmerComponent {
-          fn = greet;
-          @tracked other = 'a';
-        }
+        Root
       );
       assertHTML('[hi][a]');
 
@@ -186,14 +188,12 @@ moduleFor(
       this.registerHelper('call-it', ([fn]) => (fn as () => string)());
       this.registerComponent('baz', precompileTemplate('[{{call-it @fn}}]'));
 
-      const root = await this.render(
-        precompileTemplate('<Baz @fn={{this.fn}} />'),
-        class extends GlimmerComponent {
-          @tracked fn = function greetA() {
-            return 'A';
-          };
-        }
-      );
+      class Root extends GlimmerComponent {
+        @tracked fn = function greetA() {
+          return 'A';
+        };
+      }
+      const root = await this.render(precompileTemplate('<Baz @fn={{this.fn}} />'), Root);
       assertHTML('[A]');
 
       root.fn = function greetB() {
@@ -231,11 +231,12 @@ moduleFor(
         { glimmer: true }
       );
 
+      class Root extends GlimmerComponent {
+        @tracked name = 'world';
+      }
       const root = await this.render(
         precompileTemplate('<TestHarness @stuff={{hash Foo=(component "foo") name=this.name}} />'),
-        class extends GlimmerComponent {
-          @tracked name = 'world';
-        }
+        Root
       );
       assertHTML('hello world!');
 
@@ -282,12 +283,13 @@ moduleFor(
         glimmer: true,
       });
 
+      class Root extends GlimmerComponent {
+        greet = (value: string) => `hi ${value}`;
+        @tracked other = 'a';
+      }
       const root = await this.render(
         precompileTemplate('<TestHarness @f={{fn this.greet "x"}} />{{this.other}}'),
-        class extends GlimmerComponent {
-          greet = (value: string) => `hi ${value}`;
-          @tracked other = 'a';
-        }
+        Root
       );
       assertHTML('[hi x]a');
 
@@ -302,12 +304,13 @@ moduleFor(
         glimmer: true,
       });
 
+      class Root extends GlimmerComponent {
+        greet = (value: string) => `hi ${value}`;
+        @tracked name = 'x';
+      }
       const root = await this.render(
         precompileTemplate('<TestHarness @f={{fn this.greet this.name}} />'),
-        class extends GlimmerComponent {
-          greet = (value: string) => `hi ${value}`;
-          @tracked name = 'x';
-        }
+        Root
       );
       assertHTML('[hi x]');
 
@@ -320,12 +323,13 @@ moduleFor(
       this.registerHelper('call-it', ([fn]) => (fn as () => string)());
       this.registerComponent('test-harness', precompileTemplate('[{{call-it @f}}]'));
 
+      class Root extends GlimmerComponent {
+        greet = (value: string) => `hi ${value}`;
+        @tracked other = 'a';
+      }
       const root = await this.render(
         precompileTemplate('<TestHarness @f={{fn this.greet "x"}} />{{this.other}}'),
-        class extends GlimmerComponent {
-          greet = (value: string) => `hi ${value}`;
-          @tracked other = 'a';
-        }
+        Root
       );
       assertHTML('[hi x]a');
 
@@ -349,11 +353,12 @@ moduleFor(
         )
       );
 
+      class Root extends GlimmerComponent {
+        @tracked value = 'a';
+      }
       await this.render(
         precompileTemplate('<TestHarness @f={{fn (mut this.value)}} @value={{this.value}} />'),
-        class extends GlimmerComponent {
-          @tracked value = 'a';
-        }
+        Root
       );
       assertHTML('[a]');
 

@@ -77,7 +77,7 @@ export function createComputeRef<T>(
 }
 
 export function createReadOnlyRef<T>(ref: Reference<T>): Reference<T> {
-  if (!isUpdatableRef(ref)) return ref;
+  if (!isUpdatableRef(ref as Reference)) return ref;
   return createComputeRef(() => valueForRef(ref), null, ref.debugLabel);
 }
 
@@ -127,7 +127,7 @@ export function childRefFor(parentRef: Reference, path: string): Reference {
     const parent = parentRef.value;
     child =
       parent === null || parent === undefined
-        ? UNDEFINED_REFERENCE
+        ? (UNDEFINED_REFERENCE as Reference)
         : createUnboundRef(
             (parent as Record<string, unknown>)[path],
             DEBUG && `${parentRef.debugLabel ?? ''}.${path}`

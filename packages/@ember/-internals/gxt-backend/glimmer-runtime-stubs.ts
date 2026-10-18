@@ -75,7 +75,6 @@ export const RuntimeOpImpl = vmStub('RuntimeOpImpl');
 // Bare '@glimmer/runtime' index — only the wrappers' dynamic-import
 // UpdatingVM patch reaches it in the dist graph; `undefined` makes that
 // site's `if (UVM && ...)` guard a no-op (no VM runs in the GXT dist).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const UpdatingVM: any = undefined;
 
 // lib/compiled/opcodes/-debug-strip — permissive checkers for the one kept

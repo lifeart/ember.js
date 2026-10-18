@@ -113,11 +113,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
           duringDestroy = isDestroyed(obj);
         });
         destroy(obj);
-        assert.strictEqual(
-          duringDestroy,
-          false,
-          'isDestroyed is false while destructors are running'
-        );
+        assert.false(duringDestroy, 'isDestroyed is false while destructors are running');
         assert.ok(isDestroyed(obj), 'isDestroyed is true after destroy completes');
       }
     );
@@ -138,7 +134,7 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
         duringDestruction = isDestroying(obj);
       });
       destroy(obj);
-      assert.strictEqual(duringDestruction, true, 'isDestroying is true during destruction');
+      assert.true(duringDestruction, 'isDestroying is true during destruction');
     });
 
     QUnit.test('returns true after destroy completes', async function (assert: any) {
@@ -252,3 +248,5 @@ gxtSuiteModule('Compat: destroyable.ts', function () {
     });
   });
 });
+
+export {};

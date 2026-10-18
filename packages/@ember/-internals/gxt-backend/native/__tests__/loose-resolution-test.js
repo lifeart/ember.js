@@ -21,7 +21,7 @@ import { DEBUG } from '@glimmer/env';
 import { RenderingTestCase, moduleFor, runTask } from 'internal-test-helpers';
 
 function names(nodes, out = []) {
-  for (const node of nodes) {
+  for (let node of nodes) {
     out.push(node.name);
     names(node.children, out);
   }
@@ -50,11 +50,11 @@ moduleFor(
   class extends RenderingTestCase {
     ['@test <FooBar>, <XBlah>, <X-Blah>, <Foo> and <Foo::Bar> resolve by their dasherized names']() {
       // (precompileTemplate needs a literal string: gxt compiles it at build time)
-      const only = (template) => setComponentTemplate(template, templateOnly());
-      this.owner.register('component:foo-bar', only(precompileTemplate('foo-bar')));
-      this.owner.register('component:x-blah', only(precompileTemplate('x-blah')));
-      this.owner.register('component:foo', only(precompileTemplate('foo')));
-      this.owner.register('component:foo/bar-baz', only(precompileTemplate('nested')));
+      let asTemplateOnly = (template) => setComponentTemplate(template, templateOnly());
+      this.owner.register('component:foo-bar', asTemplateOnly(precompileTemplate('foo-bar')));
+      this.owner.register('component:x-blah', asTemplateOnly(precompileTemplate('x-blah')));
+      this.owner.register('component:foo', asTemplateOnly(precompileTemplate('foo')));
+      this.owner.register('component:foo/bar-baz', asTemplateOnly(precompileTemplate('nested')));
 
       this.render('<FooBar />|<XBlah />|<X-Blah />|<Foo />|<Foo::BarBaz />');
       this.assertText('foo-bar|x-blah|x-blah|foo|nested');
@@ -160,8 +160,8 @@ moduleFor(
 
       this.render('<XPanel />');
 
-      const tree = this.owner.lookup('renderer:-dom').debugRenderTree.capture();
-      const all = names(tree);
+      let tree = this.owner.lookup('renderer:-dom').debugRenderTree.capture();
+      let all = names(tree);
       assert.ok(all.includes('x-panel'), `named by the resolver name (${all.join(', ')})`);
       assert.notOk(all.includes('Panel'), 'not by its class name');
     }

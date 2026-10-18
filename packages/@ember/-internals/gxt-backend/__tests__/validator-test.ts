@@ -47,7 +47,7 @@ gxtSuiteModule('Compat: validator.ts', function () {
   QUnit.module('isTracking()', function () {
     QUnit.test('returns false outside track()', async function (assert: any) {
       const { isTracking } = await import('../validator');
-      assert.strictEqual(isTracking(), false, 'not tracking outside track()');
+      assert.false(isTracking(), 'not tracking outside track()');
     });
 
     QUnit.test('returns true inside track()', async function (assert: any) {
@@ -56,7 +56,7 @@ gxtSuiteModule('Compat: validator.ts', function () {
       track(() => {
         insideValue = isTracking();
       });
-      assert.strictEqual(insideValue, true, 'tracking inside track()');
+      assert.true(insideValue, 'tracking inside track()');
     });
   });
 
@@ -132,7 +132,7 @@ gxtSuiteModule('Compat: validator.ts', function () {
       const tag = track(() => {
         consumeTag(updatable);
       });
-      assert.ok(tag._consumed && tag._consumed.length > 0, 'tag was consumed in track frame');
+      assert.ok(tag._consumed?.length > 0, 'tag was consumed in track frame');
     });
   });
 
@@ -348,8 +348,8 @@ gxtSuiteModule('Compat: validator.ts', function () {
     QUnit.test('new properties can be added', async function (assert: any) {
       const { trackedObject } = await import('../validator-vm-compat');
       const obj = trackedObject<Record<string, any>>({});
-      obj.foo = 'bar';
-      assert.strictEqual(obj.foo, 'bar', 'dynamically added property');
+      obj['foo'] = 'bar';
+      assert.strictEqual(obj['foo'], 'bar', 'dynamically added property');
     });
 
     QUnit.test('defaults to empty object when argument is falsy', async function (assert: any) {
@@ -379,7 +379,7 @@ gxtSuiteModule('Compat: validator.ts', function () {
             innerTracking = isTracking();
           });
         });
-        assert.strictEqual(innerTracking, false, 'not tracking inside untrack');
+        assert.false(innerTracking, 'not tracking inside untrack');
       }
     );
   });
@@ -501,3 +501,5 @@ gxtSuiteModule('Compat: validator.ts', function () {
     });
   });
 });
+
+export {};

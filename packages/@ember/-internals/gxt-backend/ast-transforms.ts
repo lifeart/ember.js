@@ -19,7 +19,6 @@
 // Public AST-transform hook type. `transforms: AstTransform[]` runs
 // `@glimmer/syntax`-style visitors on the parsed template AST after preprocess,
 // before glimmer-next codegen.
-// @ts-ignore - type-only; some published versions lack this export (see compile.ts footer note)
 import { type AstTransform as GxtAstTransform } from '@lifeart/gxt/runtime-compiler';
 import { DEBUG } from '@glimmer/env';
 
@@ -262,9 +261,9 @@ function gxtElseBlockTransform(
   return (env: GxtAstEnv) => {
     const b = env.syntax.builders;
     const isKeyword = (path: any, name: string): boolean =>
-      !!path &&
+      Boolean(path) &&
       path.type === 'PathExpression' &&
-      !!path.head &&
+      Boolean(path.head) &&
       path.head.type === 'VarHead' &&
       path.head.name === name &&
       path.tail.length === 0;
@@ -797,7 +796,7 @@ const _GXT_BODY_BARE_BUILTINS: ReadonlySet<string> = new Set([
  * (rehydration delegate fixtures, strict-mode locals).
  */
 function gxtBodyBareHelperTransform(scopeValues?: Record<string, unknown>) {
-  const hasScope = !!scopeValues && Object.keys(scopeValues).length > 0;
+  const hasScope = scopeValues != null && Object.keys(scopeValues).length > 0;
   return (env: GxtAstEnv) => {
     const b = env.syntax.builders;
     return {

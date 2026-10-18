@@ -81,7 +81,6 @@ class SubOwnerManager {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 class SubOwnerComponent {
   static subOwner: Owner;
   static destroyable: object;

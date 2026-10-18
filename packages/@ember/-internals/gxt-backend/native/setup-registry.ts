@@ -32,7 +32,9 @@ export function setupEngineRegistry(registry: Registry): void {
 
   registry.optionsForType('helper', { instantiate: false });
 
+  // @ts-expect-error -- the stub stands in for Glimmer's opaque internal component, which the registry stores as is
   registry.register('component:input', Input);
   registry.register('component:link-to', LinkTo);
+  // @ts-expect-error -- the stub stands in for Glimmer's opaque internal component, which the registry stores as is
   registry.register('component:textarea', Textarea);
 }

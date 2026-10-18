@@ -100,7 +100,7 @@ function resolveGxtArg(a: any): any {
   return v;
 }
 function unwrapArgs(args: any[]): any[] {
-  if (!Array.isArray(args)) return Object.freeze([]) as any[];
+  if (!Array.isArray(args)) return Object.freeze([] as any[]) as any[];
   // Only unwrap GXT getters (arrow fns with no prototype).
   // Regular functions (like closures from (fn ...)) should be passed as-is.
   const result = args.map(resolveGxtArg);
@@ -609,7 +609,7 @@ function createEmberMaybeHelper(original: Function) {
     }
 
     // Handle CurriedComponent — when a curried component is used as {{curried ...}} or {{object.comp ...}}
-    if (nameOrFn && nameOrFn.__isCurriedComponent) {
+    if (nameOrFn && (nameOrFn as any).__isCurriedComponent) {
       // Merge the invocation args into the curried component
       const namedArgs = callNamedArgs(hash);
       const positionals = Array.isArray(args) ? args : [];
@@ -834,14 +834,9 @@ function createEmberMaybeHelper(original: Function) {
           named[k] = makeRef((namedObj as any)[k], labels?.named?.[k]);
         }
         const captured = { positional: positionalRefs, named, length: positionalRefs.length };
-        let ref: any;
-        try {
-          ref = helperFnOrManager(captured, getAmbientOwner());
-        } catch (e) {
-          // Rethrow so assert.throws() in DEBUG can capture invalid-arity /
-          // non-string-tag asserts produced by the element helper.
-          throw e;
-        }
+        // What the helper throws (the element helper's invalid-arity and
+        // non-string-tag asserts in DEBUG) reaches the caller.
+        const ref: any = helperFnOrManager(captured, getAmbientOwner());
         // The Helper return is itself a `Reference`. Read its current
         // value via `valueForRef` — matches Ember's Glimmer-VM read path
         // exactly, including tag-tracking for the wrapping reactive read.
@@ -1365,7 +1360,7 @@ function createEmberMaybeHelper(original: Function) {
                   componentArgs[posKey] = val;
                 }
               }
-              componentArgs.__posCount__ = posList.length;
+              componentArgs['__posCount__'] = posList.length;
             }
             const result = $_MANAGERS.component.handle(name, componentArgs, [[], [], []], null);
             if (typeof result === 'function') {
@@ -1678,7 +1673,7 @@ function createEmberTag(original: Function) {
                     ? args.__hasBlockParams__()
                     : args.__hasBlockParams__) === 'default'
                 : undefined;
-            slots.default = createSlotFn(defaultChildren, explicitHasBlockParams);
+            slots['default'] = createSlotFn(defaultChildren, explicitHasBlockParams);
           }
         }
 
@@ -1997,8 +1992,8 @@ function createEmberDc(original: Function) {
     // Check for __hasBlock__ marker in args
     const hasBlockValue = gxtArgs?.__hasBlock__ ?? mergedArgs.__hasBlock__;
     if (hasBlockValue) {
-      if (!slots.default) {
-        slots.default = () => [];
+      if (!slots['default']) {
+        slots['default'] = () => [];
       }
     }
 
@@ -2511,7 +2506,7 @@ function createEmberDc(original: Function) {
       // catches it. We only throw for values that actually reached the user
       // code (component-typeof, function without component manager), not for
       // native GXT primitives which proceed through the fallback below.
-      const hasHelperMgr = !!findHelperManager(componentValue);
+      const hasHelperMgr = Boolean(findHelperManager(componentValue));
       const hasModifierMgr =
         typeof componentValue === 'function' &&
         getGxtRenderer()?.registries.internalModifierManagers &&
@@ -2853,7 +2848,7 @@ function _patchGxtEntriesOf(): void {
     }
     return;
   }
-  if (BUILTIN.__gxtEntriesOfPatched) return;
+  if (BUILTIN['__gxtEntriesOfPatched']) return;
   const entriesOf = function entriesOf(obj: any): EachInEntry[] {
     // Thunks produced by the GXT compiler are arrow functions with no own
     // prototype. Only invoke in that case; leave regular functions and
@@ -2921,7 +2916,7 @@ function _patchGxtEntriesOf(): void {
   // `{{#each-in X key=K}}` is `{{#each (gxtEntriesOf X K) key="key"}}`
   // (ast-transforms.ts): the entries of X, each keyed by the `key=` option
   // (`keyEachInEntries`).
-  BUILTIN.gxtEntriesOf = function gxtEntriesOfEmber(obj: any, key?: unknown): EachInEntry[] {
+  BUILTIN['gxtEntriesOf'] = function gxtEntriesOfEmber(obj: any, key?: unknown): EachInEntry[] {
     return keyEachInEntries(entriesOf(obj), key);
   };
   Object.defineProperty(BUILTIN, '__gxtEntriesOfPatched', {

@@ -13,6 +13,7 @@ if (typeof QUnit !== 'undefined') {
   // QUnit not loaded yet — set timeout when it becomes available
   const _checkQUnit = setInterval(() => {
     if (typeof QUnit !== 'undefined') {
+      // @ts-expect-error -- QUnit narrows to undefined in this branch; the callback runs once QUnit loads
       QUnit.config.testTimeout = 15000;
       clearInterval(_checkQUnit);
     }
@@ -21,8 +22,6 @@ if (typeof QUnit !== 'undefined') {
 
 import { setCurrentOutletState } from '@ember/-internals/gxt-backend/gxt-bridge';
 
-import Component from '@ember/component';
-import { setComponentTemplate } from '@ember/component';
 import { _backburner, run, _getCurrentRunLoop, schedule } from '@ember/runloop';
 import { renderSettled } from '@ember/-internals/glimmer';
 import { compile } from '../ember-template-compiler';
@@ -81,8 +80,6 @@ gxtSuiteModule('GXT Integration', function (hooks: any) {
   });
 
   QUnit.test('runloop begin/end hooks are registered', function (assert: any) {
-    // Check that backburner has our hooks
-    const listeners = (_backburner as any)._eventCallbacks || (_backburner as any).options;
     assert.ok(_backburner, 'backburner exists');
 
     // Run a simple task in the runloop
@@ -222,16 +219,17 @@ gxtSuiteModule('Component Rendering', function (hooks: any) {
   });
 });
 
-gxtSuiteModule('Observer Integration', function (hooks: any) {
+gxtSuiteModule('Observer Integration', function () {
   QUnit.test('addObserver function exists', function (assert: any) {
-    assert.ok(typeof addObserver === 'function', 'addObserver is a function');
-    assert.ok(typeof removeObserver === 'function', 'removeObserver is a function');
+    assert.strictEqual(typeof addObserver, 'function', 'addObserver is a function');
+    assert.strictEqual(typeof removeObserver, 'function', 'removeObserver is a function');
   });
 
   QUnit.test('can add observer to EmberObject', function (assert: any) {
     const done = assert.async();
 
     const obj = EmberObject.create({
+      // @ts-expect-error -- the classic EmberObject.create type rejects properties the class does not declare
       name: 'initial',
     });
 
@@ -265,6 +263,7 @@ gxtSuiteModule('Observer Integration', function (hooks: any) {
     const done = assert.async();
 
     const obj = EmberObject.create({
+      // @ts-expect-error -- the classic EmberObject.create type rejects properties the class does not declare
       count: 0,
     });
 
@@ -304,7 +303,9 @@ gxtSuiteModule('Observer Integration', function (hooks: any) {
     const done = assert.async();
 
     const obj = EmberObject.create({
+      // @ts-expect-error -- the classic EmberObject.create type rejects properties the class does not declare
       person: EmberObject.create({
+        // @ts-expect-error -- the classic EmberObject.create type rejects properties the class does not declare
         name: 'John',
       }),
     });
@@ -332,14 +333,15 @@ gxtSuiteModule('Observer Integration', function (hooks: any) {
   });
 });
 
-gxtSuiteModule('Destroyable Integration', function (hooks: any) {
+gxtSuiteModule('Destroyable Integration', function () {
   QUnit.test('destroyable functions exist', function (assert: any) {
-    assert.ok(typeof registerDestructor === 'function', 'registerDestructor is a function');
-    assert.ok(typeof destroy === 'function', 'destroy is a function');
-    assert.ok(typeof isDestroyed === 'function', 'isDestroyed is a function');
-    assert.ok(typeof isDestroying === 'function', 'isDestroying is a function');
-    assert.ok(
-      typeof associateDestroyableChild === 'function',
+    assert.strictEqual(typeof registerDestructor, 'function', 'registerDestructor is a function');
+    assert.strictEqual(typeof destroy, 'function', 'destroy is a function');
+    assert.strictEqual(typeof isDestroyed, 'function', 'isDestroyed is a function');
+    assert.strictEqual(typeof isDestroying, 'function', 'isDestroying is a function');
+    assert.strictEqual(
+      typeof associateDestroyableChild,
+      'function',
       'associateDestroyableChild is a function'
     );
   });
@@ -410,7 +412,7 @@ gxtSuiteModule('Destroyable Integration', function (hooks: any) {
   });
 });
 
-gxtSuiteModule('Tracked Properties', function (hooks: any) {
+gxtSuiteModule('Tracked Properties', function () {
   QUnit.test('@tracked decorator works', function (assert: any) {
     class Counter {
       @tracked count = 0;
@@ -463,7 +465,7 @@ gxtSuiteModule('Tracked Properties', function (hooks: any) {
   });
 });
 
-gxtSuiteModule('Computed Properties', function (hooks: any) {
+gxtSuiteModule('Computed Properties', function () {
   QUnit.test('computed property getter works', function (assert: any) {
     const Person = EmberObject.extend({
       firstName: 'John',
@@ -546,7 +548,7 @@ gxtSuiteModule('Computed Properties', function (hooks: any) {
   });
 });
 
-gxtSuiteModule('Runloop Scheduling', function (hooks: any) {
+gxtSuiteModule('Runloop Scheduling', function () {
   QUnit.test('schedule runs callback in specified queue', function (assert: any) {
     const done = assert.async();
     let callbackRan = false;
@@ -583,7 +585,7 @@ gxtSuiteModule('Runloop Scheduling', function (hooks: any) {
   });
 });
 
-gxtSuiteModule('Reference System', function (hooks: any) {
+gxtSuiteModule('Reference System', function () {
   QUnit.test('createConstRef creates reference with correct value', async function (assert: any) {
     const { createConstRef, valueForRef } = await import('../reference');
 
@@ -598,7 +600,7 @@ gxtSuiteModule('Reference System', function (hooks: any) {
     const { createComputeRef, valueForRef } = await import('../reference');
 
     let count = 0;
-    const ref = createComputeRef(() => ++count, 'counter');
+    const ref = createComputeRef(() => ++count, null, 'counter');
 
     const val1 = valueForRef(ref);
     const val2 = valueForRef(ref);
@@ -618,7 +620,7 @@ gxtSuiteModule('Reference System', function (hooks: any) {
   });
 });
 
-gxtSuiteModule('Validator System', function (hooks: any) {
+gxtSuiteModule('Validator System', function () {
   QUnit.test('tagFor creates tag for object property', async function (assert: any) {
     const { tagFor, dirtyTagFor, validateTag, valueForTag } = await import('../validator');
 
@@ -628,7 +630,7 @@ gxtSuiteModule('Validator System', function (hooks: any) {
     assert.ok(tag, 'tag is created');
 
     const revision = valueForTag(tag);
-    assert.ok(typeof revision === 'number', 'revision is a number');
+    assert.strictEqual(typeof revision, 'number', 'revision is a number');
 
     // Tag should be valid before dirty
     assert.ok(validateTag(tag, revision), 'tag is valid at captured revision');
@@ -750,9 +752,6 @@ gxtSuiteModule('Outlet Integration', function (hooks: any) {
     // Note: timing may vary, so we check after a microtask
     return new Promise<void>((resolve) => {
       setTimeout(() => {
-        const hasContent =
-          fixture.innerHTML.includes('Nested Content') ||
-          fixture.querySelector('ember-outlet')!.innerHTML.includes('Nested Content');
         assert.ok(
           true,
           'ember-outlet element was created (rendering may depend on template format)'

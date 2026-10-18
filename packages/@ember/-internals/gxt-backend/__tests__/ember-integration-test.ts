@@ -17,9 +17,6 @@ import { set } from '@ember/object';
 import Component from '@ember/component';
 import { setComponentTemplate } from '@ember/component';
 
-// Declare QUnit
-declare const QUnit: any;
-
 /**
  * Local replacement for the removed `RenderingTestCase#registerComponent`
  * helper (commit 176b87e8e4 unified test infrastructure on
@@ -63,11 +60,11 @@ gxtModuleFor(
 
       this.render('<XBlah />');
 
-      this.assertComponentElement(this.firstChild, { content: 'hello' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'hello' });
 
       runTask(() => this.rerender());
 
-      this.assertComponentElement(this.firstChild, { content: 'hello' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'hello' });
     }
 
     '@test it can render a basic template only component'() {
@@ -75,11 +72,11 @@ gxtModuleFor(
 
       this.render('<FooBar />');
 
-      this.assertComponentElement(this.firstChild, { content: 'hello' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'hello' });
 
       runTask(() => this.rerender());
 
-      this.assertComponentElement(this.firstChild, { content: 'hello' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'hello' });
     }
 
     '@test it can render a basic component with template and javascript'() {
@@ -92,7 +89,7 @@ gxtModuleFor(
 
       this.render('<FooBar />');
 
-      this.assertComponentElement(this.firstChild, { content: 'FIZZ BAR hey' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'FIZZ BAR hey' });
     }
 
     '@test it can render a single word component name'() {
@@ -100,11 +97,11 @@ gxtModuleFor(
 
       this.render('<Foo />');
 
-      this.assertComponentElement(this.firstChild, { content: 'hello' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'hello' });
 
       runTask(() => this.rerender());
 
-      this.assertComponentElement(this.firstChild, { content: 'hello' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'hello' });
     }
 
     '@test it can have a custom id and it is not bound'() {
@@ -142,7 +139,7 @@ gxtModuleFor(
 
       this.render('<FooBar />');
 
-      this.assertComponentElement(this.firstChild, { content: 'hello' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'hello' });
     }
 
     '@test it can render a component with block content'() {
@@ -150,11 +147,11 @@ gxtModuleFor(
 
       this.render('<FooBar>block content</FooBar>');
 
-      this.assertComponentElement(this.firstChild, { content: 'block content' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'block content' });
 
       runTask(() => this.rerender());
 
-      this.assertComponentElement(this.firstChild, { content: 'block content' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'block content' });
     }
 
     '@test it can yield values from template'() {
@@ -162,7 +159,7 @@ gxtModuleFor(
 
       this.render('<FooBar as |value|>{{value}}</FooBar>');
 
-      this.assertComponentElement(this.firstChild, { content: 'hello' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'hello' });
     }
 
     '@test it can yield multiple values'() {
@@ -170,7 +167,7 @@ gxtModuleFor(
 
       this.render('<FooBar as |greeting name|>{{greeting}} {{name}}</FooBar>');
 
-      this.assertComponentElement(this.firstChild, { content: 'hello world' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'hello world' });
     }
 
     '@test it renders named blocks'() {
@@ -241,7 +238,7 @@ gxtModuleFor(
 
       this.render('<FooBar @greeting="Hello" @name="World" />');
 
-      this.assertComponentElement(this.firstChild, { content: 'Hello World' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'Hello World' });
     }
 
     '@test args are reactive'() {
@@ -249,11 +246,11 @@ gxtModuleFor(
 
       this.render('<FooBar @value={{this.value}} />', { value: 'initial' });
 
-      this.assertComponentElement(this.firstChild, { content: 'initial' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'initial' });
 
       runTask(() => set(this.context, 'value', 'updated'));
 
-      this.assertComponentElement(this.firstChild, { content: 'updated' });
+      this.assertComponentElement(this.firstChild, { tagName: 'div', content: 'updated' });
     }
 
     '@test it supports splattributes'() {
@@ -261,7 +258,7 @@ gxtModuleFor(
 
       this.render('<FooBar class="custom" data-test="value" />');
 
-      const element = this.firstChild.firstChild;
+      const element = this.firstChild!.firstChild as Element;
       this.assert.equal(element.className, 'custom');
       this.assert.equal(element.getAttribute('data-test'), 'value');
     }

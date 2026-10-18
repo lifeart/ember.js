@@ -11,8 +11,11 @@
 import compile from '../runtime-compile';
 import { precompileTemplate as nativePrecompileTemplate } from '../template-compilation';
 
+// The precompileTemplate below replaces the one this re-exports.
+// eslint-disable-next-line import/export -- an explicit export overrides `export *`
 export * from '../template-compilation';
 
+// eslint-disable-next-line import/export -- see above
 export function precompileTemplate(
   template: Parameters<typeof nativePrecompileTemplate>[0],
   options?: Parameters<typeof nativePrecompileTemplate>[1]

@@ -19,6 +19,7 @@ import { precompileTemplate } from '@ember/template-compilation';
 
 const BoomClass = EmberObject.extend({
   init() {
+    // @ts-expect-error -- classic extend() does not type this._super
     this._super(...arguments);
     throw new Error('the helper failed to initialize');
   },
@@ -164,7 +165,6 @@ moduleFor(
         }
         init() {
           super.init();
-          // eslint-disable-next-line @typescript-eslint/no-this-alias
           instance = this;
         }
       }
@@ -190,7 +190,7 @@ moduleFor(
       this.add(
         'component:foo-bar',
         class extends Component {
-          destroy() {
+          destroy(): never {
             super.destroy();
             throw new Error('the teardown failed');
           }

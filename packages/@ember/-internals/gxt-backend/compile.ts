@@ -383,7 +383,6 @@ import { RECOMPUTE_TAG } from '@ember/-internals/glimmer/lib/helper';
 // The class of `templateOnly()` component definitions.
 import { TemplateOnlyComponentDefinition } from '@glimmer/runtime/lib/component/template-only';
 // Import the GXT runtime compiler
-// @ts-ignore - direct path to avoid GXT Babel plugin
 import {
   compileTemplate as gxtCompileTemplate,
   setupGlobalScope,
@@ -408,7 +407,6 @@ import {
 // GXT's reactive tracker (setTracker/getTracker) is needed for {{unbound}}.
 
 // Use direct path to avoid GXT Babel plugin processing (which injects duplicate declarations)
-// @ts-ignore - direct path import
 import {
   createRoot as gxtCreateRoot,
   setParentContext as gxtSetParentContext,
@@ -432,9 +430,7 @@ import {
   $_SVGProvider as _gxtSVGProvider,
   $_HTMLProvider as _gxtHTMLProvider,
   $_MathMLProvider as _gxtMathMLProvider,
-  // @ts-ignore - patched export for {{unbound}} helper support
   setTracker as _gxtSetTracker,
-  // @ts-ignore
   getTracker as _gxtGetTracker,
   resolveRenderable as _gxtResolveRenderable,
   // Per-render-root state: `createRenderRootState` mints an isolated
@@ -497,7 +493,16 @@ let _emberToBoolRef: ((predicate: unknown) => boolean) | null = null;
 // globalThis, so the globals stay published.
 const _GXT_SYMBOL_PARAM_NAMES = Object.keys(GXT_RUNTIME_SYMBOLS);
 
-const cellFor = _cellForFromDirectImport;
+// `assert` as `getDebugFunction('assert')` returns it, typed as a plain call:
+// a test can stub it (expectAssertion) to return, so the code after it runs.
+type LooseAssert = (desc: string, test?: unknown) => void;
+
+// gxt types `cellFor` over `keyof T`; the keys read here are dynamic.
+const cellFor = _cellForFromDirectImport as (
+  obj: object,
+  key: PropertyKey,
+  skipDefine?: boolean
+) => GxtCell<unknown>;
 const gxtEffect = _effectFromDirectImport;
 const gxtSyncDom = _syncDomFromDirectImport;
 const gxtFormula = _formulaFromDirectImport;
@@ -1088,11 +1093,11 @@ installEmberWrappers();
   };
   const _toBool = (v: any): boolean => {
     if (Array.isArray(v) && v.length === 0) return false;
-    return !!v;
+    return Boolean(v);
   };
   const _throwArgCount = (name: string, expected: string, received: number): never => {
     const msg = `\`${name}\` expects ${expected}, received ${received}`;
-    const _assert = getDebugFunction('assert');
+    const _assert: LooseAssert = getDebugFunction('assert');
     if (_assert) _assert(msg, false);
     throw new Error(msg);
   };
@@ -1320,7 +1325,7 @@ function _afterFlushAfterInsertQueue(): void {
         owner.stopFollowing = null;
       }
     }
-    for (const stop of render.stops) stop();
+    for (const stopFollowing of render.stops) stopFollowing();
     render.stops.length = 0;
     for (const node of render.nodes) {
       if (node.parentNode) node.parentNode.removeChild(node);
@@ -2298,6 +2303,7 @@ function _renderCurriedNode(
   const g = globalThis as any;
   if (g.$__log) {
     const logValues = (args: unknown[]): void => {
+      // eslint-disable-next-line no-console -- the {{log}} helper's output
       console.log(
         ...args.map((arg: any) => (typeof arg === 'function' && !arg.prototype ? arg() : arg))
       );
@@ -2734,8 +2740,8 @@ function _gxtCachedReference(factory: () => unknown): () => unknown {
     // read; its arguments are live).
     const sameDefinition = (a: any, b: any): boolean =>
       a === b ||
-      (!!a &&
-        !!b &&
+      (Boolean(a) &&
+        Boolean(b) &&
         a.__isCurriedComponent === true &&
         b.__isCurriedComponent === true &&
         a.__name === b.__name);
@@ -3154,6 +3160,7 @@ function _drainCascadeQueue(): void {
     }
   }
   if (i >= _MAX_DRAIN) {
+    // eslint-disable-next-line no-console -- reports a drain that did not settle
     console.warn('[gxt] Phase 2b drain hit MAX_DRAIN cap', _deferredCascadeQueue.length);
   }
 }
@@ -5010,6 +5017,7 @@ function _gxtTriggerReRenderSyncCore(
     // render-context wrappers, with the same depth limit as the
     // prototype-chain walk.
     if (_innerSiblingRescanDepth >= _INNER_SIBLING_RESCAN_MAX_DEPTH) {
+      // eslint-disable-next-line no-console -- reports a rescan cut off at its depth limit
       console.warn('[gxt] inner sibling-getter rescan depth exceeded', {
         keyName,
         depth: _innerSiblingRescanDepth,
@@ -5972,9 +5980,9 @@ function patchGlobalIf() {
         _ifWatchCb.__getNextBool = (notifiedTarget: object) => {
           if (notifiedTarget && watchKey && notifiedTarget !== watchTarget) {
             const v2 = (notifiedTarget as any)[watchKey];
-            return !!emberToBool(v2);
+            return Boolean(emberToBool(v2));
           }
-          return !!emberToBool(conditionOrCell());
+          return Boolean(emberToBool(conditionOrCell()));
         };
         registerIfWatcher(watchTarget, watchKey, _ifWatchCb);
       }
@@ -6046,7 +6054,7 @@ function _afterRebuildViewTreeFromDom(explicitRegistry?: unknown): void {
           // IfCondition tracks its currently rendered branch via prevComponent.
           // Non-empty prevComponent => branch currently rendered (true state).
           const pc = ic && (ic.prevComponent ?? ic._prevComponent);
-          const pcHasContent = Array.isArray(pc) ? pc.length > 0 : !!pc;
+          const pcHasContent = Array.isArray(pc) ? pc.length > 0 : Boolean(pc);
           if (pcHasContent) {
             anyExpanded = true;
             break;
@@ -6315,7 +6323,7 @@ function _eachItemReadProp(raw: any, prop: string, holder: _EachItemHolder | und
   // would be pure dead weight.
   if (holder && holder.rebindPossible) {
     const revCell = cellFor(holder, '__gxtRev', /* skipDefine */ true);
-    if (revCell) (revCell as any).value;
+    if (revCell) void (revCell as any).value;
   }
   // Subscribe to the property's cell, holding the value just read. The cell is
   // created without reading the property: `cellFor` would read it again for the
@@ -6327,7 +6335,7 @@ function _eachItemReadProp(raw: any, prop: string, holder: _EachItemHolder | und
     cell._relatedKey = prop;
   }
   cell._value = value;
-  cell.value;
+  void cell.value;
   return _wrapNestedEachValue(value);
 }
 const _eachItemProxyHandler: ProxyHandler<any> = {
@@ -6541,7 +6549,7 @@ function _isSelfReactiveWrapper(value: object): boolean {
 function _instanceHasNoOwnDataProps(value: object): boolean {
   const own = Object.getOwnPropertyNames(value);
   for (let i = 0; i < own.length; i++) {
-    const d = Object.getOwnPropertyDescriptor(value, own[i]);
+    const d = Object.getOwnPropertyDescriptor(value, own[i]!);
     // An own ACCESSOR is fine (still self-reactive); an own DATA property means
     // mutable instance state that needs the per-prop cell → must wrap.
     if (d && 'value' in d) return false;
@@ -6593,7 +6601,7 @@ const _eachNestedProxyHandler: ProxyHandler<any> = {
     const cell = cellFor(target, prop, /* skipDefine */ true);
     if (cell) {
       if ((cell as any)._value !== v) (cell as any)._value = v;
-      (cell as any).value;
+      void (cell as any).value;
     }
     return _wrapNestedEachValue(v);
   },
@@ -6983,7 +6991,7 @@ function patchGlobalEachSync() {
     // Ember View instances have an _isView/isView flag; only push actual
     // view-like instances. Plain objects / GXT contexts without a view
     // identity must not be pushed or they would become bogus parents.
-    const isViewInstance = !!(
+    const isViewInstance = Boolean(
       capturedParent &&
       typeof capturedParent === 'object' &&
       (capturedParent.isView === true ||
@@ -6995,7 +7003,7 @@ function patchGlobalEachSync() {
     // renderTemplateWithParentView), so pushing again would merely stack —
     // `getCurrentParentView` still returns the same top. On update, the
     // stack is empty and this push makes the parent resolvable.
-    const canWrap = isViewInstance && !!viewUtils;
+    const canWrap = isViewInstance && Boolean(viewUtils);
     // A row created on update renders in the owner the list was created in
     // (`_gxtRenderInBlockOwner`).
     const capturedOwner = getAmbientOwner();
@@ -7126,7 +7134,7 @@ function patchGlobalEachSync() {
               const candidates: any[] = [];
               for (const poolArr of allPools) {
                 for (const entry of poolArr) {
-                  const inst = entry && entry.instance;
+                  const inst = entry && (entry as any).instance;
                   if (!inst || inst.isDestroyed || inst.isDestroying) continue;
                   if (inst === capturedParent) continue;
                   if (!inst.__gxtEverInserted) continue;
@@ -8412,7 +8420,7 @@ function _comparisonHelper(name: string, compare: (a: any, b: any) => boolean) {
   return {
     [name]: (...args: any[]) => {
       if (args.length !== 2) {
-        const _assert = getDebugFunction('assert');
+        const _assert: LooseAssert = getDebugFunction('assert');
         const msg = `\`${name}\` expects exactly two arguments, received ${args.length}`;
         if (_assert) _assert(msg, false);
         throw new Error(msg);
@@ -8495,7 +8503,6 @@ function _gxtEntriesOf(obj: any): Array<{ k: any; v: any }> {
 // These are simplified implementations for GXT since it doesn't have Glimmer VM's reference system
 // Module-local; other files (ember-gxt-wrappers' helper resolution + entries-of
 // patch) reach it by reference through `compilePipeline.getBuiltinHelpers`.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _emberBuiltinHelpers: Record<string, any> = {
   // readonly: Returns a readonly cell marker object.
   // The component manager detects __isReadonly and provides an immutable attr
@@ -8539,7 +8546,7 @@ const _emberBuiltinHelpers: Record<string, any> = {
     if (!path || typeof path !== 'string') {
       // If value is not a getter function, it's a literal or helper result — not allowed
       if (typeof value !== 'function' || value.prototype) {
-        const _assert = getDebugFunction('assert');
+        const _assert: LooseAssert = getDebugFunction('assert');
         if (_assert) _assert('You can only pass a path to mut', false);
       }
       return typeof value === 'function' ? value() : value;
@@ -8557,7 +8564,7 @@ const _emberBuiltinHelpers: Record<string, any> = {
     if (DEBUG && readArgument !== null) {
       const reference: any = readArgument();
       if (reference !== null && typeof reference === 'object' && reference.__isReadonly === true) {
-        const _assert = getDebugFunction('assert');
+        const _assert: LooseAssert = getDebugFunction('assert');
         if (_assert) _assert('You can only pass a path to mut', false);
       }
     }
@@ -8719,7 +8726,7 @@ const _emberBuiltinHelpers: Record<string, any> = {
   // static own-property values before returning the hash so downstream
   // `{{value.foo}}` reads the frozen value.
   unbound: (...args: any[]) => {
-    const _assert = getDebugFunction('assert');
+    const _assert: LooseAssert = getDebugFunction('assert');
     if (_assert)
       _assert(
         'unbound helper cannot be called with multiple params or hash params',
@@ -9175,14 +9182,10 @@ const blockParamsStack: any[][] = [];
 // The most recent template render context and the hash-getter construction
 // context (set while a hash-constructed getter runs); used by the
 // $_componentHelper mut-parent-context capture.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _gxtLastRenderContext: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _gxtHashGetterCtx: any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _gxtCurrentSlots: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _gxtCurrentFw: any;
 const _gxtGetSlotsFn = () => _gxtCurrentSlots;
 const _gxtGetFwFn = () => _gxtCurrentFw;
@@ -9190,7 +9193,6 @@ const _gxtGetFwFn = () => _gxtCurrentFw;
 // Per-template scope-value store. Each compile overwrites its storeKey entry,
 // and compiled bodies read it through the injected `__gxtGetScope` accessor
 // parameter on every invocation, so they see the latest values.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _gxtScopeStore = new Map<string, any>();
 const _gxtGetScopeFn = (key: string) => _gxtScopeStore.get(key);
 
@@ -9749,7 +9751,9 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
     ctx: any,
     children: any[]
   ): any {
-    const resolvedTag = typeof tag === 'function' ? tag() : tag;
+    // A tag can also be a component value (a curried component, a block
+    // param), which the parameter type leaves out.
+    const resolvedTag: any = typeof tag === 'function' ? tag() : tag;
 
     // Handle non-string tags that resolve to CurriedComponent or other Ember components
     // This happens with <fb.baz> where fb is a block param yielding a component hash
@@ -9797,7 +9801,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
 
           // Extract slots from children
           if (children && children.length > 0) {
-            const defaultSlotFn = (slotCtx: any, ...params: any[]) => {
+            const defaultSlotFn = (_slotCtx: any, ..._params: any[]) => {
               return children.map((child: any) => (typeof child === 'function' ? child() : child));
             };
             _setInternalProp(namedArgs, '$slots', { default: defaultSlotFn });
@@ -9901,7 +9905,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
             }
           }
           if (thisDynChildren.length > 0) {
-            const defaultSlotFn = (slotCtx: any) => {
+            const defaultSlotFn = (_slotCtx: any) => {
               return thisDynChildren.map((child: any) => {
                 if (typeof child === 'function') {
                   return child();
@@ -9969,7 +9973,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
         // Check if attrs (index 1) contains block params marker
         const attrs = tagProps[1];
         if (Array.isArray(attrs)) {
-          for (const [key, value] of attrs) {
+          for (const [key] of attrs) {
             if (key === '@__hasBlockParams__') {
               hasBlockParams = true;
               break;
@@ -10267,7 +10271,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
     let _eoPrev: any;
     if (mightBeComponent) {
       const _eoCtx = ctx?.owner;
-      _eoSwap = !!(
+      _eoSwap = Boolean(
         _eoCtx &&
         typeof _eoCtx === 'object' &&
         typeof _eoCtx.factoryFor === 'function' &&
@@ -10603,12 +10607,13 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
             // Check both fwProps and fwAttrs for __splatLocal__ marker
             for (const arr of [fwProps, fwAttrs]) {
               for (let i = arr.length - 1; i >= 0; i--) {
-                if (arr[i][0] === '__splatLocal__') {
+                const entry = arr[i]!;
+                if (entry[0] === '__splatLocal__') {
                   const names =
-                    typeof arr[i][1] === 'string'
-                      ? arr[i][1]
-                      : typeof arr[i][1] === 'function'
-                        ? arr[i][1]()
+                    typeof entry[1] === 'string'
+                      ? entry[1]
+                      : typeof entry[1] === 'function'
+                        ? entry[1]()
                         : '';
                   for (const n of names.split(',')) if (n) splatLocalNames.add(n);
                   arr.splice(i, 1);
@@ -10745,7 +10750,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
                 if (typeof key === 'string' && isAllDigits(key) && key !== '0') {
                   textChildren.push(entry[1]);
                 } else {
-                  realEvents.push(entry);
+                  realEvents.push(entry as [string, any]);
                 }
               } else {
                 // Non-array entries in position 2 could be children (functions)
@@ -10908,10 +10913,10 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
               // `<:inverse>` is an alias for `<:else>` (Glimmer v2 normalize rule).
               // Register both names so that `{{yield to="else"}}` finds the block
               // even when the invoker wrote `<:inverse>`, and vice versa.
-              if (slotName === 'else' && !slots.inverse) {
-                slots.inverse = fn;
-              } else if (slotName === 'inverse' && !slots.else) {
-                slots.else = fn;
+              if (slotName === 'else' && !slots['inverse']) {
+                slots['inverse'] = fn;
+              } else if (slotName === 'inverse' && !slots['else']) {
+                slots['else'] = fn;
               }
             }
 
@@ -10928,7 +10933,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
                       ? args.__hasBlockParams__()
                       : args.__hasBlockParams__) === 'default'
                   : undefined;
-              slots.default = createSlotFn(defaultChildren, explicitHasBlockParams);
+              slots['default'] = createSlotFn(defaultChildren, explicitHasBlockParams);
             }
           }
 
@@ -10936,7 +10941,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
           // empty angle-bracket invocation <Component></Component>
           // Even if children are empty, we need to create a default slot
           // so that (has-block) returns true
-          if (args.__hasBlock__ && !slots.default) {
+          if (args.__hasBlock__ && !slots['default']) {
             const blockName =
               typeof args.__hasBlock__ === 'function' ? args.__hasBlock__() : args.__hasBlock__;
             // Check if block params were declared
@@ -10947,7 +10952,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
                     : args.__hasBlockParams__) === 'default'
                 : false;
             // Create an empty slot function for the specified block
-            const slotFn = (slotCtx: any, ...params: any[]) => {
+            const slotFn = (_slotCtx: any, ..._params: any[]) => {
               return []; // Empty slot - just return empty array
             };
             // Set the hasBlockParams flag on the slot
@@ -11118,7 +11123,8 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
           // so that GXT's rendering pipeline calls it within the slot scope.
           // Otherwise, execute immediately so GXT receives a DOM node directly.
           const bpStack = blockParamsStack;
-          const hasBP = bpStack && bpStack.length > 0 && bpStack[bpStack.length - 1]?.length > 0;
+          const hasBP =
+            bpStack && bpStack.length > 0 && (bpStack[bpStack.length - 1]?.length ?? 0) > 0;
           if (hasBP) {
             return renderComponent;
           }
@@ -11986,7 +11992,8 @@ if (g.$_dc && !g.$_dc.__splatForwardWrapped) {
 // Template cache for performance
 const templateCache = new Map<string, any>();
 
-let _functionCodeCache: Map<string, Function> | null = null;
+type _GxtTemplateFn = (this: any, ...args: any[]) => any;
+let _functionCodeCache: Map<string, _GxtTemplateFn> | null = null;
 
 /**
  * Map of GXT block-keyword names that must be rewritten to a PascalCase
@@ -12202,7 +12209,9 @@ const _GXT_LEGACY_BINDING_NAMES = new Set([
 ]);
 function _gxtNativeTemplateEligible(
   cr: any,
-  options: { strictMode?: boolean; scope?: unknown; scopeValues?: unknown } | undefined
+  options:
+    | { strictMode?: boolean; scope?: unknown; scopeValues?: Record<string, unknown> }
+    | undefined
 ): boolean {
   if (!cr || typeof cr.templateFn !== 'function') return false;
   if (cr.errors && cr.errors.length > 0) return false;
@@ -12617,6 +12626,9 @@ export function precompileTemplate(templateString: string, options?: GxtPrecompi
     // would re-route the call through the kebab-case Ember registry lookup
     // (`$_c('foo', ...)` → raw `<foo>` element), which is exactly the bug
     // that breaks the Strict-Mode renderComponent cluster.
+    // gxt's compileTemplate neither types nor passes on this option; gxt's loose-mode
+    // visitor dasherizes component names itself, so this hook is not called.
+    // @ts-expect-error -- see above
     customizeComponentName: (name: string) => {
       if (scopeBindings.has(name)) {
         return name;
@@ -12634,7 +12646,7 @@ export function precompileTemplate(templateString: string, options?: GxtPrecompi
   // tags already ran above).
   if (_gxtDialectFindings.textArea) {
     // Use getDebugFunction('assert') so expectAssertion's stub is the one called.
-    const _assert = getDebugFunction('assert');
+    const _assert: LooseAssert = getDebugFunction('assert');
     if (_assert)
       _assert('Could not find component `<TextArea />` (did you mean `<Textarea />`?)', false);
   }
@@ -12688,7 +12700,7 @@ export function precompileTemplate(templateString: string, options?: GxtPrecompi
   // of the code plus the legacy injections ($a alias for @named args,
   // $slots/$fw accessors, helper and scope locals).
   const __gxtUseNativeTemplateFn =
-    !!compilationResult.code && _gxtNativeTemplateEligible(compilationResult, options);
+    Boolean(compilationResult.code) && _gxtNativeTemplateEligible(compilationResult, options);
   if (__gxtUseNativeTemplateFn) {
     (compilationResult as any).__gxtNativePath = true;
   } else if (compilationResult.code) {
@@ -13119,7 +13131,7 @@ export function precompileTemplate(templateString: string, options?: GxtPrecompi
           _gxtGetFwFn,
           _gxtGetScopeFn,
           ..._GXT_SYMBOL_PARAM_NAMES.map((n) => (globalThis as any)[n])
-        );
+        ) as _GxtTemplateFn;
         _functionCodeCache.set(templateFnCode, cachedFn);
       }
       compilationResult.templateFn = cachedFn;
@@ -13198,7 +13210,7 @@ export function precompileTemplate(templateString: string, options?: GxtPrecompi
       const subscribed = _gxtCell(0);
       let rerun: (() => void) | null = null;
       const destroyBinding = _gxtTemplateEffect(() => {
-        subscribed.value;
+        void subscribed.value;
         if (rerun !== null) rerun();
       });
 
@@ -13673,6 +13685,7 @@ export function precompileTemplate(templateString: string, options?: GxtPrecompi
           }
         }
         if (!parentElement) {
+          // eslint-disable-next-line no-console -- reports a render call without a target
           console.warn('[gxt-compile] No parent element provided for render');
           return { nodes: [] };
         }
@@ -13787,7 +13800,7 @@ export function precompileTemplate(templateString: string, options?: GxtPrecompi
             const _owner = getAmbientOwner();
             if (_owner && !_owner.isDestroyed && !_owner.isDestroying) {
               for (const builtinName of BUILTIN_HELPER_NAMES) {
-                const hasOverride = !!_owner.factoryFor?.(`helper:${builtinName}`);
+                const hasOverride = Boolean(_owner.factoryFor?.(`helper:${builtinName}`));
                 if (hasOverride) {
                   emberAssert(
                     `You attempted to overwrite the built-in helper "${builtinName}" which is not allowed. Please rename the helper.`,
@@ -14211,7 +14224,7 @@ _gxtRegisterHostHooks({
   // deferred formulas outside `wrapBranch`'s dynamic scope.
   onConditionBranchSwap: (branchCtx: object, meta: { if?: object; value?: boolean }) => {
     const ifc = meta?.if as any;
-    const isTrue = !!meta?.value;
+    const isTrue = Boolean(meta?.value);
     // The branch about to render is the block of the components it renders
     // (`wrapBranch`).
     if (ifc !== null && typeof ifc === 'object') _gxtIfBranchBlocks.set(ifc, branchCtx);
@@ -14393,6 +14406,7 @@ installCompilePipelinePart({
   // `globalThis.__gxtWithRootContext` so an out-of-package SSR driver that
   // cannot import `@ember/-internals` can reach it — a deliberate external
   // surface.
+  // @ts-expect-error -- not in GxtCompilePipelineCapabilities (published in gxt-bridge.d.ts); no in-repo caller reads it
   withRootContext: _gxtWithRootContext,
   // Get-only accessor (with internal lazy-init) for the canonical
   // `_gxtComponentContexts` WeakMap; module code (and the test-teardown reset
