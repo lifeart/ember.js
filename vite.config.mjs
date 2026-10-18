@@ -454,8 +454,8 @@ function compileErrorTestModule(id, error) {
  * - `virtual:gxt-test-setup`, the first import of the setup script: the gxt
  *   runtime template compiler, which must register before any template module
  *   loads;
- * - `virtual:gxt-tests`, imported by the test script: gxt-backend's own QUnit
- *   tests (`gxt-backend/__tests__/*-test.ts`).
+ * - `virtual:gxt-tests`, imported by the test script: the QUnit tests of
+ *   gxt-backend and @glimmer/component-gxt (`__tests__/*-test.ts`).
  * In classic builds both are empty modules, so the classic test page loads no
  * gxt-backend code.
  */
@@ -467,7 +467,10 @@ function gxtTestSetup(useGxt) {
   const modules = {
     'virtual:gxt-test-setup': `import ${JSON.stringify(compiler)};\n`,
     'virtual:gxt-tests':
-      "import.meta.glob('/packages/@ember/-internals/gxt-backend/__tests__/*-test.ts', { eager: true });\n",
+      'import.meta.glob([' +
+      "'/packages/@ember/-internals/gxt-backend/__tests__/*-test.ts', " +
+      "'/packages/@glimmer/component-gxt/__tests__/*-test.ts'" +
+      '], { eager: true });\n',
   };
   return {
     name: 'gxt-test-setup',
