@@ -123,11 +123,12 @@ import { getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
 // `{ __gxtTemplate, source, moduleName }` instead of a Glimmer block spec,
 // which the classic `templateFactory` cannot read. Compile such markers with
 // the GXT runtime compiler and wrap them with the same cache-counter
-// instrumentation that `compile()` uses.
-function template(spec: unknown): ReturnType<typeof _templateFactory> {
+// instrumentation that `compile()` uses. Classic builds export
+// `templateFactory` itself.
+function gxtTemplate(spec: unknown): ReturnType<typeof _templateFactory> {
   if (spec && typeof spec === 'object') {
     const anySpec = spec as Record<string, unknown>;
-    if (__GXT_MODE__ && anySpec['__gxtTemplate'] === true) {
+    if (anySpec['__gxtTemplate'] === true) {
       const cp = getGxtRenderer()?.compilePipeline;
       const gxtCompile = cp?.compileTemplate;
       const instrument = cp?.instrumentFactory;
@@ -143,6 +144,9 @@ function template(spec: unknown): ReturnType<typeof _templateFactory> {
   }
   return _templateFactory(spec as Parameters<typeof _templateFactory>[0]);
 }
+const template: typeof _templateFactory = __GXT_MODE__
+  ? (gxtTemplate as typeof _templateFactory)
+  : _templateFactory;
 export { template };
 
 export { default as RootTemplate } from './lib/templates/root';
