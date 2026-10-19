@@ -671,6 +671,8 @@ import { defineEmberOutletElement } from './outlet';
 import './glimmer-host';
 // Installs the GXT `template()` of @ember/template-compiler (gxt-bridge).
 import './template-function';
+// Installs the GXT re-render trigger of metal's `notifyPropertyChange` (gxt-bridge).
+import './property-events';
 
 // Typed capabilities bridge for destruction hooks. Populated by manager.ts at
 // its module init time.

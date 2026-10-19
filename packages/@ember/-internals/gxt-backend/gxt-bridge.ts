@@ -283,7 +283,7 @@ export interface GxtViewUtilsCapabilities {
  * Compile/sync-pipeline hooks and shared render state. Seeded by manager.ts and
  * extended through `installCompilePipelinePart` by the module that owns each piece
  * (compile.ts, ember-gxt-wrappers.ts, ember-template-compiler.ts, classic-roots.ts,
- * template-function.ts, metal).
+ * template-function.ts, property-events.ts, metal).
  */
 export interface GxtCompilePipelineCapabilities {
   /**
@@ -753,9 +753,23 @@ export interface GxtCompilePipelineCapabilities {
   /**
    * Recompute the cached computed properties of `obj` that depend on
    * `changedKey` and return their new values; returns `[]` inside a
-   * property-change batch. Contributed by metal's property_events.ts.
+   * property-change batch. Contributed by property-events.ts.
    */
   recomputeDependents?(obj: object, changedKey: string): Array<{ key: string; value: unknown }>;
+
+  /**
+   * The GXT re-render trigger of metal's `notifyPropertyChange`:
+   * `triggerReRender(obj, keyName)` inside `withInTriggerReRender`, with
+   * `value` when the caller passed it (`hasValueArg`). Contributed by
+   * property-events.ts.
+   */
+  triggerPropertyChange?(obj: object, keyName: string, value: unknown, hasValueArg: boolean): void;
+
+  /**
+   * Whether a `beginPropertyChanges` batch is open. Contributed by metal's
+   * property_events.ts.
+   */
+  propertyChangesDeferred?(): boolean;
 
   /** metal's `notifyPropertyChange`. Contributed by metal's property_events.ts. */
   notifyPropertyChange?(obj: object, keyName: string, _meta?: unknown, value?: unknown): void;
