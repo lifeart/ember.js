@@ -669,6 +669,8 @@ import { defineEmberMountElement } from './mount-element';
 import { defineEmberOutletElement } from './outlet';
 // Installs the glimmer host that glimmer's renderer modules call (gxt-bridge).
 import './glimmer-host';
+// Installs the GXT `template()` of @ember/template-compiler (gxt-bridge).
+import './template-function';
 
 // Typed capabilities bridge for destruction hooks. Populated by manager.ts at
 // its module init time.

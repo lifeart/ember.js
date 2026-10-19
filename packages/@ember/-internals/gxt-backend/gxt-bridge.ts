@@ -282,7 +282,8 @@ export interface GxtViewUtilsCapabilities {
 /**
  * Compile/sync-pipeline hooks and shared render state. Seeded by manager.ts and
  * extended through `installCompilePipelinePart` by the module that owns each piece
- * (compile.ts, ember-gxt-wrappers.ts, ember-template-compiler.ts, classic-roots.ts, metal).
+ * (compile.ts, ember-gxt-wrappers.ts, ember-template-compiler.ts, classic-roots.ts,
+ * template-function.ts, metal).
  */
 export interface GxtCompilePipelineCapabilities {
   /**
@@ -361,6 +362,14 @@ export interface GxtCompilePipelineCapabilities {
    * compiler cannot compile throws the compiler's error.
    */
   compileTemplate?(templateString: string, options?: unknown): unknown;
+
+  /**
+   * `template()` of `@ember/template-compiler` in GXT builds: compile the
+   * template with `compileTemplate` and set it as the template of the options'
+   * `component` (by default a new template-only component), which it returns.
+   * Contributed by template-function.ts.
+   */
+  template?(templateString: string, options?: unknown): object;
 
   /**
    * Wrap a template factory so the template-cache counters match the classic

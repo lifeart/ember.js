@@ -609,7 +609,7 @@ export const GXT_NATIVE_FORBIDDEN = [
     'Glimmer VM tag protocol',
   ],
   [
-    /gxt-backend\/(compile|manager|ember-gxt-wrappers|validator|reference|destroyable|gxt-bridge|helper-manager)\.ts$/,
+    /gxt-backend\/(compile|manager|ember-gxt-wrappers|validator|reference|destroyable|gxt-bridge|helper-manager|template-function)\.ts$/,
     'gxt compat bridge',
   ],
   [
