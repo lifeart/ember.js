@@ -6,7 +6,7 @@ import { tracked } from '@ember/-internals/metal/lib/tracked';
 import { consumeTag } from '@glimmer/validator/lib/tracking';
 import { tagFor } from '@glimmer/validator/lib/meta';
 import type Owner from '@ember/owner';
-import { getGxtRenderer, getRouteOutletHooks } from '@ember/-internals/gxt-backend/gxt-bridge';
+import { getRouteOutletHooks } from '@ember/-internals/gxt-backend/gxt-bridge';
 import { getOwner } from '@ember/owner';
 import { getRouteManager } from '@ember/-internals/routing/route-managers/registry';
 import type { RouteManager } from '@ember/-internals/routing/route-managers/api';
@@ -84,53 +84,10 @@ function defaultDidTransition(this: EmberRouter, infos: InternalRouteInfo[]) {
   notifyPropertyChange(this, 'url');
   this.currentState = this.targetState;
 
-  // GXT: LinkTo.href consumes `tagFor(routing, 'currentState')`, where
-  // `routing` is the `-routing` service that aliases `router.currentState`
-  // via `readOnly('router.currentState')`. In GXT mode the alias chain tag
-  // doesn't always propagate dirty to the routing service's tag on
-  // `set(router, 'currentState', ...)`, so LinkTo.href getters don't re-
-  // evaluate after a QP-only transition (triggered by `set(controller,
-  // 'q', 'lol')` → _activeQPChanged → fireQueryParamTransition). We
-  // explicitly notify the routing service so its `currentState` tag
-  // dirties, forcing LinkTo.href getters to re-evaluate with the latest
-  // sticky QP values. This matches the semantics upstream Glimmer VM
-  // already achieves via its chain-tag machinery.
+  // GXT: dirty the `-routing` service's `currentState` and sync the DOM, so
+  // `<LinkTo>` hrefs follow a query-param-only transition (gxt-backend/outlet.ts).
   if (__GXT_MODE__) {
-    try {
-      const owner = getOwner(this);
-      if (owner) {
-        const routing = owner.lookup('service:-routing') as any;
-        if (routing) {
-          // Dirty the routing service's `currentState` tag directly (see
-          // above). Without the bridge, fall back to `notifyPropertyChange`.
-          const dirtyTagFor = getGxtRenderer()?.compilePipeline.classicDirtyTagFor;
-          if (typeof dirtyTagFor === 'function') {
-            dirtyTagFor(routing, 'currentState');
-          } else if (typeof routing.notifyPropertyChange === 'function') {
-            routing.notifyPropertyChange('currentState');
-          }
-          // Trigger a sync so enqueued effects (e.g. LinkTo.applyHref via
-          // registerClassicReactor) flush synchronously before the test's
-          // next assertion runs. Marking it as property-driven makes the sync
-          // re-evaluate the routing-service formulas.
-          const _cpRouter = getGxtRenderer()?.compilePipeline;
-          const syncDomNow = _cpRouter?.syncDomNow;
-          if (typeof syncDomNow === 'function') {
-            _cpRouter?.setPendingSync?.(true);
-            _cpRouter?.setPendingSyncFromPropertyChange?.(true);
-            syncDomNow();
-          }
-        }
-      }
-    } catch (e) {
-      // Best-effort: a throw here must never block the transition, but it
-      // would leave LinkTo href/isActive stale, so surface it in DEBUG (a
-      // console.warn does not trip QUnit's warn/deprecation assertions).
-      if (DEBUG) {
-        // eslint-disable-next-line no-console
-        console.warn('[gxt] post-transition tag-dirty/sync failed', e);
-      }
-    }
+    getRouteOutletHooks()?.didTransition(this);
   }
 
   if (DEBUG) {

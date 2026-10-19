@@ -11,7 +11,7 @@ import {
 } from '@ember/-internals/metal/lib/evented-methods';
 import type Owner from '@ember/owner';
 import { getOwner } from '@ember/-internals/owner';
-import { getGxtRenderer, getRouteOutletHooks } from '@ember/-internals/gxt-backend/gxt-bridge';
+import { getRouteOutletHooks } from '@ember/-internals/gxt-backend/gxt-bridge';
 import type { default as BucketCache } from './lib/cache';
 import computed from '@ember/-internals/metal/lib/computed';
 import { get } from '@ember/-internals/metal/lib/property_get';
@@ -33,7 +33,6 @@ import { assert } from '@ember/debug';
 import EngineInstance from '@ember/engine/instance';
 import { dependentKeyCompat } from '@ember/object/compat';
 import { once, scheduleOnce } from '@ember/runloop';
-import { DEBUG } from '@glimmer/env';
 import { setRouteManager } from '@ember/-internals/routing/route-managers/registry';
 import { ClassicRouteManager } from '@ember/-internals/routing/route-managers/classic/manager';
 import { hasClassicInterop } from '@ember/-internals/routing/route-managers/api';
@@ -950,51 +949,10 @@ class Route<Model = unknown> extends EmberObject.extend(InternalActionHandler) {
     @public
    */
   refresh(): Transition {
-    // GXT fix (Issue #13263): When a route template is rendered, GXT creates
-    // a `renderContext = Object.create(controller)` and binds `{{on "click"
-    // this.action}}` handlers to that renderContext. If the action mutates a
-    // QP via `set(this, 'foo', v)` or `incrementProperty('foo')`, the write
-    // hits the renderContext's *own* property and shadows the controller —
-    // leaving `controller.foo` stale, so the QP observer never fires and the
-    // URL never updates on subsequent refreshes. Before refreshing, walk any
-    // live renderContexts for this route's controller and mirror their own QP
-    // values back to the controller so subsequent QP observers see the new
-    // value (so `_qpChanged` → `_activeQPChanged` → URL update fires).
+    // GXT: copy the query-param values that the route template's render
+    // contexts shadow back onto the controller (gxt-backend/outlet.ts).
     if (__GXT_MODE__) {
-      try {
-        let controller = this.controller;
-        // controller -> live render contexts, populated by the outlet root
-        // template (`templates/root.ts`) at render time.
-        let ctxsMap = getGxtRenderer()?.compilePipeline.getComponentContextsMap?.();
-        if (controller && ctxsMap && ctxsMap.has(controller)) {
-          // SAFETY: Since `_qp` is protected we can't infer the type
-          let queryParams = get(this, '_qp') as Route<Model>['_qp'];
-          let qpNames = queryParams.propertyNames;
-          if (qpNames.length > 0) {
-            // `ctxsMap.has(controller)` is checked above, so `.get` is defined.
-            let contexts: Set<object> = ctxsMap.get(controller)!;
-            contexts.forEach((renderContext: any) => {
-              for (let prop of qpNames) {
-                if (Object.prototype.hasOwnProperty.call(renderContext, prop)) {
-                  let rcValue = renderContext[prop];
-                  let ctrlValue = (controller as any)[prop];
-                  if (rcValue !== ctrlValue) {
-                    set(controller, prop, rcValue);
-                  }
-                }
-              }
-            });
-          }
-        }
-      } catch (e) {
-        // Best-effort: a throw here must not break `refresh()`, but it would
-        // leave the controller's QP values out of sync, so surface it in DEBUG
-        // (a console.warn does not trip QUnit's warn/deprecation assertions).
-        if (DEBUG) {
-          // eslint-disable-next-line no-console
-          console.warn('[gxt] query-param controller sync failed during refresh', e);
-        }
-      }
+      getRouteOutletHooks()?.refreshRoute(this);
     }
     let managed = getRouteManagement(this);
     assert('Expected a classic route manager to refresh', managed !== undefined);
@@ -1036,43 +994,10 @@ class Route<Model = unknown> extends EmberObject.extend(InternalActionHandler) {
 
     let states = queryParams.states;
 
-    // GXT fix: Ensure the controller has a writable instance meta, not just an
-    // inherited prototype meta. Without this, notifyPropertyChange on QP values
-    // skips markObjectAsDirty because isPrototypeMeta(controller) returns true —
-    // causing async QP observers to never detect the dirty tag, so URL/LinkTo
-    // hrefs never update when QPs change.
-    //
-    // Additionally: in some GXT paths the instance meta is created with
-    // meta.proto === controller (instead of controller.constructor.prototype),
-    // which makes `isPrototypeMeta(controller)` return true for the *instance*.
-    // That short-circuits `ComputedProperty.get` to return `undefined`,
-    // breaking every `@computed` getter on controllers. Repair it here.
+    // GXT: pin the controller's meta `proto` to its class prototype
+    // (gxt-backend/outlet.ts).
     if (__GXT_MODE__) {
-      let m = metaFor(controller);
-      const correctProto = Object.getPrototypeOf(controller);
-      if (correctProto && correctProto !== controller) {
-        // Pin meta.proto to the real class prototype. Without this, the GXT
-        // outlet render builds `renderContext = Object.create(controller)` and the
-        // first `peekMeta(renderContext)` walks up to `controller`, sees
-        // `meta.proto !== controller`, and mutates `meta.proto = controller`.
-        // That makes `isPrototypeMeta(controller)` return true,
-        // which short-circuits `ComputedProperty.get` to return `undefined` for
-        // every `@computed` getter on the controller — breaking templates that
-        // read things like `this.allSitesAllArticles`.
-        m.proto = correctProto;
-        // `proto` is a configurable property of the meta (a data property, or
-        // this accessor from an earlier setup), so it can be redefined.
-        Object.defineProperty(m, 'proto', {
-          get() {
-            return correctProto;
-          },
-          set(_v) {
-            /* ignore — see comment above */
-          },
-          configurable: true,
-          enumerable: false,
-        });
-      }
+      getRouteOutletHooks()?.pinControllerMeta(controller);
     }
 
     controller._qpDelegate = states.allowOverrides;

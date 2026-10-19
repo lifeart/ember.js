@@ -1148,6 +1148,24 @@ export interface GxtRouteOutletHooks {
    * invokes: the next level (`{{outlet}}`).
    */
   withOutletArg<T extends object>(args: T): T;
+  /**
+   * `Route#refresh`: copy the query-param values that the route template's
+   * render contexts shadow (an action's `set` on the context) back onto the
+   * controller, so its query-param observers see them.
+   */
+  refreshRoute(route: object): void;
+  /**
+   * `Route#setup`: pin the controller's meta `proto` to its class prototype;
+   * the outlet render's `Object.create(controller)` contexts would otherwise
+   * make it the controller itself.
+   */
+  pinControllerMeta(controller: object): void;
+  /**
+   * The router's `didTransition`: dirty the `-routing` service's
+   * `currentState` and sync the DOM, so `<LinkTo>` hrefs follow a
+   * query-param-only transition.
+   */
+  didTransition(router: object): void;
 }
 
 let _routeOutletHooks: GxtRouteOutletHooks | null = null;

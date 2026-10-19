@@ -25,13 +25,15 @@
 // route.ts and router.ts reach this module through the gxt-bridge route-outlet
 // hooks (`setRouteOutletHooks`), installed when compile.ts loads it.
 import { getOwner, type InternalOwner } from '@ember/-internals/owner';
-import { set } from '@ember/-internals/metal';
+import { get, set } from '@ember/-internals/metal';
+import { meta as metaFor } from '@ember/-internals/meta/lib/meta';
 import { assert } from '@ember/debug';
 import { _instrumentStart } from '@ember/instrumentation';
 import { schedule } from '@ember/runloop';
 import { DEBUG } from '@glimmer/env';
 import { templateOnlyComponent } from '@glimmer/runtime/lib/component/template-only';
 import { invokableFor } from 'router_js';
+import type Route from '@ember/routing/route';
 import {
   componentCapabilities,
   hasInternalComponentManager,
@@ -979,6 +981,147 @@ function setOutlets(router: object, routeInfos: readonly object[]): void {
   }
 }
 
+// The GXT parts of `Route#refresh`, `Route#setup` and the router's
+// `didTransition` (route.ts, router.ts), through the route-outlet hooks.
+
+// `Route#refresh`.
+// GXT fix (Issue #13263): When a route template is rendered, GXT creates
+// a `renderContext = Object.create(controller)` and binds `{{on "click"
+// this.action}}` handlers to that renderContext. If the action mutates a
+// QP via `set(this, 'foo', v)` or `incrementProperty('foo')`, the write
+// hits the renderContext's *own* property and shadows the controller —
+// leaving `controller.foo` stale, so the QP observer never fires and the
+// URL never updates on subsequent refreshes. Before refreshing, walk any
+// live renderContexts for this route's controller and mirror their own QP
+// values back to the controller so subsequent QP observers see the new
+// value (so `_qpChanged` → `_activeQPChanged` → URL update fires).
+function refreshRoute(route: Route): void {
+  try {
+    let controller = route.controller;
+    // controller -> live render contexts, populated by the outlet root
+    // template (root-template.ts) at render time.
+    let ctxsMap = getGxtRenderer()?.compilePipeline.getComponentContextsMap?.();
+    if (controller && ctxsMap && ctxsMap.has(controller)) {
+      // SAFETY: Since `_qp` is protected we can't infer the type
+      let queryParams = get(route, '_qp') as Route['_qp'];
+      let qpNames = queryParams.propertyNames;
+      if (qpNames.length > 0) {
+        // `ctxsMap.has(controller)` is checked above, so `.get` is defined.
+        let contexts: Set<object> = ctxsMap.get(controller)!;
+        contexts.forEach((renderContext: any) => {
+          for (let prop of qpNames) {
+            if (Object.prototype.hasOwnProperty.call(renderContext, prop)) {
+              let rcValue = renderContext[prop];
+              let ctrlValue = (controller as any)[prop];
+              if (rcValue !== ctrlValue) {
+                set(controller, prop, rcValue);
+              }
+            }
+          }
+        });
+      }
+    }
+  } catch (e) {
+    // Best-effort: a throw here must not break `refresh()`, but it would
+    // leave the controller's QP values out of sync, so surface it in DEBUG
+    // (a console.warn does not trip QUnit's warn/deprecation assertions).
+    if (DEBUG) {
+      // eslint-disable-next-line no-console
+      console.warn('[gxt] query-param controller sync failed during refresh', e);
+    }
+  }
+}
+
+// `Route#setup`.
+// GXT fix: Ensure the controller has a writable instance meta, not just an
+// inherited prototype meta. Without this, notifyPropertyChange on QP values
+// skips markObjectAsDirty because isPrototypeMeta(controller) returns true —
+// causing async QP observers to never detect the dirty tag, so URL/LinkTo
+// hrefs never update when QPs change.
+//
+// Additionally: in some GXT paths the instance meta is created with
+// meta.proto === controller (instead of controller.constructor.prototype),
+// which makes `isPrototypeMeta(controller)` return true for the *instance*.
+// That short-circuits `ComputedProperty.get` to return `undefined`,
+// breaking every `@computed` getter on controllers. Repair it here.
+function pinControllerMeta(controller: object): void {
+  let m = metaFor(controller);
+  const correctProto = Object.getPrototypeOf(controller);
+  if (correctProto && correctProto !== controller) {
+    // Pin meta.proto to the real class prototype. Without this, the GXT
+    // outlet render builds `renderContext = Object.create(controller)` and the
+    // first `peekMeta(renderContext)` walks up to `controller`, sees
+    // `meta.proto !== controller`, and mutates `meta.proto = controller`.
+    // That makes `isPrototypeMeta(controller)` return true,
+    // which short-circuits `ComputedProperty.get` to return `undefined` for
+    // every `@computed` getter on the controller — breaking templates that
+    // read things like `this.allSitesAllArticles`.
+    m.proto = correctProto;
+    // `proto` is a configurable property of the meta (a data property, or
+    // this accessor from an earlier setup), so it can be redefined.
+    Object.defineProperty(m, 'proto', {
+      get() {
+        return correctProto;
+      },
+      set(_v) {
+        /* ignore — see comment above */
+      },
+      configurable: true,
+      enumerable: false,
+    });
+  }
+}
+
+// The router's `didTransition`.
+// GXT: LinkTo.href consumes `tagFor(routing, 'currentState')`, where
+// `routing` is the `-routing` service that aliases `router.currentState`
+// via `readOnly('router.currentState')`. In GXT mode the alias chain tag
+// doesn't always propagate dirty to the routing service's tag on
+// `set(router, 'currentState', ...)`, so LinkTo.href getters don't re-
+// evaluate after a QP-only transition (triggered by `set(controller,
+// 'q', 'lol')` → _activeQPChanged → fireQueryParamTransition). We
+// explicitly notify the routing service so its `currentState` tag
+// dirties, forcing LinkTo.href getters to re-evaluate with the latest
+// sticky QP values. This matches the semantics upstream Glimmer VM
+// already achieves via its chain-tag machinery.
+function didTransition(router: object): void {
+  try {
+    const owner = getOwner(router);
+    if (owner) {
+      const routing = owner.lookup('service:-routing') as any;
+      if (routing) {
+        // Dirty the routing service's `currentState` tag directly (see
+        // above). Without the bridge, fall back to `notifyPropertyChange`.
+        const dirtyTagFor = getGxtRenderer()?.compilePipeline.classicDirtyTagFor;
+        if (typeof dirtyTagFor === 'function') {
+          dirtyTagFor(routing, 'currentState');
+        } else if (typeof routing.notifyPropertyChange === 'function') {
+          routing.notifyPropertyChange('currentState');
+        }
+        // Trigger a sync so enqueued effects (e.g. LinkTo.applyHref via
+        // registerClassicReactor) flush synchronously before the test's
+        // next assertion runs. Marking it as property-driven makes the sync
+        // re-evaluate the routing-service formulas.
+        const _cpRouter = getGxtRenderer()?.compilePipeline;
+        const syncDomNow = _cpRouter?.syncDomNow;
+        if (typeof syncDomNow === 'function') {
+          _cpRouter?.setPendingSync?.(true);
+          _cpRouter?.setPendingSyncFromPropertyChange?.(true);
+          syncDomNow();
+        }
+      }
+    }
+  } catch (e) {
+    // Best-effort: a throw here must never block the transition, but it
+    // would leave LinkTo href/isActive stale, so surface it in DEBUG (a
+    // console.warn does not trip QUnit's warn/deprecation assertions).
+    if (DEBUG) {
+      // eslint-disable-next-line no-console
+      console.warn('[gxt] post-transition tag-dirty/sync failed', e);
+    }
+  }
+}
+
 setRouteOutletHooks({
   renderRoute(route: object): void {
     ROUTE_RENDER_STATES.set(route, buildRenderState(route as ClassicRouteLike));
@@ -991,4 +1134,9 @@ setRouteOutletHooks({
     renderWrappedLevel(level as GxtOutletState, target);
   },
   withOutletArg,
+  refreshRoute(route: object): void {
+    refreshRoute(route as Route);
+  },
+  pinControllerMeta,
+  didTransition,
 });
