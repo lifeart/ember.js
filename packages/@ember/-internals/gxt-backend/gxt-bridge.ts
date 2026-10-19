@@ -242,6 +242,12 @@ export interface GxtViewUtilsCapabilities {
   rebuildViewTreeBeforeRead?(registry: unknown): void;
 
   /**
+   * Reset the child views of `view` to none (views/lib/system/utils.ts's
+   * `initChildViews`). Contributed by views/lib/system/utils.ts.
+   */
+  initChildViews?(view: object): void;
+
+  /**
    * Runs after `rebuildViewTreeFromDom`. Contributed by compile.ts: resets the
    * view-registry children of `{{#if}}` wrappers the user collapsed and drains
    * the in-element deferred-render queue. Errors are caught.

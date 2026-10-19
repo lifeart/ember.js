@@ -29,7 +29,6 @@ import {
 } from './utils';
 import { getDebuggerCallback } from '@glimmer/runtime/lib/debugger-callback';
 import {
-  initChildViews as _emberInitChildViews,
   getElementView as _emberGetElementView,
   getViewElement as _emberGetViewElement,
 } from '@ember/-internals/views/lib/system/utils';
@@ -6086,7 +6085,8 @@ function _afterRebuildViewTreeFromDom(explicitRegistry?: unknown): void {
         if (v2 && !v2.isDestroyed && !v2.isDestroying) views.add(v2);
       }
       for (const v of views) {
-        _emberInitChildViews(v);
+        // views/lib/system/utils.ts's `initChildViews`, installed on the bridge.
+        getGxtRenderer()!.viewUtils.initChildViews!(v);
       }
     }
     for (const id of staleIds) _wrapperIfUserFalse.delete(id);

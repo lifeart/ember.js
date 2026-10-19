@@ -1,5 +1,5 @@
 import type { View } from '@ember/-internals/glimmer/lib/renderer';
-import { getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
+import { getGxtRenderer, installViewUtilsPart } from '@ember/-internals/gxt-backend/gxt-bridge';
 import type { InternalOwner } from '@ember/-internals/owner';
 import { getOwner } from '@ember/-internals/owner';
 import { guidFor } from '@ember/-internals/utils/lib/guid';
@@ -136,7 +136,7 @@ export function getChildViews(view: View): View[] {
   return collectChildViews(view, registry);
 }
 
-export function initChildViews(view: View): Set<string> {
+function initChildViews(view: View): Set<string> {
   let childViews: Set<string> = new Set();
   CHILD_VIEW_IDS.set(view, childViews);
   return childViews;
@@ -219,4 +219,10 @@ export function getViewClientRects(view: View): DOMRectList {
 export function getViewBoundingClientRect(view: View): DOMRect {
   let range = getViewRange(view);
   return range.getBoundingClientRect();
+}
+
+if (__GXT_MODE__) {
+  // gxt-backend's view-tree rebuild (manager.ts, compile.ts) resets the child
+  // views of the views it re-links.
+  installViewUtilsPart({ initChildViews });
 }

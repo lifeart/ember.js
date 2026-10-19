@@ -55,7 +55,6 @@ import {
   getViewElement,
   getElementView,
   addChildView as _addChildView,
-  initChildViews as _initChildViews,
   getViewId,
 } from '@ember/-internals/views/lib/system/utils';
 import { getOwner as _glimmerGetOwner } from '@glimmer/owner';
@@ -1209,6 +1208,11 @@ let _gxtSuppressDirtyTagForDuringRebuild = false;
 function classicDirtyTagForGuarded(obj: any, key: any) {
   if (_gxtSuppressDirtyTagForDuringRebuild) return;
   return _validatorDirtyTagFor(obj, key);
+}
+
+// views/lib/system/utils.ts's `initChildViews`, which it installs on the bridge.
+function _initChildViews(view: object): void {
+  getGxtRenderer()!.viewUtils.initChildViews!(view);
 }
 
 // Exposed as the bridge's `viewUtils.rebuildViewTreeFromDom` (DEBUG-only;
