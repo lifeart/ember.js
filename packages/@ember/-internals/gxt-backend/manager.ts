@@ -1362,6 +1362,21 @@ function _gxtBridgeRebuildViewTreeFromDom(explicitRegistry?: unknown): void {
   if (typeof after === 'function') after(explicitRegistry);
 }
 
+// `getRootViews` / `getChildViews` (views/lib/system/utils.ts): the rebuild
+// they run before reading the view registry, through the bridge.
+function _gxtRebuildViewTreeBeforeRead(registry: unknown): void {
+  try {
+    getGxtRenderer()?.viewUtils.rebuildViewTreeFromDom?.(registry);
+  } catch (e) {
+    // A failed rebuild leaves the registry read below with a stale
+    // parent/child graph; surface it in DEBUG and read the registry anyway.
+    if (DEBUG) {
+      // eslint-disable-next-line no-console
+      console.warn('[gxt] viewUtils.rebuildViewTreeFromDom failed; view registry may be stale', e);
+    }
+  }
+}
+
 // Bridge adapter. Wraps the exported `flushAfterInsertQueue` so that AFTER the
 // queue is drained, the `afterFlushAfterInsertQueue` host hook contributed by
 // compile.ts runs to drain the in-element deferred-render queue.
@@ -14137,6 +14152,7 @@ setGxtRenderer({
     // body runs, to reset stale `_wrapperIfUserFalse` view-registry children
     // and drain the in-element deferred-render queue.
     rebuildViewTreeFromDom: _gxtBridgeRebuildViewTreeFromDom,
+    rebuildViewTreeBeforeRead: _gxtRebuildViewTreeBeforeRead,
     reRenderInvocations: _gxtReRenderInvocations,
     // The adapter dispatches an `afterFlushAfterInsertQueue` host hook
     // (contributed by compile.ts via `installViewUtilsPart`) AFTER the main

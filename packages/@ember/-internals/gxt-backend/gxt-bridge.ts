@@ -235,6 +235,13 @@ export interface GxtViewUtilsCapabilities {
   rebuildViewTreeFromDom?(explicitRegistry?: unknown): void;
 
   /**
+   * `rebuildViewTreeFromDom(registry)` for `getRootViews` / `getChildViews`
+   * (views/lib/system/utils.ts), which read `registry` next: what the rebuild
+   * throws is reported in DEBUG and the read goes on. Contributed by manager.ts.
+   */
+  rebuildViewTreeBeforeRead?(registry: unknown): void;
+
+  /**
    * Runs after `rebuildViewTreeFromDom`. Contributed by compile.ts: resets the
    * view-registry children of `{{#if}}` wrappers the user collapsed and drains
    * the in-element deferred-render queue. Errors are caught.
