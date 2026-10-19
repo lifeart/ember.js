@@ -1235,11 +1235,6 @@ export function setControllerOutletRerender(
 export interface GxtClassicRoot {
   result: unknown;
   render: () => void;
-  isGxt: boolean;
-  isOutletView: boolean;
-  gxtRenderIncomplete: boolean;
-  gxtComponentTag: unknown;
-  gxtLastTagValue: number;
 }
 
 /**

@@ -20,7 +20,6 @@ import type {
   TemplateFactory,
   EvaluationContext,
   CurriedComponent,
-  Tag,
 } from '@glimmer/interfaces';
 
 import type { Nullable } from '@ember/-internals/utility-types';
@@ -105,19 +104,6 @@ class ClassicRootState implements RendererRoot {
   public destroyed: boolean;
   public render: () => void;
   readonly env: Environment;
-  public isGxt: boolean = false; // Track if this root uses GXT templates
-  public isOutletView: boolean = false; // Track if this root is an OutletView
-  // True while the most recent render() attempt threw before completing.
-  // Such a root never wired its reactivity (gxtComponentTag stays unset), so
-  // the tag-based dirty selection in _gxtForceEmberRerender cannot see it;
-  // the flag makes the next force pass retry the full root render. Classic
-  // production recovers after an initial-render error this way ("it
-  // rerenders after error in production"); in DEBUG errorLoopTransaction has
-  // already nooped the render fn, so the retry is a warn-noop and dev keeps
-  // its "does not rerender after error" behavior.
-  public gxtRenderIncomplete: boolean = false;
-  public gxtComponentTag: Tag | null = null; // Track component's dirty tag for GXT reactivity
-  public gxtLastTagValue: number = 0; // Last known tag value for comparison
 
   constructor(
     public root: Component,

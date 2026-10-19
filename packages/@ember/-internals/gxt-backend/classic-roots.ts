@@ -51,6 +51,48 @@ let _gxtForceRerenderInProgress = false;
 // consumed (and cleared) by `_gxtForceEmberRerender` in the same sync.
 let _gxtDirtyRootsAtSync: any[] | undefined;
 
+// The GXT render state of a classic root (a `ClassicRootState` of
+// glimmer/lib/renderer.ts), which `renderClassicRoot` writes and the force
+// re-render reads. A root that has no entry has not started a GXT render; it
+// reads as one whose fields have their initial values.
+interface GxtClassicRootFields {
+  // Whether the root renders a GXT template.
+  isGxt: boolean;
+  // Whether the root is an OutletView.
+  isOutletView: boolean;
+  // True while the most recent render() attempt threw before completing.
+  // Such a root never wired its reactivity (gxtComponentTag stays unset), so
+  // the tag-based dirty selection in _gxtForceEmberRerender cannot see it;
+  // the flag makes the next force pass retry the full root render. Classic
+  // production recovers after an initial-render error this way ("it
+  // rerenders after error in production"); in DEBUG errorLoopTransaction has
+  // already nooped the render fn, so the retry is a warn-noop and dev keeps
+  // its "does not rerender after error" behavior.
+  gxtRenderIncomplete: boolean;
+  // The root component's dirty tag, for GXT reactivity.
+  gxtComponentTag: Tag | null;
+  // The last known value of `gxtComponentTag`, for comparison.
+  gxtLastTagValue: number;
+}
+
+const GXT_CLASSIC_ROOT_FIELDS = new WeakMap<object, GxtClassicRootFields>();
+
+// The fields of a root, created with their initial values.
+function classicRootFields(root: object): GxtClassicRootFields {
+  let fields = GXT_CLASSIC_ROOT_FIELDS.get(root);
+  if (fields === undefined) {
+    fields = {
+      isGxt: false,
+      isOutletView: false,
+      gxtRenderIncomplete: false,
+      gxtComponentTag: null,
+      gxtLastTagValue: 0,
+    };
+    GXT_CLASSIC_ROOT_FIELDS.set(root, fields);
+  }
+  return fields;
+}
+
 // Force re-render all GXT roots whose own tag moved in the current sync
 // cycle. gxt-backend calls this (as `compilePipeline.forceEmberRerender`) from
 // its DOM sync when GXT's cell tracking misses changes made through Ember's
@@ -75,7 +117,7 @@ function _gxtForceEmberRerender(): void {
     // Roots whose previous render() threw mid-way (gxtRenderIncomplete) —
     // they never wired gxtComponentTag, so the tag comparison below cannot
     // select them. They are retried unconditionally; see the field doc on
-    // ClassicRootState.
+    // GxtClassicRootFields.
     const incompleteRoots: any[] = [];
     for (const renderer of renderers) {
       const state = (renderer as any).state as RendererState;
@@ -84,15 +126,17 @@ function _gxtForceEmberRerender(): void {
       if (!debugRoots) continue;
       for (const root of debugRoots) {
         const classicRoot = root as any;
-        if (classicRoot.isGxt && (classicRoot.gxtComponentTag || classicRoot.isOutletView)) {
+        // A root that has not started a GXT render is neither a GXT root nor
+        // incomplete.
+        const fields = GXT_CLASSIC_ROOT_FIELDS.get(classicRoot);
+        if (fields === undefined) continue;
+        if (fields.isGxt && (fields.gxtComponentTag || fields.isOutletView)) {
           allGxtRoots.push(classicRoot);
-          const currentTagValue = classicRoot.gxtComponentTag
-            ? valueForTag(classicRoot.gxtComponentTag)
-            : 0;
-          if (currentTagValue !== classicRoot.gxtLastTagValue) {
+          const currentTagValue = fields.gxtComponentTag ? valueForTag(fields.gxtComponentTag) : 0;
+          if (currentTagValue !== fields.gxtLastTagValue) {
             dirtyRoots.push(classicRoot);
           }
-        } else if (classicRoot.gxtRenderIncomplete === true && !classicRoot.destroyed) {
+        } else if (fields.gxtRenderIncomplete === true && !classicRoot.destroyed) {
           incompleteRoots.push(classicRoot);
         }
       }
@@ -158,7 +202,7 @@ function _gxtForceEmberRerender(): void {
       if (classicRoot.__gxtDeferredError) {
         const err = classicRoot.__gxtDeferredError;
         classicRoot.__gxtDeferredError = null;
-        if (classicRoot.gxtRenderIncomplete === true) {
+        if (GXT_CLASSIC_ROOT_FIELDS.get(classicRoot)?.gxtRenderIncomplete === true) {
           // A recovery retry that threw again: queue the error for the test
           // harness instead of rethrowing — a throw here would abort the
           // force pass mid-loop and wedge subsequent flushes. The flag stays
@@ -219,12 +263,13 @@ function _gxtUpdateRootTagValues(): void {
     if (!debugRoots) continue;
     for (const root of debugRoots) {
       const classicRoot = root as any;
-      if (classicRoot.isGxt && classicRoot.gxtComponentTag) {
-        const currentTagValue = valueForTag(classicRoot.gxtComponentTag);
-        if (currentTagValue !== classicRoot.gxtLastTagValue) {
+      const fields = GXT_CLASSIC_ROOT_FIELDS.get(classicRoot);
+      if (fields !== undefined && fields.isGxt && fields.gxtComponentTag) {
+        const currentTagValue = valueForTag(fields.gxtComponentTag);
+        if (currentTagValue !== fields.gxtLastTagValue) {
           dirtyRoots.push(classicRoot);
         }
-        classicRoot.gxtLastTagValue = currentTagValue;
+        fields.gxtLastTagValue = currentTagValue;
       }
     }
   }
@@ -310,15 +355,10 @@ function _ensureTriggerReRenderPatched() {
 let _gxtRenderDepth = 0;
 
 // The fields of glimmer's `ClassicRootState` (renderer.ts) that its GXT render
-// reads and writes. `gxtRenderIncomplete` is documented on the field.
+// reads and writes. Its GXT render state is in `GXT_CLASSIC_ROOT_FIELDS`.
 interface GxtClassicRootState {
   result: GlimmerRenderResult | undefined;
   render: () => void;
-  isGxt: boolean;
-  isOutletView: boolean;
-  gxtRenderIncomplete: boolean;
-  gxtComponentTag: Tag | null;
-  gxtLastTagValue: number;
 }
 
 // What a `ClassicRootState` renders: its root (a classic component or an
@@ -348,15 +388,16 @@ export function renderClassicRoot(
     return;
   }
   _gxtRenderDepth = depth + 1;
+  const fields = classicRootFields(this);
   try {
-    this.gxtRenderIncomplete = false;
+    fields.gxtRenderIncomplete = false;
     // Set the ambient owner for the GXT manager system to access (classic
     // Glimmer threads the owner through dynamicScope instead).
     setAmbientOwner(owner);
 
     if (isGxtTemplate(template)) {
       // Mark this root as using GXT templates (for forced re-render)
-      this.isGxt = true;
+      fields.isGxt = true;
 
       // The render-error queue is global. The errors queued from here on
       // are this root's render's (see the flush after the render).
@@ -397,7 +438,7 @@ export function renderClassicRoot(
 
         if (root && 'state' in root && 'ref' in root) {
           // This is an OutletView - transform to expected format
-          this.isOutletView = true;
+          fields.isOutletView = true;
           const outletView = root as any;
           renderContext = {
             rootState: {
@@ -669,8 +710,8 @@ export function renderClassicRoot(
       if (gxtRoot && 'layoutName' in gxtRoot) {
         const component = gxtRoot as any;
         const componentTag = tagForObject(component);
-        this.gxtComponentTag = componentTag;
-        this.gxtLastTagValue = valueForTag(componentTag);
+        fields.gxtComponentTag = componentTag;
+        fields.gxtLastTagValue = valueForTag(componentTag);
       }
 
       // GXT's fine-grained reactivity drives all re-renders, so `render`
@@ -691,8 +732,8 @@ export function renderClassicRoot(
       throw new Error('[gxt] non-GXT template encountered in GXT mode; no VM fallback');
     }
   } catch (e) {
-    // See gxtRenderIncomplete doc on the field declaration.
-    this.gxtRenderIncomplete = true;
+    // See the gxtRenderIncomplete doc on GxtClassicRootFields.
+    fields.gxtRenderIncomplete = true;
     throw e;
   } finally {
     // Restore the pre-entry depth (not 0) so nested renders unwind
