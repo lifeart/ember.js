@@ -1228,6 +1228,12 @@ export function setControllerOutletRerender(
   _controllerOutletRerender = fn;
 }
 
+/** What `GxtGlimmerHost.renderRoots` uses of a root (base-renderer.ts's `RendererRoot`). */
+export interface GxtRendererRoot {
+  readonly destroyed: boolean;
+  render(): void;
+}
+
 /**
  * The fields of glimmer's `ClassicRootState` (renderer.ts) that its GXT render
  * (`GxtGlimmerHost.renderClassicRoot`) reads and writes.
@@ -1274,6 +1280,14 @@ export interface GxtGlimmerHost {
    * (gxt-backend render-component.ts).
    */
   debugRenderTree(state: { readonly roots: readonly object[] }): DebugRenderTree;
+
+  /**
+   * The render passes of a renderer's roots (`RendererState#renderRoots`):
+   * without a VM transaction and without recording a revision. Destroyed roots
+   * go to `removedRoots`, which the caller then removes (gxt-backend
+   * render-component.ts).
+   */
+  renderRoots(roots: GxtRendererRoot[], removedRoots: GxtRendererRoot[]): void;
 
   /**
    * The render of a classic root, called as its `render` with the root state

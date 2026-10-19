@@ -323,7 +323,7 @@ export class RendererState {
        * If it stays invalid, `loopEnd` starts one more run loop,
        * and that run loop throws the same error again.
        */
-      if (!completedWithoutError && !__GXT_MODE__) {
+      if (!__GXT_MODE__ && !completedWithoutError) {
         this.#lastRevision = valueForTag(CURRENT_TAG);
       }
       this.#inRenderTransaction = false;
@@ -343,26 +343,27 @@ export class RendererState {
    * A rerender of a root with no changes does no DOM work.
    */
   renderRoots(): void {
+    // GXT roots render without a VM transaction and record no revision (nor
+    // does `#renderRootsTransaction` after an error): gxt-backend's
+    // render-component.ts runs their passes.
+    if (__GXT_MODE__) {
+      const host = getGxtGlimmerHost();
+      assert('[gxt] the glimmer host is not installed (gxt-backend/glimmer-host.ts)', host);
+      host.renderRoots(this.#roots, this.#removedRoots);
+      while (this.#removedRoots.length) {
+        this.#removeRoot(this.#removedRoots.pop()!);
+      }
+      return;
+    }
+
     let roots = this.#roots;
     let removedRoots = this.#removedRoots;
     let initialRootsLength: number;
-    let _renderIterations = 0;
 
     do {
-      if (__GXT_MODE__) {
-        // GXT safety limit against infinite render loops.
-        if (++_renderIterations > 20) {
-          break;
-        }
-        // GXT test-harness loop guard (DEBUG only, so it tree-shakes out of
-        // the production dist).
-        if (DEBUG && typeof (globalThis as any).__gxtOpCheck === 'function') {
-          (globalThis as any).__gxtOpCheck();
-        }
-      }
       initialRootsLength = roots.length;
 
-      const renderRootsPass = () => {
+      inTransaction(this.context.env, () => {
         /**
          * `roots.length` is read on each iteration, because a render can
          *
@@ -381,35 +382,10 @@ export class RendererState {
           if (i >= initialRootsLength) continue;
 
           root.render();
-
-          // In GXT mode, lifecycle errors during re-render (destroy, didInsertElement)
-          // are deferred to avoid disabling errorLoopTransaction. Re-throw them here
-          // so they propagate to assert.throws() in tests.
-          if (__GXT_MODE__ && (root as any).__gxtDeferredError) {
-            const err = (root as any).__gxtDeferredError;
-            (root as any).__gxtDeferredError = null;
-            throw err;
-          }
         }
 
-        // GXT: `isValid` does not compare revisions (gxt renders the updates),
-        // and reading `CURRENT_TAG` would subscribe the formula a nested
-        // `renderComponent` call runs in (a helper that renders a component
-        // and adds its root) to every tag: the formula would run again on any
-        // change, and render the component again.
-        if (!__GXT_MODE__) {
-          this.#lastRevision = valueForTag(CURRENT_TAG);
-        }
-      };
-
-      if (__GXT_MODE__) {
-        // GXT roots never enqueue VM-transaction work (no opcodes run), and
-        // the GXT renderer has no VM environment to open a transaction on
-        // (see the BaseRenderer constructor). Run the pass directly.
-        renderRootsPass();
-      } else {
-        inTransaction(this.context.env, renderRootsPass);
-      }
+        this.#lastRevision = valueForTag(CURRENT_TAG);
+      });
     } while (roots.length > initialRootsLength);
 
     while (removedRoots.length) {
@@ -509,19 +485,6 @@ export class RendererState {
  * ----------------------------------------------------------------------------
  */
 
-// Default element builder for the classic VM render loop. Under __GXT_MODE__
-// the Glimmer VM element-builder is never invoked (renderMain /
-// glimmerRenderComponent are gated off and the GXT render path never touches a
-// VM builder), so resolving the literal `clientBuilder` here would needlessly
-// retain the VM element-builder module. Gate it behind `!__GXT_MODE__` so the
-// `clientBuilder` reference is statically dead in the GXT dist; the GXT branch
-// is a thrower (fail loud, no VM fallback) that is never reached at runtime.
-export const defaultClientBuilder: IBuilder = __GXT_MODE__
-  ? (((): never => {
-      throw new Error('[gxt] Glimmer VM element builder requested in GXT mode; no VM fallback.');
-    }) as unknown as IBuilder)
-  : clientBuilder;
-
 export class BaseRenderer {
   /**
    * Creates a renderer that has no router.
@@ -539,7 +502,7 @@ export class BaseRenderer {
       { hasDOM: hasDOM, ...options },
       document as SimpleDocument,
       new ResolverImpl(),
-      defaultClientBuilder
+      clientBuilder
     );
   }
 

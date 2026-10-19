@@ -11,6 +11,8 @@ import type {
 } from '@glimmer/interfaces';
 import type { SimpleElement } from '@simple-dom/interface';
 import { _getCurrentRunLoop } from '@ember/runloop';
+import { assert } from '@ember/debug';
+import { DEBUG } from '@glimmer/env';
 import { destroy, registerDestructor } from '@glimmer/destroyable';
 import type {
   BaseRenderer,
@@ -19,6 +21,64 @@ import type {
   RenderResult,
 } from '@ember/-internals/glimmer/lib/base-renderer';
 import { getGxtRenderer, getAmbientOwner, setAmbientOwner } from './gxt-bridge';
+
+// The render passes of a renderer's roots (`RendererState#renderRoots` in
+// base-renderer.ts) in GXT builds: each pass renders the roots there were when
+// it started, and a pass runs again while a render adds roots. GXT roots never
+// enqueue VM-transaction work (no opcodes run), and the GXT renderer has no VM
+// environment to open a transaction on (see the BaseRenderer constructor), so
+// the passes run directly. No revision is recorded: `isValid` does not compare
+// revisions (gxt renders the updates), and reading `CURRENT_TAG` would
+// subscribe the formula a nested `renderComponent` call runs in (a helper that
+// renders a component and adds its root) to every tag: the formula would run
+// again on any change, and render the component again. The caller removes the
+// roots this adds to `removedRoots`.
+export function gxtRenderRoots(roots: RendererRoot[], removedRoots: RendererRoot[]): void {
+  let initialRootsLength: number;
+  let _renderIterations = 0;
+
+  do {
+    // GXT safety limit against infinite render loops.
+    if (++_renderIterations > 20) {
+      break;
+    }
+    // GXT test-harness loop guard (DEBUG only, so it tree-shakes out of
+    // the production dist).
+    if (DEBUG && typeof (globalThis as any).__gxtOpCheck === 'function') {
+      (globalThis as any).__gxtOpCheck();
+    }
+    initialRootsLength = roots.length;
+
+    /**
+     * `roots.length` is read on each iteration, because a render can
+     *
+     * - add roots, which this pass skips
+     * - remove roots, which makes the array shorter
+     */
+    for (let i = 0; i < roots.length; i++) {
+      let root = roots[i];
+      assert('has root', root);
+
+      if (root.destroyed) {
+        removedRoots.push(root);
+        continue;
+      }
+
+      if (i >= initialRootsLength) continue;
+
+      root.render();
+
+      // In GXT mode, lifecycle errors during re-render (destroy, didInsertElement)
+      // are deferred to avoid disabling errorLoopTransaction. Re-throw them here
+      // so they propagate to assert.throws() in tests.
+      if ((root as any).__gxtDeferredError) {
+        const err = (root as any).__gxtDeferredError;
+        (root as any).__gxtDeferredError = null;
+        throw err;
+      }
+    }
+  } while (roots.length > initialRootsLength);
+}
 
 // What `renderComponent` renders into (base-renderer.ts).
 type IntoTarget = Cursor | Element | SimpleElement;

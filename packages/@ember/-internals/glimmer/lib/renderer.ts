@@ -32,6 +32,7 @@ import type { Reference } from '@glimmer/reference/lib/reference';
 // eslint-disable-next-line ember-local/no-barrel-imports
 import { createConstRef, UNDEFINED_REFERENCE, valueForRef } from '@glimmer/reference';
 import type { CurriedValue } from '@glimmer/runtime/lib/curried-value';
+import { clientBuilder } from '@glimmer/runtime/lib/vm/element-builder';
 import { curry } from '@glimmer/runtime/lib/curried-value';
 import { inTransaction } from '@glimmer/runtime/lib/environment';
 import { renderMain } from '@glimmer/runtime/lib/render';
@@ -44,7 +45,7 @@ import { RootComponentDefinition } from './component-managers/root';
 import RouterResolver from './router-resolver';
 import type { OutletState } from '../../routing/route-managers/outlet-state';
 import type { IBuilder, RendererRoot } from './base-renderer';
-import { BaseRenderer, defaultClientBuilder, errorLoopTransaction } from './base-renderer';
+import { BaseRenderer, errorLoopTransaction } from './base-renderer';
 
 export {
   type IBuilder,
@@ -238,7 +239,7 @@ export class Renderer extends BaseRenderer {
     env: { isInteractive: boolean; hasDOM: boolean },
     rootTemplate: TemplateFactory,
     viewRegistry: ViewRegistry,
-    builder = defaultClientBuilder,
+    builder = clientBuilder,
     resolver = new RouterResolver()
   ) {
     super(owner, env, document, resolver, builder);
