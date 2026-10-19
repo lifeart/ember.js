@@ -503,14 +503,17 @@ function descriptorForField(
     !desc || (!desc.value && !desc.get && !desc.set)
   );
 
-  let initializer = desc ? desc.initializer : undefined;
-  if (__GXT_MODE__ && initializer == null) {
+  let initializer: (() => unknown) | undefined;
+  if (__GXT_MODE__) {
     // GXT: always pass a function initializer to trackedData so GXT's cellFor
     // creates a cell with a safe getter (instead of reading back through the
     // property descriptor, which causes infinite recursion).
-    initializer = () => undefined;
+    initializer = (desc ? desc.initializer : undefined) ?? (() => undefined);
   }
-  let { getter, setter } = trackedData<any, any>(key, initializer);
+  let { getter, setter } = trackedData<any, any>(
+    key,
+    __GXT_MODE__ ? initializer : desc ? desc.initializer : undefined
+  );
   let equals = options?.equals;
 
   function get(this: object): unknown {
