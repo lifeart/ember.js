@@ -24,13 +24,7 @@ import type {
 
 import type { Nullable } from '@ember/-internals/utility-types';
 import type { Reference } from '@glimmer/reference/lib/reference';
-// The @glimmer/reference BARREL specifier below is load-bearing for the GXT
-// dual backend: the rollup GXT alias map (scripts/gxt-alias-map.mjs) redirects
-// the exact barrel key to the gxt-backend shim, while deep lib/* paths would
-// resolve to the real vendored VM source and fork the reactive runtime in GXT
-// builds. Do not convert it to a deep import.
-// eslint-disable-next-line ember-local/no-barrel-imports
-import { createConstRef, UNDEFINED_REFERENCE, valueForRef } from '@glimmer/reference';
+import { createConstRef, UNDEFINED_REFERENCE, valueForRef } from '@glimmer/reference/lib/reference';
 import type { CurriedValue } from '@glimmer/runtime/lib/curried-value';
 import { clientBuilder } from '@glimmer/runtime/lib/vm/element-builder';
 import { curry } from '@glimmer/runtime/lib/curried-value';

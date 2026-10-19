@@ -30,13 +30,7 @@ import { RuntimeOpImpl } from '@glimmer/program/lib/opcode';
 import { clientBuilder } from '@glimmer/runtime/lib/vm/element-builder';
 import { inTransaction, runtimeOptions } from '@glimmer/runtime/lib/environment';
 import { renderComponent as glimmerRenderComponent } from '@glimmer/runtime/lib/render';
-// The @glimmer/validator BARREL specifier below is load-bearing for the GXT
-// dual backend: the rollup GXT alias map (scripts/gxt-alias-map.mjs) redirects
-// the exact barrel key to the gxt-backend shim, while deep lib/* paths would
-// resolve to the real vendored VM source and fork the reactive runtime in GXT
-// builds. Do not convert it to a deep import.
-// eslint-disable-next-line ember-local/no-barrel-imports
-import { CURRENT_TAG, validateTag, valueForTag } from '@glimmer/validator';
+import { CURRENT_TAG, validateTag, valueForTag } from '@glimmer/validator/lib/validators';
 import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
 import { hasDOM } from '../../browser-environment';
 import { EmberEnvironmentDelegate } from './environment';

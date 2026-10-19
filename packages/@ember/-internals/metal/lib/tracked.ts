@@ -2,24 +2,12 @@ import { meta as metaFor } from '@ember/-internals/meta/lib/meta';
 import { isEmberArray } from '@ember/array/-internals';
 import { assert } from '@ember/debug';
 import { DEBUG } from '@glimmer/env';
+import { consumeTag, untrack } from '@glimmer/validator/lib/tracking';
+import * as validatorTracking from '@glimmer/validator/lib/tracking';
+import { dirtyTagFor, tagFor } from '@glimmer/validator/lib/meta';
+import { trackedData } from '@glimmer/validator/lib/tracked-data';
+import { trackedValue, type TrackedValue } from '@glimmer/validator/lib/tracked-value';
 import { getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
-// In GXT builds `@glimmer/validator` is aliased to gxt-backend's validator
-// shim, which exposes the same named exports. The barrel specifier is
-// load-bearing: the alias map (scripts/gxt-alias-map.mjs) redirects the exact
-// '@glimmer/validator' key, so deep lib/* paths would resolve to the real VM
-// source in GXT builds.
-// eslint-disable-next-line ember-local/no-barrel-imports
-import * as validator from '@glimmer/validator';
-// eslint-disable-next-line ember-local/no-barrel-imports
-import {
-  consumeTag,
-  dirtyTagFor,
-  tagFor,
-  trackedData,
-  trackedValue,
-  type TrackedValue,
-  untrack,
-} from '@glimmer/validator';
 import type { ElementDescriptor } from '..';
 import { CHAIN_PASS_THROUGH } from './chain-tags';
 import type { ExtendedMethodDecorator, DecoratorPropertyDescriptor } from './decorator';
@@ -35,15 +23,16 @@ import {
 } from './decorator-util';
 
 // GXT-only backtracking bookkeeping on the single tracked cell. These live on
-// the gxt-backend validator shim (classic `@glimmer/validator` does not export
-// them, so they are `undefined` there); only ever invoked under `__GXT_MODE__`.
-// Accessed via the namespace import to avoid a classic-build link error on a
-// missing named export.
-const _gxtRecordTrackedRead = (validator as { recordTrackedCellRead?: unknown })
+// the gxt-backend validator shim, which GXT builds resolve
+// `@glimmer/validator/lib/tracking` to (classic `@glimmer/validator` does not
+// export them, so they are `undefined` there); only ever invoked under
+// `__GXT_MODE__`. Accessed via the namespace import to avoid a classic-build
+// link error on a missing named export.
+const _gxtRecordTrackedRead = (validatorTracking as { recordTrackedCellRead?: unknown })
   .recordTrackedCellRead as
   | ((cell: unknown, key: string | symbol, obj: object) => void)
   | undefined;
-const _gxtAssertTrackedBacktrack = (validator as { assertTrackedCellBacktrack?: unknown })
+const _gxtAssertTrackedBacktrack = (validatorTracking as { assertTrackedCellBacktrack?: unknown })
   .assertTrackedCellBacktrack as
   | ((cell: unknown, key: string | symbol, obj: object) => void)
   | undefined;

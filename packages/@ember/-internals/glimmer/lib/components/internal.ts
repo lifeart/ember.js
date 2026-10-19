@@ -13,38 +13,25 @@ import type {
   VMArguments,
   WithCreateInstance,
 } from '@glimmer/interfaces';
-// The @glimmer/manager|reference|validator BARREL specifiers are load-bearing
-// for the GXT dual backend: the rollup GXT alias map (scripts/gxt-alias-map.mjs)
-// redirects the exact barrel key to the gxt-backend shim, while deep lib/*
-// paths would resolve to the real vendored VM source and fork the runtime in
-// GXT builds. Do not convert the runtime imports below to deep imports.
-// eslint-disable-next-line ember-local/no-barrel-imports
-import { setComponentTemplate, setInternalComponentManager } from '@glimmer/manager';
+import { setComponentTemplate } from '@glimmer/manager/lib/public/template';
+import { setInternalComponentManager } from '@glimmer/manager/lib/internal/api';
 import type { Reference } from '@glimmer/reference/lib/reference';
-// GXT dual-backend note: in classic mode `@glimmer/reference` resolves to the
-// vendored package; in EMBER_RENDER_BACKEND=gxt mode rollup aliases it to
-// packages/@ember/-internals/gxt-backend/reference.ts. A namespace import
-// yields a `reference` object with `createConstRef` in both modes.
-// eslint-disable-next-line ember-local/no-barrel-imports
-import * as reference from '@glimmer/reference';
-// eslint-disable-next-line ember-local/no-barrel-imports
-import { untrack } from '@glimmer/validator';
+import { createConstRef, isConstRef, valueForRef } from '@glimmer/reference/lib/reference';
+import { untrack } from '@glimmer/validator/lib/tracking';
 
-const { createConstRef } = reference;
-// In GXT mode arg refs are cell-like (`.value` getter does the tracked read)
+// In GXT builds arg refs are cell-like (`.value` getter does the tracked read)
 // and the caller ref is not always branded const, so the permissive forms are
-// required. In classic mode they MUST be the real VM implementations: classic
-// ReferenceImpl has no `.value` property, so `ref.value` made every named-arg
-// read on InternalComponent (Input, Textarea, LinkTo) return undefined —
-// Input lost its @type/@value, LinkTo never resolved its route (stuck
-// "loading", href="#"). The bare __GXT_MODE__ flag is inlined per dist, so
-// each build carries only its own branch.
-const isConstRef: (ref: Reference) => boolean = __GXT_MODE__
-  ? (_ref: Reference) => true
-  : reference.isConstRef;
-const valueForRef: (ref: any) => unknown = __GXT_MODE__
-  ? (ref: any) => ref.value
-  : (reference.valueForRef as (ref: any) => unknown);
+// required: the GXT build reads `.value` and skips the const check. In classic
+// builds they MUST be the real VM implementations: classic ReferenceImpl has
+// no `.value` property, so `ref.value` made every named-arg read on
+// InternalComponent (Input, Textarea, LinkTo) return undefined — Input lost
+// its @type/@value, LinkTo never resolved its route (stuck "loading",
+// href="#"). The bare __GXT_MODE__ flag is inlined per dist, so each build
+// carries only its own branch.
+function gxtValueForRef(ref: any): unknown {
+  return ref.value;
+}
+
 function NOOP(): void {}
 
 export type EventListener = (event: Event) => void;
@@ -95,11 +82,13 @@ export default class InternalComponent {
 
   protected named(name: string): unknown {
     let ref = this.args.named[name];
+    if (__GXT_MODE__) return ref ? gxtValueForRef(ref) : undefined;
     return ref ? valueForRef(ref) : undefined;
   }
 
   protected positional(index: number): unknown {
     let ref = this.args.positional[index];
+    if (__GXT_MODE__) return ref ? gxtValueForRef(ref) : undefined;
     return ref ? valueForRef(ref) : undefined;
   }
 
@@ -215,11 +204,15 @@ class InternalManager
     _dynamicScope: DynamicScope,
     caller: Reference
   ): InternalComponent {
-    assert('caller must be const', isConstRef(caller));
+    assert('caller must be const', __GXT_MODE__ || isConstRef(caller));
 
     let ComponentClass = deopaquify(definition);
 
-    let instance = new ComponentClass(owner, args.capture(), valueForRef(caller));
+    let instance = new ComponentClass(
+      owner,
+      args.capture(),
+      __GXT_MODE__ ? gxtValueForRef(caller) : valueForRef(caller)
+    );
 
     untrack(instance['validateArguments'].bind(instance));
 
