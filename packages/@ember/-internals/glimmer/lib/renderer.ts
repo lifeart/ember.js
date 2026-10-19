@@ -3,10 +3,6 @@ import type { InternalOwner } from '@ember/-internals/owner';
 import { getOwner } from '@ember/-internals/owner';
 import { getViewElement, getViewId } from '@ember/-internals/views/lib/system/utils';
 import { getGxtGlimmerHost, getGxtRenderer } from '@ember/-internals/gxt-backend/gxt-bridge';
-// Side-effect-only imports, where the GXT-only code that moved to
-// gxt-backend/classic-roots.ts imported from these modules, so the classic dist
-// keeps its module graph (also the two after the @glimmer/reference import).
-import '@ember/-internals/utils/lib/guid';
 import { sendCoreViewEvent } from '@ember/-internals/views/lib/views/core-view-utils';
 import { assert } from '@ember/debug';
 import {
@@ -29,15 +25,13 @@ import type {
 
 import type { Nullable } from '@ember/-internals/utility-types';
 import type { Reference } from '@glimmer/reference/lib/reference';
-// The @glimmer/reference and @glimmer/validator BARREL specifiers below are
-// load-bearing for the GXT dual backend: the rollup GXT alias map
-// (scripts/gxt-alias-map.mjs) redirects the exact barrel key to the gxt-backend
-// shim, while deep lib/* paths would resolve to the real vendored VM source and
-// fork the reactive runtime in GXT builds. Do not convert them to deep imports.
+// The @glimmer/reference BARREL specifier below is load-bearing for the GXT
+// dual backend: the rollup GXT alias map (scripts/gxt-alias-map.mjs) redirects
+// the exact barrel key to the gxt-backend shim, while deep lib/* paths would
+// resolve to the real vendored VM source and fork the reactive runtime in GXT
+// builds. Do not convert it to a deep import.
 // eslint-disable-next-line ember-local/no-barrel-imports
 import { createConstRef, UNDEFINED_REFERENCE, valueForRef } from '@glimmer/reference';
-import '@glimmer/validator';
-import '@ember/-internals/metal/lib/tags';
 import type { CurriedValue } from '@glimmer/runtime/lib/curried-value';
 import { curry } from '@glimmer/runtime/lib/curried-value';
 import { inTransaction } from '@glimmer/runtime/lib/environment';
