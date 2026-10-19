@@ -17,8 +17,10 @@
 //   1. VM-FREE: no chunk in that closure contains a module from
 //      GXT_NATIVE_FORBIDDEN (scripts/gxt-alias-map.mjs — the same list the vite
 //      harness `--assert-native` uses: Glimmer VM packages, the validator
-//      tag-revision protocol, the gxt compat bridge, the classic VM renderer,
-//      template compilers), and the closure imports no compiler entry of gxt
+//      tag-revision protocol, the gxt compat bridge and its Glimmer host
+//      (glimmer-host / root-template / render-component / classic-roots /
+//      template-adapter), the classic VM renderer, template compilers), and
+//      the closure imports no compiler entry of gxt
 //      (`@lifeart/gxt/runtime-compiler`, `@lifeart/gxt/compiler`).
 //      One documented exception: `gxt-backend/gxt-bridge.ts` may appear as the
 //      dead `function getGxtRenderer() { return null }` stub rollup keeps for

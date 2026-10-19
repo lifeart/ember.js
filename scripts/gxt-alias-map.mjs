@@ -585,9 +585,10 @@ export function gxtNativeSpecifierForPath(absPath, packagesDir) {
 
 /**
  * Modules an app closure of the native build must not ship — the Glimmer VM, its tag-revision
- * protocol, the gxt COMPAT bridge, the classic VM renderer, and the template
- * compilers. `[pattern, reason]`; patterns match absolute module ids / sourcemap
- * sources (vite harness, scripts/bundle-modern-app.mjs --assert-native) AND the
+ * protocol, the gxt COMPAT bridge and its Glimmer host, the classic VM
+ * renderer, and the template compilers. `[pattern, reason]`; patterns match
+ * absolute module ids / sourcemap sources (vite harness,
+ * scripts/bundle-modern-app.mjs --assert-native) AND the
  * repo-relative module ids of the rollup native dist manifest
  * (scripts/assert-native-dist.mjs).
  */
@@ -610,6 +611,14 @@ export const GXT_NATIVE_FORBIDDEN = [
   [
     /gxt-backend\/(compile|manager|ember-gxt-wrappers|validator|reference|destroyable|gxt-bridge|helper-manager)\.ts$/,
     'gxt compat bridge',
+  ],
+  [
+    // The compat build's Glimmer host (`setGxtGlimmerHost`), which compile.ts
+    // installs through glimmer-host.ts: the GXT root template, renderComponent,
+    // the classic-root render and the template adapter. Native renders through
+    // native/renderer.ts.
+    /gxt-backend\/(glimmer-host|root-template|render-component|classic-roots|template-adapter)\.ts$/,
+    'gxt compat host',
   ],
   [
     /-internals\/glimmer\/lib\/(renderer|component-managers\/[^/]+|templates\/(root|outlet)|component)\.ts$/,
