@@ -669,14 +669,15 @@ function loopEnd() {
   resolveRenderPromise();
 }
 
-// In GXT mode, don't hook into backburner's begin/end events for render
-// revalidation. GXT handles rendering via its own reactivity system; pending
-// DOM syncs are flushed at the end of the outermost run loop (and explicitly
-// by the test helpers).
-if (!__GXT_MODE__) {
-  _backburner.on('begin', loopBegin);
-  _backburner.on('end', loopEnd);
-} else {
+if (!__GXT_MODE__) _backburner.on('begin', loopBegin);
+if (!__GXT_MODE__) _backburner.on('end', loopEnd);
+
+if (__GXT_MODE__) {
+  // In GXT mode, don't hook into backburner's begin/end events for render
+  // revalidation. GXT handles rendering via its own reactivity system; pending
+  // DOM syncs are flushed at the end of the outermost run loop (and explicitly
+  // by the test helpers).
+  //
   // Backburner fires 'end' event listeners BEFORE the onEnd option. Thus
   // we must flush GXT's pending DOM sync here (not rely on runloop.onEnd)
   // so that renderSettled()'s promise resolves AFTER the DOM is up-to-date.

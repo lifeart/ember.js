@@ -647,25 +647,26 @@ export class ComputedProperty extends ComputedDescriptor {
 
     meta.setValueFor(keyName, ret);
 
-    // GXT integration: mark this (obj, keyName) as "CP set in flight" so
-    // re-entrant CP.get calls triggered by the notifyPropertyChange pipeline
-    // (e.g. via dirtyTagFor → GXT formula re-evaluation or the GXT re-render
-    // trigger reading obj[keyName]) short-circuit and return the just-stored setter
-    // result instead of re-running the user getter. Without this guard, a
-    // CP whose getter has observable side effects (`this.callCount++`) would
-    // see an extra invocation on every set, corrupting user assertions.
-    // Classic mode never re-enters via this path — gate to skip per-call
-    // WeakMap+Set churn on the notify cascade.
     if (__GXT_MODE__) {
+      // GXT integration: mark this (obj, keyName) as "CP set in flight" so
+      // re-entrant CP.get calls triggered by the notifyPropertyChange pipeline
+      // (e.g. via dirtyTagFor → GXT formula re-evaluation or the GXT re-render
+      // trigger reading obj[keyName]) short-circuit and return the just-stored setter
+      // result instead of re-running the user getter. Without this guard, a
+      // CP whose getter has observable side effects (`this.callCount++`) would
+      // see an extra invocation on every set, corrupting user assertions.
+      // Classic mode never re-enters via this path — gate to skip per-call
+      // WeakMap+Set churn on the notify cascade.
       _beginCPSet(obj, keyName);
       try {
         notifyPropertyChange(obj, keyName, meta, value);
       } finally {
         _endCPSet(obj, keyName);
       }
-    } else {
-      notifyPropertyChange(obj, keyName, meta, value);
+      return ret;
     }
+
+    notifyPropertyChange(obj, keyName, meta, value);
 
     return ret;
   }

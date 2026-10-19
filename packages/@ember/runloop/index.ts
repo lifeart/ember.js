@@ -83,9 +83,10 @@ function onEnd(_current: DeferredActionQueues, next: DeferredActionQueues) {
         }
       }
     }
-  } else {
-    flushAsyncObservers(schedule);
+    return;
   }
+
+  flushAsyncObservers(schedule);
 }
 
 function flush(queueName: string, next: () => void) {
@@ -95,9 +96,7 @@ function flush(queueName: string, next: () => void) {
         _gxtFlushBudget++;
         flushAsyncObservers(schedule);
       }
-    } else {
-      flushAsyncObservers(schedule);
-    }
+    } else flushAsyncObservers(schedule);
   }
 
   next();

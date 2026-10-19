@@ -118,9 +118,7 @@ export function _setProp(obj: object, keyName: string, value: any) {
         // Forward `value` so the GXT trigger can update the property's cell
         // synchronously without re-reading `obj[keyName]`.
         notifyPropertyChange(obj, keyName, null, value);
-      } else {
-        notifyPropertyChange(obj, keyName);
-      }
+      } else notifyPropertyChange(obj, keyName);
     }
   }
 

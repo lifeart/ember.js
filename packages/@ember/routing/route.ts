@@ -1028,19 +1028,16 @@ class Route<Model = unknown> extends EmberObject.extend(InternalActionHandler) {
 
     // `_setOutlets` itself is the single `shouldRender` gate (it returns
     // early when the app was booted with `shouldRender: false`).
-    //
-    // GXT mode: record this route's render state for GXT's outlet machinery
-    // (gxt-backend/outlet.ts), as the pre-route-manager `[RENDER]()` did.
-    // Scheduling _setOutlets via once() (actions queue) from the
-    // routerTransitions queue causes it to be skipped because backburner
-    // doesn't re-visit earlier queues. Use scheduleOnce('render', ...) to
-    // ensure it runs after routerTransitions in the same runloop iteration.
     if (__GXT_MODE__) {
+      // GXT mode: record this route's render state for GXT's outlet machinery
+      // (gxt-backend/outlet.ts), as the pre-route-manager `[RENDER]()` did.
+      // Scheduling _setOutlets via once() (actions queue) from the
+      // routerTransitions queue causes it to be skipped because backburner
+      // doesn't re-visit earlier queues. Use scheduleOnce('render', ...) to
+      // ensure it runs after routerTransitions in the same runloop iteration.
       getRouteOutletHooks()?.renderRoute(this);
       scheduleOnce('render', this._router, '_setOutlets');
-    } else {
-      once(this._router, '_setOutlets');
-    }
+    } else once(this._router, '_setOutlets');
 
     // Setup can cause changes to QPs which need to be propogated immediately in
     // some situations. Eventually, we should work on making these async somehow.
@@ -1556,9 +1553,7 @@ class Route<Model = unknown> extends EmberObject.extend(InternalActionHandler) {
     if (this._router) {
       if (__GXT_MODE__) {
         scheduleOnce('render', this._router, '_setOutlets');
-      } else {
-        once(this._router, '_setOutlets');
-      }
+      } else once(this._router, '_setOutlets');
     }
   }
 
