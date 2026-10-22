@@ -818,7 +818,10 @@ function createEmberMaybeHelper(original: Function) {
         // A path argument's reference is labelled with its path (DEBUG), as
         // Glimmer's is: its `fn` assertion names the callback by it.
         const makeRef = (argVal: any, label: string | null | undefined) => {
-          const isGetter = typeof argVal === 'function' && !(argVal as any).prototype;
+          // Use isGxtGetter so a marked helper result (e.g. the bound function a
+          // nested `(fn ...)` produces), a mut cell or an fn-helper is passed
+          // through as the value instead of being eagerly invoked as a getter.
+          const isGetter = isGxtGetter(argVal);
           const getter = isGetter ? () => argVal() : () => argVal;
           const ref = createComputeRef(getter, null, 'element-arg');
           if (DEBUG && typeof label === 'string') ref.debugLabel = label;
@@ -840,10 +843,29 @@ function createEmberMaybeHelper(original: Function) {
         // The Helper return is itself a `Reference`. Read its current
         // value via `valueForRef` — matches Ember's Glimmer-VM read path
         // exactly, including tag-tracking for the wrapping reactive read.
-        if (ref && typeof ref === 'object' && typeof (ref as any).compute === 'function') {
-          return valueForRef(ref);
+        const resultValue =
+          ref && typeof ref === 'object' && typeof (ref as any).compute === 'function'
+            ? valueForRef(ref)
+            : ref;
+        // Mark a functional result (e.g. the bound function `(fn ...)` returns)
+        // so an outer helper's unwrapArgs / makeRef does not treat it as a GXT
+        // reactive getter and invoke it eagerly. Mirrors the user-helper branch.
+        // A frozen function cannot take the mark.
+        if (
+          typeof resultValue === 'function' &&
+          !resultValue.prototype &&
+          !resultValue.__isFnHelper &&
+          !resultValue.__isMutCell &&
+          !resultValue.__isHelperResult &&
+          Object.isExtensible(resultValue)
+        ) {
+          Object.defineProperty(resultValue, '__isHelperResult', {
+            value: true,
+            enumerable: false,
+            configurable: true,
+          });
         }
-        return ref;
+        return resultValue;
       }
     }
 

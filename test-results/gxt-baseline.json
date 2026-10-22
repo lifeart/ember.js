@@ -3108,22 +3108,10 @@
     },
     "Helpers test: {{fn}}": {
       "total": 14,
-      "passing": 9,
-      "assertionsTotal": 48,
-      "assertionsPassing": 20,
+      "passing": 12,
+      "assertionsTotal": 38,
+      "assertionsPassing": 32,
       "failingTests": [
-        {
-          "name": "updates when arguments change",
-          "category": "gxt:triage"
-        },
-        {
-          "name": "updates when the function changes",
-          "category": "gxt:triage"
-        },
-        {
-          "name": "partially applies each layer when nested [GH#17959]",
-          "category": "gxt:triage"
-        },
         {
           "name": "can be used on the result of `mut`",
           "category": "gxt:triage"
