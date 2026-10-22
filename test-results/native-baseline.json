@@ -1382,27 +1382,17 @@
     },
     "Custom modifier manager: destruction order": {
       "total": 1,
-      "passing": 0,
+      "passing": 1,
       "assertionsTotal": 1,
-      "assertionsPassing": 0,
-      "failingTests": [
-        {
-          "name": " modifiers are destroyed child-first, after the modifiers inside their element",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 1,
+      "failingTests": []
     },
     "Custom modifier manager: destruction order without the debug render tree": {
       "total": 1,
-      "passing": 0,
+      "passing": 1,
       "assertionsTotal": 1,
-      "assertionsPassing": 0,
-      "failingTests": [
-        {
-          "name": " modifiers are destroyed child-first, after the modifiers inside their element",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 1,
+      "failingTests": []
     },
     "Destroyables": {
       "total": 24,

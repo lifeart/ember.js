@@ -52,7 +52,12 @@ import {
   scheduleRevalidate,
 } from './host-hooks';
 import { instanceOfNode, OWNER, resolveComponentName } from './managers';
-import { commitModifiers, debugModifierNodes, INTERACTIVE } from './modifier-manager';
+import {
+  commitModifiers,
+  debugModifierNodes,
+  destroyPendingModifiers,
+  INTERACTIVE,
+} from './modifier-manager';
 import { commitComponents } from './component-lifecycle';
 import { documentedDrop } from './not-implemented';
 import type OutletView from './outlet';
@@ -91,6 +96,10 @@ export class NativeRenderRoot {
     const leftovers =
       this.rendered !== null && !this.parent.isConnected ? topLevelNodes(this.rendered) : null;
     destroyElementSync(this.root as never, false, initDOM(this.root as never));
+    // Destroy the root's modifiers in element-closing order (child-first), now
+    // that gxt's parent-first teardown has queued them, before the leftover
+    // top-level nodes are unlinked.
+    destroyPendingModifiers();
     if (leftovers !== null) {
       for (const node of leftovers) node.parentNode?.removeChild(node);
     }

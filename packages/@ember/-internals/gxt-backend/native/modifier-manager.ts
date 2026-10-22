@@ -29,6 +29,7 @@
 // false } })`, a non-interactive app environment) create no modifiers at all.
 import { DEBUG } from '@glimmer/env';
 import { ENV } from '@ember/-internals/environment';
+import { _backburner, _getCurrentRunLoop } from '@ember/runloop';
 import {
   type CapturedRenderNode,
   effect,
@@ -220,12 +221,75 @@ function runInTransaction(instance: ModifierInstance): void {
 
 const MODIFIER_LABEL = '(modifier)';
 
+// ---------------------------------------------------------------- destroy queue
+// gxt tears an element tree down parent-first, but Glimmer destroys modifiers
+// child-first: a modifier is a destroyable of its block and is destroyed in the
+// order the elements close — after the modifiers inside its element and those of
+// the elements before it. So queue each removed modifier and destroy them in
+// element-closing order at the end of the teardown: after a render pass
+// (host-hooks.ts) and after a root destroy (renderer.ts) drain it synchronously,
+// with a run-loop `actions` flush as the fallback. Ported from the compat
+// manager (`_queueModifierDestroy` / `_gxtDestroyPendingModifiers`).
+let pendingDestroys: ModifierInstance[] = [];
+
 function remove(instance: ModifierInstance): void {
   if (instance.removed) return;
   instance.removed = true;
   instance.stopTracking?.();
   instance.stopTracking = null;
-  destroy(instance.state);
+  pendingDestroys.push(instance);
+  // Fallback for a destroy outside a render pass / root teardown (the two sync
+  // points that drain the queue themselves): flush on the run loop's `actions`.
+  if (_getCurrentRunLoop() !== null) {
+    _backburner.scheduleOnce('actions', null, destroyPendingModifiers);
+  }
+}
+
+/**
+ * Destroy the queued modifiers in the order their elements close (child-first;
+ * see the destroy-queue note above). Idempotent — the sync drain points and the
+ * `actions` fallback all call it, and it no-ops on an empty queue.
+ */
+export function destroyPendingModifiers(): void {
+  if (pendingDestroys.length === 0) return;
+  const queue = pendingDestroys;
+  pendingDestroys = [];
+  for (const instance of inClosingOrder(queue)) {
+    destroy(instance.state);
+  }
+}
+
+// The queued destroys in the order Glimmer destroys modifiers: grouped by the
+// tree their element belongs to (its topmost ancestor still linked at teardown),
+// each tree sorted by element-closing order. Detached singletons (every element
+// its own root) keep the queue order.
+function inClosingOrder(entries: ModifierInstance[]): ModifierInstance[] {
+  if (entries.length < 2) return entries;
+  const trees = new Map<Node, ModifierInstance[]>();
+  for (const entry of entries) {
+    let root: Node = entry.element;
+    while (root.parentNode !== null) root = root.parentNode;
+    const tree = trees.get(root);
+    if (tree === undefined) trees.set(root, [entry]);
+    else tree.push(entry);
+  }
+  if (trees.size === entries.length) return entries;
+  const ordered: ModifierInstance[] = [];
+  for (const tree of trees.values()) {
+    tree.sort((a, b) => closingOrder(a.element, b.element));
+    for (const entry of tree) ordered.push(entry);
+  }
+  return ordered;
+}
+
+// The order two elements of one tree close in: a child closes before its
+// ancestor, and earlier siblings before later ones.
+function closingOrder(a: Node, b: Node): number {
+  if (a === b) return 0;
+  const position = a.compareDocumentPosition(b);
+  if (position & Node.DOCUMENT_POSITION_CONTAINED_BY) return 1;
+  if (position & Node.DOCUMENT_POSITION_CONTAINS) return -1;
+  return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
 }
 
 // ---------------------------------------------------------------- debug render tree

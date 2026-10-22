@@ -37,7 +37,7 @@ import { _backburner, _getCurrentRunLoop } from '@ember/runloop';
 import toBool from '@ember/-internals/glimmer/lib/utils/to-bool';
 import { flushRevalidation } from '@lifeart/gxt';
 import { attributeText } from '../utils';
-import { commitModifiers } from './modifier-manager';
+import { commitModifiers, destroyPendingModifiers } from './modifier-manager';
 import { commitComponents, updateComponents } from './component-lifecycle';
 import { debug } from './validator';
 
@@ -93,6 +93,9 @@ function renderPass(): void {
   // callbacks (didCreate / didUpdate) commit first, as in Glimmer.
   commitComponents();
   commitModifiers();
+  // Destroy the modifiers the pass removed, in element-closing order (child-
+  // first), now that the pass's teardown has queued them.
+  destroyPendingModifiers();
 }
 
 function renderPassBody(): void {
