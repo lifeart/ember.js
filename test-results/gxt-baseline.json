@@ -2967,15 +2967,10 @@
     },
     "Helper Tracked Properties": {
       "total": 10,
-      "passing": 9,
+      "passing": 10,
       "assertionsTotal": 47,
-      "assertionsPassing": 46,
-      "failingTests": [
-        {
-          "name": " @test custom ember array properties rerender when updated",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 47,
+      "failingTests": []
     },
     "Helpers test: argument-less helper invocation in named arguments position": {
       "total": 6,

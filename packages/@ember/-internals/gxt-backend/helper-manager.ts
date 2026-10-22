@@ -7,6 +7,7 @@
 // HelperManager delegate for a given owner.
 
 import { DEBUG } from '@glimmer/env';
+import { isEmberArray } from '@ember/array/-internals';
 import { bumpHelperArgsTag, consumeTag, createCache, createHelperArgsTag } from './validator';
 import {
   createComputeRef,
@@ -122,43 +123,88 @@ function argsProxyForCustom(capturedArgs: any): { positional: any; named: any } 
  * array changed in place (`pushObject`, a `trackedArray` push) is a changed
  * argument.
  */
+// A recorded array argument: a snapshot of its elements (`null`: not an array,
+// compared by identity only). An EmberArray is mutated in place (`pushObject`)
+// and keeps a stable identity, so comparing the element snapshot is what reveals
+// an in-place change — Glimmer consumes the array's `[]` tag for the same effect.
+type ArgSlot = { elements: unknown[] } | null;
+
 interface HelperArgSlots {
-  // The array elements recorded for each positional slot (`null`: not an array).
-  positional: (unknown[] | null)[];
+  // The array snapshot recorded for each positional slot (`null`: not an array).
+  positional: ArgSlot[];
   // The same per named argument.
-  named: Record<string, unknown[] | null>;
+  named: Record<string, ArgSlot>;
 }
 
-function elementsOf(value: unknown): unknown[] | null {
-  return Array.isArray(value) ? value.slice() : null;
+// An EmberArray (ArrayProxy, a MutableArray, a hand-rolled `objectAt`/`length`
+// implementation, …) is not a native array. `isEmberArray` only recognises
+// instances branded by the mixin's `init`, so also accept the `EmberArray`
+// shape (an `objectAt` method with a numeric `length`).
+function isEmberArrayLike(value: unknown): value is EmberArrayShape {
+  if (isEmberArray(value)) return true;
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    typeof (value as { objectAt?: unknown }).objectAt === 'function' &&
+    typeof (value as { length?: unknown }).length === 'number'
+  );
 }
 
-function slotUnchanged(value: unknown, elements: unknown[] | null, next: unknown): boolean {
+interface EmberArrayShape {
+  length: number;
+  objectAt(index: number): unknown;
+  toArray?(): unknown[];
+}
+
+// Snapshot an EmberArray's current elements via its `objectAt`/`length` array
+// primitives (or `toArray`). Runs outside a tracking frame (createHelper / the
+// args setter), so reading the elements consumes no tags.
+function emberArrayElements(value: EmberArrayShape): unknown[] {
+  if (typeof value.objectAt === 'function' && typeof value.length === 'number') {
+    const out = new Array<unknown>(value.length);
+    for (let i = 0; i < value.length; i++) out[i] = value.objectAt(i);
+    return out;
+  }
+  return typeof value.toArray === 'function' ? value.toArray() : [];
+}
+
+function slotFor(value: unknown): ArgSlot {
+  if (Array.isArray(value)) return { elements: value.slice() };
+  if (isEmberArrayLike(value)) return { elements: emberArrayElements(value) };
+  return null;
+}
+
+function slotUnchanged(value: unknown, slot: ArgSlot, next: unknown): boolean {
   if (!Object.is(value, next)) return false;
-  if (elements === null) return true;
-  const array = next as unknown[];
-  if (array.length !== elements.length) return false;
+  if (slot === null) return true;
+  const elements = slot.elements;
+  const nextElements = Array.isArray(next)
+    ? next
+    : isEmberArrayLike(next)
+      ? emberArrayElements(next)
+      : [];
+  if (nextElements.length !== elements.length) return false;
   for (let i = 0; i < elements.length; i++) {
-    if (!Object.is(array[i], elements[i])) return false;
+    if (!Object.is(nextElements[i], elements[i])) return false;
   }
   return true;
 }
 
-function positionalSlots(positional: unknown): (unknown[] | null)[] {
-  return Array.isArray(positional) ? positional.map(elementsOf) : [];
+function positionalSlots(positional: unknown): ArgSlot[] {
+  return Array.isArray(positional) ? positional.map(slotFor) : [];
 }
 
-function namedSlots(named: unknown): Record<string, unknown[] | null> {
-  const slots: Record<string, unknown[] | null> = {};
+function namedSlots(named: unknown): Record<string, ArgSlot> {
+  const slots: Record<string, ArgSlot> = {};
   if (named !== null && typeof named === 'object') {
     for (const key of Object.keys(named)) {
-      slots[key] = elementsOf((named as Record<string, unknown>)[key]);
+      slots[key] = slotFor((named as Record<string, unknown>)[key]);
     }
   }
   return slots;
 }
 
-function samePositionalArgs(current: unknown, slots: (unknown[] | null)[], next: unknown): boolean {
+function samePositionalArgs(current: unknown, slots: ArgSlot[], next: unknown): boolean {
   if (!Array.isArray(current) || !Array.isArray(next)) return current === next;
   if (current.length !== next.length) return false;
   for (let i = 0; i < current.length; i++) {
@@ -169,7 +215,7 @@ function samePositionalArgs(current: unknown, slots: (unknown[] | null)[], next:
 
 function sameNamedArgs(
   current: unknown,
-  slots: Record<string, unknown[] | null>,
+  slots: Record<string, ArgSlot>,
   next: unknown
 ): boolean {
   if (
