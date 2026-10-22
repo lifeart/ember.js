@@ -9,6 +9,7 @@
 import { assert as emberAssert } from '@ember/debug';
 import { deprecate as emberDeprecate } from '@ember/debug';
 import { getDebugFunction, warn } from '@ember/debug';
+import calculateLocationDisplay from '@ember/template-compiler/lib/system/calculate-location-display';
 import {
   pascalToKebab,
   isAllDigits,
@@ -12659,7 +12660,25 @@ export function precompileTemplate(templateString: string, options?: GxtPrecompi
       _assert('Could not find component `<TextArea />` (did you mean `<Textarea />`?)', false);
   }
   if (_gxtDialectFindings.dottedMustache) {
-    const { head, tail } = _gxtDialectFindings.dottedMustache;
+    const { head, tail, loc } = _gxtDialectFindings.dottedMustache;
+    // Loose-mode `{{attrs.foo}}` is Ember's `assert-against-attrs` case: surface
+    // it as an Ember assertion with a source location (so `expectAssertion`
+    // catches it), matching @ember/template-compiler's assert-against-attrs
+    // plugin exactly. Use getDebugFunction('assert') so the stub expectAssertion
+    // installs is the one called. Falls through to the generic throw in prod
+    // (assert stripped) and in strict mode (where `attrs` is just out of scope).
+    if (!__strictModeFlag && head === 'attrs') {
+      const _assert: LooseAssert = getDebugFunction('assert');
+      if (_assert) {
+        _assert(
+          `Using {{attrs}} to reference named arguments is not supported. {{${head}.${tail}}} should be updated to {{@${tail}}}. ${calculateLocationDisplay(
+            options?.moduleName,
+            loc as Parameters<typeof calculateLocationDisplay>[1]
+          )}`,
+          false
+        );
+      }
+    }
     throw new Error(
       `You attempted to render a path (\`{{${head}.${tail}}}\`), but ${head} was not in scope`
     );

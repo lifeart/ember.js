@@ -1461,8 +1461,9 @@ export interface GxtAssertFindings {
   dynamicHelper: boolean;
   dynamicModifier: boolean;
   // First offending `{{head.tail}}` (matches the former scanner, which threw on
-  // the first match in document order).
-  dottedMustache: { head: string; tail: string } | null;
+  // the first match in document order). `loc` is the offending path's source
+  // span, used to build the `{{attrs}}` assertion's `(Lx:Cy)` location display.
+  dottedMustache: { head: string; tail: string; loc?: unknown } | null;
   // The message of the first `-with-dynamic-vars` / `-get-dynamic-var` use of
   // a key other than `outletState` (recorded by `gxtDynamicVarsTransform`).
   dynamicScope: string | null;
@@ -1570,7 +1571,9 @@ function gxtDottedMustacheAssert(
           }
           if (blockParamNames.has(head)) return;
           if (scopeValueNames && scopeValueNames.has(head)) return;
-          findings.dottedMustache = { head, tail: tailSegs.join('.') };
+          // Record the path's loc so a loose-mode `{{attrs.x}}` can be reported
+          // with the same `(Lx:Cy)` source location as Ember's assert-against-attrs.
+          findings.dottedMustache = { head, tail: tailSegs.join('.'), loc: path.loc };
         },
       },
     };

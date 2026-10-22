@@ -1596,18 +1596,10 @@
     },
     "Components test: curly components": {
       "total": 60,
-      "passing": 55,
+      "passing": 57,
       "assertionsTotal": 238,
-      "assertionsPassing": 233,
+      "assertionsPassing": 235,
       "failingTests": [
-        {
-          "name": " non-block with properties access via attrs is asserted against",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " block with properties on attrs is asserted against",
-          "category": "gxt:triage"
-        },
         {
           "name": " when a property is changed during children's rendering",
           "category": "gxt:triage"
@@ -1624,15 +1616,10 @@
     },
     "Components test: curly components (classic component)": {
       "total": 72,
-      "passing": 71,
+      "passing": 72,
       "assertionsTotal": 498,
-      "assertionsPassing": 497,
-      "failingTests": [
-        {
-          "name": " using attrs for positional params is asserted against",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 498,
+      "failingTests": []
     },
     "Components test: dynamic components": {
       "total": 20,
