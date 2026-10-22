@@ -185,12 +185,33 @@ const DEFINITION_OF_TEMPLATE = new WeakMap<object, object>();
 // Per rendered NODE (wins over the definition's name): the route name of a
 // route template rendered by an outlet (one template function can serve several
 // routes — `templateName`, the shared default `{{outlet}}` template), `main`
-// for an outlet.
+// for an outlet, `{ROOT}` for a renderComponent root (native/renderer.ts).
 const NODE_NAMES = new WeakMap<object, string>();
 
 /** Name one rendered component node for the Inspector (native/outlet.ts). */
 export function nameNode(node: object, name: string): void {
   NODE_NAMES.set(node, name);
+}
+
+// The name a strict-mode template's scope gives a definition, as Glimmer (in
+// DEBUG) names a component invoked through a lexical variable by that variable.
+// Fills the gap for a `precompileTemplate(..., { scope })` value (an anonymous
+// `templateOnly()`), whose only name is its binding; a gjs template bakes the
+// name in itself. The first name wins, as Glimmer keeps the first it assigns.
+const LEXICAL_NAMES = new WeakMap<object, string>();
+
+/** Record the names a strict-mode template's scope gives its values. */
+export function recordLexicalNames(scope: Readonly<Record<string, unknown>>): void {
+  for (const name of Object.keys(scope)) {
+    const value = scope[name];
+    if (
+      value !== null &&
+      (typeof value === 'object' || typeof value === 'function') &&
+      !LEXICAL_NAMES.has(value)
+    ) {
+      LEXICAL_NAMES.set(value, name);
+    }
+  }
 }
 
 function nameOfDefinition(definition: object): string {
@@ -210,14 +231,18 @@ function nameOfDefinition(definition: object): string {
  * slots / roots), so gxt's keyword naming still applies to them.
  */
 export function resolveComponentName(node: object): string | undefined {
+  // Name precedence: an explicit node name ({ROOT} / outlet / route) wins over
+  // the lexical scope name, which wins over the definition's own name.
   const nodeName = NODE_NAMES.get(node);
   if (nodeName !== undefined) return nodeName;
   const definition = DEFINITION_OF_NODE.get(node);
-  if (definition !== undefined) return nameOfDefinition(definition);
+  if (definition !== undefined) return LEXICAL_NAMES.get(definition) ?? nameOfDefinition(definition);
   const ctor = (node as { constructor?: unknown }).constructor;
   if (isTemplateFn(ctor)) {
     const templateOnly = DEFINITION_OF_TEMPLATE.get(ctor as object);
-    if (templateOnly !== undefined) return nameOfDefinition(templateOnly);
+    if (templateOnly !== undefined) {
+      return LEXICAL_NAMES.get(templateOnly) ?? nameOfDefinition(templateOnly);
+    }
     return (ctor as { name?: string }).name || undefined;
   }
   return undefined;

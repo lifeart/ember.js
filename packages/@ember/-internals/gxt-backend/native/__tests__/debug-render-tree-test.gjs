@@ -36,7 +36,7 @@ module('gxt-native | debugRenderTree', function (hooks) {
     const all = names(tree);
 
     assert.strictEqual(tree.length, 1, 'one root for this owner');
-    assert.strictEqual(tree[0].name, 'OuterCard', 'class component named by its class');
+    assert.strictEqual(tree[0].name, '{ROOT}', 'the renderComponent root is {ROOT} (Glimmer parity)');
     assert.ok(all.includes('InnerTemplateOnly'), `template-only gxt component named by its binding (${all.join(', ')})`);
     assert.ok(all.includes('Badge'), 'templateOnly() definition named by its definition name');
     assert.notOk(all.includes('NativeComponent'), 'never the native factory name');

@@ -20,6 +20,7 @@
 // `compileTemplate()` (runtime compilation) works once a runtime compiler has
 // been registered (`__registerTemplateCompiler`) — the native entry for that is
 // `native/runtime-compile.ts` (tests / @ember/template-compiler/runtime).
+import { DEBUG } from '@glimmer/env';
 import {
   lazyFactoryForTemplate,
   failingTemplateFactory,
@@ -27,6 +28,7 @@ import {
   type GxtTemplate,
   type NativeTemplateFactory,
 } from './template-factory';
+import { recordLexicalNames } from './managers';
 
 interface TemplateCompiler {
   compile(...args: unknown[]): unknown;
@@ -66,7 +68,12 @@ export function precompileTemplate(
     const loose = options?.strictMode !== true;
     const scope = options?.scope;
     return lazyFactoryForTemplate(() => {
-      const compiled = template(scope === undefined ? NO_SCOPE : scope());
+      const scopeValues = scope === undefined ? NO_SCOPE : scope();
+      // Record the scope's lexical names so the debug render tree can name a
+      // component invoked through a binding (e.g. an anonymous `templateOnly()`
+      // passed as `scope: () => ({ Foo })`) by that binding.
+      if (DEBUG && scope !== undefined) recordLexicalNames(scopeValues);
+      const compiled = template(scopeValues);
       if (loose) markLooseTemplate(compiled);
       return compiled;
     });

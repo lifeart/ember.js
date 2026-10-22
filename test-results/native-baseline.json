@@ -585,19 +585,10 @@
     },
     "Application test: debug render tree": {
       "total": 12,
-      "passing": 10,
+      "passing": 12,
       "assertionsTotal": 437,
-      "assertionsPassing": 433,
-      "failingTests": [
-        {
-          "name": " components rendered with renderComponent",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " components rendered with renderComponent and a different owner",
-          "category": "gxt:triage"
-        }
-      ],
+      "assertionsPassing": 437,
+      "failingTests": [],
       "skippedTests": [
         " {{mount}}",
         " routable engine",
@@ -3474,19 +3465,10 @@
     },
     "Strict Mode - RenderComponentTestCase": {
       "total": 4,
-      "passing": 2,
+      "passing": 4,
       "assertionsTotal": 15,
-      "assertionsPassing": 13,
-      "failingTests": [
-        {
-          "name": " captureRenderTree includes the rendered components",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " captureRenderTree includes components rendered with any owner",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 15,
+      "failingTests": []
     },
     "Strict Mode - Runtime Template Compiler (explicit)": {
       "total": 12,

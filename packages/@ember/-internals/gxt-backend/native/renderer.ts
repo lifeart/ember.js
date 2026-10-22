@@ -51,7 +51,8 @@ import {
   resetRenderLoop,
   scheduleRevalidate,
 } from './host-hooks';
-import { instanceOfNode, OWNER, resolveComponentName } from './managers';
+import { instanceOfNode, nameNode, OWNER, resolveComponentName } from './managers';
+import { ENV } from '@ember/-internals/environment';
 import {
   commitModifiers,
   debugModifierNodes,
@@ -455,6 +456,14 @@ function mountRender(
     args: args ?? {},
     interactive,
   });
+
+  // The root component of a `renderComponent` render is `{ROOT}` in the debug
+  // render tree (Glimmer's RendererState.renderRoot), not its definition name.
+  // Only this path — the app's outlet root (renderRoot via appendOutletView)
+  // keeps its own outlet naming.
+  if (ENV._DEBUG_RENDER_TREE && root.rendered !== null) {
+    nameNode(root.rendered, '{ROOT}');
+  }
 
   // Destroying the owner tears the render down (Ember destroyable graph).
   let ownerDestructor: (() => void) | null = () => root.destroy();
