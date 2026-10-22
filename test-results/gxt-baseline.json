@@ -5617,14 +5617,10 @@
     },
     "[integration] jit :: Components :: Debugger": {
       "total": 4,
-      "passing": 2,
+      "passing": 3,
       "assertionsTotal": 47,
-      "assertionsPassing": 44,
+      "assertionsPassing": 45,
       "failingTests": [
-        {
-          "name": "debugger in template-only component logs template-only message",
-          "category": "gxt:triage"
-        },
         {
           "name": "basic debugger statement",
           "category": "gxt:triage"
@@ -5640,14 +5636,10 @@
     },
     "[integration] jit :: Components :: Debugger > [integration] TemplateOnly": {
       "total": 2,
-      "passing": 0,
+      "passing": 1,
       "assertionsTotal": 23,
-      "assertionsPassing": 20,
+      "assertionsPassing": 21,
       "failingTests": [
-        {
-          "name": "debugger in template-only component logs template-only message",
-          "category": "gxt:triage"
-        },
         {
           "name": "basic debugger statement",
           "category": "gxt:triage"

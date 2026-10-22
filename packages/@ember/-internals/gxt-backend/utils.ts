@@ -668,7 +668,13 @@ export function markTemplateOnlySelf(context: object): void {
 
 /** Whether `context` renders a template-only component (Glimmer's self: `null`). */
 export function isTemplateOnlySelf(context: unknown): boolean {
-  return typeof context === 'object' && context !== null && templateOnlySelves.has(context);
+  if (typeof context !== 'object' || context === null) return false;
+  if (templateOnlySelves.has(context)) return true;
+  // The render self handed to the `{{debugger}}` hook is the createRenderContext
+  // Proxy, while the mark is on its raw target; unwrap it (`__gxtRawTarget`) so a
+  // template-only component is recognised as such regardless of the Proxy wrap.
+  const raw = (context as { __gxtRawTarget?: unknown }).__gxtRawTarget;
+  return typeof raw === 'object' && raw !== null && templateOnlySelves.has(raw);
 }
 
 /**
