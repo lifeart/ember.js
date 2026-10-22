@@ -2162,19 +2162,10 @@
     },
     "Helpers test: {{get}}": {
       "total": 23,
-      "passing": 21,
-      "assertionsTotal": 92,
-      "assertionsPassing": 87,
-      "failingTests": [
-        {
-          "name": " should be able to get string length with a static key",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " should be able to get string length with a bound/dynamic key",
-          "category": "gxt:triage"
-        }
-      ],
+      "passing": 23,
+      "assertionsTotal": 96,
+      "assertionsPassing": 96,
+      "failingTests": [],
       "skippedTests": [
         " the result of a get helper can be yielded",
         " get helper value should be updatable using <Input> and (mut) - static key",

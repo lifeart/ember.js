@@ -137,8 +137,9 @@ export const concat = /*#__PURE__*/ internalHelper(({ positional }) =>
   )
 );
 
-const isDict = (value: unknown): value is object =>
-  value !== null && (typeof value === 'object' || typeof value === 'function');
+// Matches Glimmer's `isDict` (@glimmer/util): only null/undefined are rejected,
+// so primitives like strings flow through to `emberGet` (e.g. `{{get str "length"}}`).
+const isDict = (value: unknown): value is {} => value !== null && value !== undefined;
 
 export const get = /*#__PURE__*/ internalHelper(({ positional }) => {
   const sourceRef: Reference<any> = positional[0] ?? UNDEFINED_REFERENCE;
