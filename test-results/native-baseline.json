@@ -2111,19 +2111,10 @@
     },
     "Helpers test: {{array}}": {
       "total": 12,
-      "passing": 10,
+      "passing": 12,
       "assertionsTotal": 38,
-      "assertionsPassing": 35,
-      "failingTests": [
-        {
-          "name": "should yield hash of an array of internal properties",
-          "category": "gxt:triage"
-        },
-        {
-          "name": "should yield hash of an array of internal and external properties",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 38,
+      "failingTests": []
     },
     "Helpers test: {{concat}}": {
       "total": 4,
@@ -2165,27 +2156,10 @@
     },
     "Helpers test: {{hash}}": {
       "total": 10,
-      "passing": 6,
-      "assertionsTotal": 33,
-      "assertionsPassing": 29,
-      "failingTests": [
-        {
-          "name": "should yield hash of internal properties",
-          "category": "gxt:triage"
-        },
-        {
-          "name": "should yield hash of internal and external properties",
-          "category": "gxt:triage"
-        },
-        {
-          "name": "individual hash values are accessed lazily",
-          "category": "gxt:triage"
-        },
-        {
-          "name": "works with computeds",
-          "category": "gxt:triage"
-        }
-      ]
+      "passing": 10,
+      "assertionsTotal": 32,
+      "assertionsPassing": 32,
+      "failingTests": []
     },
     "Helpers test: {{if}} used in attribute position": {
       "total": 101,

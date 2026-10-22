@@ -33,13 +33,14 @@ import {
   getInternalHelperManager,
   hasDestroyable,
   hasValue,
+  setCustomTagFor,
   setInternalHelperManager,
   setInternalModifierManager,
   type CustomHelperManager,
   type HelperDelegate,
 } from './manager-api';
 import { createComputeRef, UNDEFINED_REFERENCE, valueForRef, type Reference } from './reference';
-import { createCache, getValue, type Cache } from './validator';
+import { createCache, getValue, track, type Cache } from './validator';
 
 export { TemplateOnlyComponentDefinition, templateOnlyComponent } from './template-only';
 // `{{debugger}}`'s callback (`@glimmer/runtime`'s `setDebuggerCallback` /
@@ -105,15 +106,31 @@ function buildUntouchableThis(source: string): object | null {
 
 // ---------------------------------------------------------------- internal helpers
 export const hash = /*#__PURE__*/ internalHelper(({ named }) => {
-  const ref = createComputeRef(
-    () => {
-      const out: Record<string, unknown> = {};
-      for (const key of Object.keys(named)) out[key] = valueForRef(named[key]!);
-      return out;
-    },
-    null,
-    'hash'
-  );
+  // A single object with a lazy, enumerable getter per key, of stable identity:
+  // a member is read only when it is accessed (Glimmer reads hash values
+  // lazily), and each read pulls its reference live — so a yielded
+  // `(hash x=this.model.x)` stays reactive after gxt's createSlot fixes the
+  // block-param value (an eager snapshot would freeze to the initial values).
+  const obj: Record<string, unknown> = {};
+  for (const key of Object.keys(named)) {
+    Object.defineProperty(obj, key, {
+      get: () => valueForRef(named[key]!),
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  // A classic `@computed('args.hash.key')` reads members under `untrack` and
+  // watches `tagFor(obj, key)`; map that tag to the cells the member's reference
+  // reads so the computed invalidates when the source changes.
+  setCustomTagFor(obj, (_obj, key) => {
+    const ref = named[key as string];
+    return track(() => {
+      if (ref !== undefined) valueForRef(ref);
+    });
+  });
+  const ref = createComputeRef(() => obj, null, 'hash');
+  // Reference-level child access (childRefFor) resolves straight to the member
+  // references, keeping a consumer that reads the hash as a reference lazy too.
   ref.children = new Map(Object.entries(named));
   return ref;
 });
