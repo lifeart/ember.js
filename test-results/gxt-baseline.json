@@ -2419,15 +2419,10 @@
     },
     "Errors thrown during render": {
       "total": 4,
-      "passing": 3,
+      "passing": 4,
       "assertionsTotal": 12,
-      "assertionsPassing": 11,
-      "failingTests": [
-        {
-          "name": " it can recover resets the transaction when an error is thrown during modifier installation",
-          "category": "gxt:triage"
-        }
-      ],
+      "assertionsPassing": 12,
+      "failingTests": [],
       "skippedTests": [
         " it can recover resets the transaction when an error is thrown during rerender"
       ]
