@@ -9671,6 +9671,24 @@ const $_MANAGERS = {
             } else {
               _modifierCommit(() => manager.installModifier(instance, element, trackedInstallArgs));
             }
+          } catch (installErr) {
+            // Glimmer installs modifiers at commit; an error thrown by a
+            // modifier's install hook propagates to the caller but does NOT
+            // tear down the element that was already built (e.g. the
+            // surrounding `<div>hello</div>` stays rendered). Route the error
+            // through the render-error channel so `flushRenderErrors` rethrows
+            // it AFTER insert — preserving the DOM — instead of letting it
+            // escape `template.render()`, which would trigger the init-phase
+            // `innerHTML = ''` wipe in classic-roots.ts and lose the output.
+            // This mirrors the didInsertElement recovery path, which already
+            // routes its throw through `captureRenderError` + the after-insert
+            // flush (same test, `didInsertElement` variant, is green).
+            try {
+              captureRenderError(installErr);
+            } catch (_captureFailed) {
+              // The capture channel itself failed — never swallow the original.
+              throw installErr;
+            }
           } finally {
             if (instance) installWatchers.delete(instance);
           }
