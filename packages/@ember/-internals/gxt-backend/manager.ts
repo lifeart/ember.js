@@ -11507,6 +11507,22 @@ function _installCustomManagedArgEffect(o: {
     // render pass, and this effect runs in the pass that rendered them: give
     // them the values just read, so the component's reads see the new ones.
     o.seedLiveArgs(newNamed, newPos);
+    // The component's template reads `@key` from its render context's
+    // arguments, a cell the sync's arg-cell pass refreshes. An argument that
+    // reads a list row's item reference (a block param of a kept
+    // `key="@index"` row) changes in the list's own update, after that pass:
+    // refresh the cells of the changed arguments here, as Glimmer's argument
+    // references update.
+    const renderArgs = renderContext ? renderContext[$ARGS_KEY] : null;
+    if (renderArgs && typeof renderArgs === 'object') {
+      for (const k of changedNamed) {
+        const cell = _gxtCellFor(renderArgs, k, /* skipDefine */ true);
+        if (cell) {
+          cell.update(newNamed[k]);
+          _gxtFlushCellOpcodes(cell);
+        }
+      }
+    }
     // A computed property of the component that depends on an argument
     // (`@computed('args.named.x')`, `'args.positional.[]'`,
     // `'args.positional.0'`) depends on the tag of that key of `liveNamed` /
