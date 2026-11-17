@@ -1873,9 +1873,15 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
             }
           )
         );
+        let classicOuters = [];
         let ClassicOuter = setComponentTemplate(
           precompileTemplate('{{two-way name=@name bar=@value}}'),
-          class extends Component {}
+          class extends Component {
+            init() {
+              super.init(...arguments);
+              classicOuters.push(this);
+            }
+          }
         );
         let GlimmerOuter = setComponentTemplate(
           precompileTemplate('{{two-way name=@name bar=@value}}'),
@@ -1910,14 +1916,186 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
 
         this.render('{{lexical-host}}');
         this.assertText('abc');
+        // The classic outer is a classic component, with its instance.
+        this.assert.strictEqual(classicOuters.length, 1, 'the classic outer has an instance');
+        this.assert.strictEqual(classicOuters[0].value, 'a', 'with its arguments');
 
         runTask(() => components.classic.set('bar', 'A'));
         this.assert.strictEqual(host.classic, 'A', 'through a classic outer');
+        this.assert.strictEqual(
+          classicOuters[0].value,
+          'A',
+          'the classic outer gets the new value'
+        );
         runTask(() => components.glimmer.set('bar', 'B'));
         this.assert.strictEqual(host.glimmer, 'B', 'through a Glimmer outer');
         runTask(() => components['template-only'].set('bar', 'C'));
         this.assert.strictEqual(host.templateOnly, 'C', 'through a template-only outer');
         this.assertText('ABC');
+      }
+
+      ['@test a classic component class invoked from the scope of a strict template is a classic component']() {
+        expectClassicComponentDeprecation();
+
+        // A co-located classic component a `.gjs` imports (`Component.extend`
+        // with `setComponentTemplate`, in a strict template's scope).
+        let instances = [];
+        let inserted = [];
+        let Legacy = setComponentTemplate(
+          precompileTemplate(
+            '<span class="local">{{this.local}}</span><span class="arg">{{this.value}}</span><button {{action "bump"}}>{{this.count}}</button>'
+          ),
+          Component.extend({
+            count: 0,
+            init() {
+              this._super(...arguments);
+              instances.push(this);
+              this.set('local', 'from init');
+            },
+            didInsertElement() {
+              inserted.push(this.element.querySelector('.arg').textContent);
+            },
+            actions: {
+              bump() {
+                this.incrementProperty('count');
+              },
+            },
+          })
+        );
+        let host;
+        this.owner.register(
+          'component:strict-host',
+          setComponentTemplate(
+            precompileTemplate('<Legacy @value={{this.value}} />', {
+              strictMode: true,
+              scope: () => ({ Legacy }),
+            }),
+            class extends Component {
+              value = 'a';
+              init() {
+                super.init(...arguments);
+                host = this;
+              }
+            }
+          )
+        );
+
+        this.render('{{strict-host}}');
+
+        this.assert.strictEqual(instances.length, 1, 'init runs');
+        this.assert.deepEqual(inserted, ['a'], 'didInsertElement fires');
+        let text = (selector) => this.element.querySelector(selector).textContent;
+        this.assert.strictEqual(text('.local'), 'from init', 'a property set in init renders');
+        this.assert.strictEqual(text('.arg'), 'a', 'the argument arrives');
+
+        runTask(() => set(host, 'value', 'b'));
+        this.assert.strictEqual(text('.arg'), 'b', 'the argument updates');
+        this.assert.strictEqual(instances[0].value, 'b', 'on the instance');
+
+        runTask(() => this.element.querySelector('button').click());
+        this.assert.strictEqual(text('button'), '1', 'the action runs on the instance');
+        this.assert.strictEqual(instances.length, 1, 'the same instance');
+      }
+
+      ['@test key="@index": the classic component of a kept row whose argument also changed fires each update hook once']() {
+        expectClassicComponentDeprecation();
+
+        this.owner.register(
+          'component:positional-list',
+          setComponentTemplate(
+            precompileTemplate(
+              '<ul>{{#each this.items key="@index" as |i|}}<li>{{yield i}}</li>{{/each}}</ul>'
+            ),
+            class extends Component {}
+          )
+        );
+        this.owner.register(
+          'component:glimmer-positional-list',
+          setComponentTemplate(
+            precompileTemplate(
+              '<ul>{{#each @items key="@index" as |i|}}<li>{{yield i}}</li>{{/each}}</ul>'
+            ),
+            class extends GlimmerComponent {}
+          )
+        );
+        let rows = [];
+        let record = (row, hook) => row.hooks.push(`${hook} ${row.item.name} ${row.label}`);
+        this.owner.register(
+          'component:item-row',
+          setComponentTemplate(
+            precompileTemplate('{{this.item.name}}{{this.label}}'),
+            class extends Component {
+              hooks = [];
+              init() {
+                super.init(...arguments);
+                rows.push(this);
+              }
+              didUpdateAttrs() {
+                record(this, 'didUpdateAttrs');
+              }
+              didReceiveAttrs() {
+                record(this, 'didReceiveAttrs');
+              }
+              willUpdate() {
+                record(this, 'willUpdate');
+              }
+              willRender() {
+                record(this, 'willRender');
+              }
+              didUpdate() {
+                record(this, 'didUpdate');
+              }
+              didRender() {
+                record(this, 'didRender');
+              }
+            }
+          )
+        );
+
+        let a = { name: 'a' };
+        let b = { name: 'b' };
+        this.render(
+          strip`
+          <div class="classic-list">{{#positional-list items=this.list as |item|}}{{item-row item=item label=this.label}}{{/positional-list}}</div>
+          <div class="glimmer-list"><GlimmerPositionalList @items={{this.list}} as |item|>{{item-row item=item label=this.label}}</GlimmerPositionalList></div>`,
+          { list: [a, b], label: 'l' }
+        );
+        let created = rows.slice();
+        this.assert.strictEqual(created.length, 4, 'a row component per row');
+        let rowsOf = (name) =>
+          Array.from(this.element.querySelectorAll(`.${name} li`)).map((li) =>
+            created.find((row) => li.contains(row.element))
+          );
+        for (let row of created) row.hooks = [];
+
+        runTask(() => {
+          set(this.context, 'label', 'x');
+          set(this.context, 'list', [b, a]);
+        });
+
+        this.assert.deepEqual(rows, created, 'the same instances');
+        let once = (name) => [
+          `didUpdateAttrs ${name} x`,
+          `didReceiveAttrs ${name} x`,
+          `willUpdate ${name} x`,
+          `willRender ${name} x`,
+          `didUpdate ${name} x`,
+          `didRender ${name} x`,
+        ];
+        for (let name of ['classic-list', 'glimmer-list']) {
+          this.assert.deepEqual(
+            rowsOf(name).map((row) => row.hooks),
+            [once('b'), once('a')],
+            `${name}: each update hook once, with the final arguments`
+          );
+          this.assert.deepEqual(
+            Array.from(this.element.querySelectorAll(`.${name} li`)).map((li) =>
+              li.textContent.trim()
+            ),
+            ['bx', 'ax'],
+            `${name}: the rows show the final arguments`
+          );
+        }
       }
 
       ['@test a helper arrow passed positionally to a component is the value']() {

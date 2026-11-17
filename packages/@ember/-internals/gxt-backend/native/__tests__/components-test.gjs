@@ -3,7 +3,7 @@
 // args, blocks, `...attributes`, control flow, per-invocation instances.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { setComponentTemplate } from '@ember/component';
+import ClassicComponent, { setComponentTemplate } from '@ember/component';
 import templateOnly from '@ember/component/template-only';
 import { set } from '@ember/object';
 import Service, { service } from '@ember/service';
@@ -14,6 +14,19 @@ const { module, test } = QUnit;
 
 module('gxt-native | components', function (hooks) {
   setupNativeRendering(hooks);
+
+  test('a classic @ember/component class in scope throws the documented drop', function (assert) {
+    // The native build has no classic components: a co-located classic
+    // component a `.gjs` imports must not render its template alone, as if it
+    // were template-only.
+    const DROP = /Classic `@ember\/component` Component is not supported by the gxt-native build/;
+    assert.throws(() => ClassicComponent.extend({}), DROP, 'Component.extend');
+    class Legacy extends ClassicComponent {}
+    setComponentTemplate(<template><p class="legacy">legacy</p></template>, Legacy);
+    const Root = <template><Legacy /></template>;
+    assert.throws(() => this.render(Root), DROP, 'a class in scope');
+    assert.strictEqual(this.element.querySelector('.legacy'), null, 'nothing rendered');
+  });
 
   test('template-only component (gxt template function) renders with @args', function (assert) {
     const Greeting = <template><p class="greeting">Hello, {{@name}}!</p></template>;
