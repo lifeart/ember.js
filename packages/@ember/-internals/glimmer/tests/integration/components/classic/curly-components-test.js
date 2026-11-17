@@ -1992,16 +1992,23 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
             }
           )
         );
-        let parentTemplate =
-          '{{#positional-list items=@list as |item|}}{{item-row item=item}}{{/positional-list}}';
+        // (The template is spelled out in each call: precompileTemplate takes a
+        // string literal.)
         this.owner.register(
           'component:classic-parent',
-          setComponentTemplate(precompileTemplate(parentTemplate), class extends Component {})
+          setComponentTemplate(
+            precompileTemplate(
+              '{{#positional-list items=@list as |item|}}{{item-row item=item}}{{/positional-list}}'
+            ),
+            class extends Component {}
+          )
         );
         this.owner.register(
           'component:glimmer-parent',
           setComponentTemplate(
-            precompileTemplate(parentTemplate),
+            precompileTemplate(
+              '{{#positional-list items=@list as |item|}}{{item-row item=item}}{{/positional-list}}'
+            ),
             class extends GlimmerComponent {}
           )
         );
