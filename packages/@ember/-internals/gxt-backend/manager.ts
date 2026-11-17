@@ -8111,13 +8111,16 @@ function _helperPositionalArgs(params: any): any[] {
   return Array.isArray(params) ? params.map(_unwrapHelperArg) : [];
 }
 
-// Named helper args without GXT's internal keys (`$_…`, `hash`), unwrapped.
+// Named helper args without GXT's internal keys (`$_…`, `hash`), unwrapped:
+// gxt's compiler brands the getter it emits for a named argument
+// (`$_argThunk`), and only such a getter is read; any other function — a
+// `(fn)` result, an action — is the argument's value, passed as it is.
 function _helperNamedArgs(hash: any): Record<string, any> {
   return hash && typeof hash === 'object'
     ? Object.fromEntries(
         Object.entries(hash)
           .filter(([k]) => !(k.startsWith('$_') || k === 'hash'))
-          .map(([k, v]: [string, any]) => [k, _unwrapHelperArg(v)])
+          .map(([k, v]: [string, any]) => [k, _gxtIsArgThunk(v) ? v() : v])
       )
     : {};
 }

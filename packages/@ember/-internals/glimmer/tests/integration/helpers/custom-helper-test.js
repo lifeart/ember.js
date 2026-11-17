@@ -16,6 +16,57 @@ import { setComponentTemplate } from '@glimmer/manager';
 moduleFor(
   'Helpers test: custom helpers',
   class extends RenderingTestCase {
+    ['@test a class helper and a function helper get `(fn)` results and actions passed as named arguments as they are'](
+      assert
+    ) {
+      let received = {};
+      let calls = [];
+      this.registerHelper('class-helper', {
+        compute(_positional, named) {
+          received.classSave = named.save;
+          received.classAction = named.action;
+          return 'class';
+        },
+      });
+      this.registerHelper('function-helper', (_positional, named) => {
+        received.functionSave = named.save;
+        received.functionAction = named.action;
+        return 'function';
+      });
+
+      this.render(
+        `{{class-helper save=(fn this.save 1) action=this.act}} {{function-helper save=(fn this.save 2) action=this.act}}`,
+        {
+          save: (n) => calls.push(`save ${n}`),
+          act: () => calls.push('act'),
+        }
+      );
+
+      this.assertText('class function');
+      assert.deepEqual(calls, [], 'nothing is called when the helpers render');
+      assert.strictEqual(typeof received.classSave, 'function', 'the class helper gets the (fn)');
+      assert.strictEqual(
+        typeof received.functionSave,
+        'function',
+        'the function helper gets the (fn)'
+      );
+      assert.strictEqual(
+        received.classAction,
+        this.context.act,
+        'the class helper gets the action'
+      );
+      assert.strictEqual(
+        received.functionAction,
+        this.context.act,
+        'the function helper gets the action'
+      );
+
+      received.classSave();
+      received.functionSave();
+      received.classAction();
+      assert.deepEqual(calls, ['save 1', 'save 2', 'act'], 'and calls them when it likes');
+    }
+
     ['@test it cannot override built-in syntax']() {
       this.registerHelper('array', () => 'Nope');
       expectAssertion(() => {

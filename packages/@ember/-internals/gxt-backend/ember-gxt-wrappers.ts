@@ -9,7 +9,7 @@
  */
 
 import * as gxtModule from '@lifeart/gxt';
-import { $PROPS_SYMBOL, $SLOTS_SYMBOL } from '@lifeart/gxt';
+import { $PROPS_SYMBOL, $SLOTS_SYMBOL, isArgThunk } from '@lifeart/gxt';
 import { DEBUG } from '@glimmer/env';
 
 // Typed bridge populated by manager.ts at its module init (e.g. the
@@ -132,10 +132,13 @@ function unwrapHash(hash: Record<string, any>): Record<string, any> {
   return result;
 }
 
-// The value of a named argument of a helper call.
+// The value of a named argument of a helper call. gxt's compiler brands the
+// getter it emits for a named argument (`$_argThunk`): only such a getter is
+// read. Any other function is the argument's value — a `(fn)` result, an
+// action, a curried component — and is passed on as it is, as Glimmer passes
+// it (calling it here invoked the user's function at render).
 function resolveNamedArg(val: any): any {
-  // Don't call CurriedComponent functions - they should be preserved as-is
-  let resolved = typeof val === 'function' && !val.__isCurriedComponent ? val() : val;
+  let resolved = isArgThunk(val) ? val() : val;
   // Resolve the extra `$__cached` level for a `(hash)`/`(array)` named arg
   // (see resolveGxtArg).
   let guard = 0;
