@@ -27,17 +27,19 @@ const argSources = new WeakMap<object, Map<string, GxtArgSource | null>>();
 
 /**
  * Record the source of the argument `key` of `args`, whose value is `value` as
- * the invocation passed it. A value gxt's compiler did not brand tells
- * nothing: its argument's source is left to the manager's guess.
+ * the invocation passed it. A value gxt's compiler gave no source (not one of
+ * its component argument getters) tells nothing: its argument's source is left
+ * to the manager's guess.
  */
 export function recordArgSource(args: object, key: string, value: unknown): void {
   if (!gxtIsArgThunk(value)) return;
+  const source = gxtArgSource(value);
+  if (source === undefined) return;
   let sources = argSources.get(args);
   if (sources === undefined) {
     sources = new Map();
     argSources.set(args, sources);
   }
-  const source = gxtArgSource(value);
   sources.set(key, source === null ? null : { parent: source[0], key: source[1] });
 }
 
@@ -52,13 +54,11 @@ export function shareArgSources(target: object, args: object): void {
 
 /**
  * The source of the argument `key` of `args`: `undefined` when gxt's compiler
- * told nothing for `args` (the manager guesses), `null` when the argument is
+ * told nothing about it (the manager guesses), `null` when the argument is
  * not writable, else where a write of it goes.
  */
 export function compiledArgSource(args: object, key: string): GxtArgSource | null | undefined {
-  const sources = argSources.get(args);
-  if (sources === undefined) return undefined;
-  return sources.get(key) ?? null;
+  return argSources.get(args)?.get(key);
 }
 
 /**
@@ -77,6 +77,8 @@ export function resolveArgWrite(source: GxtArgSource): readonly [object, string]
       return null;
     }
     if (!key.startsWith('@')) return [parent, key];
+    // The caller's argument: not writable, or nothing known about it (an
+    // argument the compiler gave no source): nothing is written.
     const outer = argSources.get(parent)?.get(key.slice(1));
     if (outer === undefined || outer === null) return null;
     parent = outer.parent();
