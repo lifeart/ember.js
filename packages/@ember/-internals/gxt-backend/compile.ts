@@ -6391,6 +6391,23 @@ function wrapEachItemForTracking(item: any, rebindPossible: boolean = false): an
   return proxy;
 }
 
+// The item of a row keyed by position (`key="@index"`): gxt builds the row
+// with a reference to its item, whose `value` is the item now at the row's
+// position, and the compiled row body reads the item through `.value`. The row
+// reads that item through its body proxy (`wrapEachItemForTracking`), as a row
+// keyed otherwise reads its item; reading `value` reads gxt's reference, so a
+// binding that read the item re-renders when gxt points the reference at
+// another item.
+class GxtEachItemReference {
+  readonly ref: { readonly value: unknown };
+  constructor(ref: { readonly value: unknown }) {
+    this.ref = ref;
+  }
+  get value(): unknown {
+    return wrapEachItemForTracking(this.ref.value);
+  }
+}
+
 // Nested-object tracking for each-body sub-paths.
 // `wrapEachItemForTracking` subscribes the immediate `item.<prop>` read; this
 // recursively wraps the RETURNED value so a deeper read (`item.v.reports.x`)
@@ -6852,30 +6869,30 @@ function patchGlobalEachSync() {
     // `hasIndex` makes the list build a reactive index MergedCell whose formula
     // re-locates the item in the current source array on every revalidation.
     //
-    // `key="@index"` keys the rows by identity, as up to gxt 0.0.86, whose
-    // compiler emitted `'@identity'` for it. gxt 0.0.87 keys them by position:
-    // a row stays where it is and the `rebindEachItem` host hook is told that
-    // it now stands for another item. But a row's block param is the item it
-    // was built with, and only an object item, read through its body proxy
-    // (`wrapEachItemForTracking`), can be pointed at another one; an array, a
-    // collection or a primitive cannot, so its row went on rendering the old
-    // item (an inner `{{#each}}` over it kept iterating the old list).
-    if (key === '@index') key = '@identity';
+    // `key="@index"` (and `key="@key"`, which gxt's compiler emits as
+    // `'@index'`) keys a row by its position. gxt builds such a row with a
+    // REFERENCE to its item, `ref.value` being the item now at the row's
+    // position, and points it at the next item itself when the row is kept for
+    // another one — whatever the item is (an object, an array an inner
+    // `{{#each}}` iterates, a primitive); the `rebindEachItem` host hook is not
+    // called for such a row. The row body reads the item through `.value`
+    // (`GxtEachItemReference` below).
+    const _positional = key === '@index';
     //
     // Determine whether this list's keying can ever STALE a key and rebind a
     // reused row to a NEW object ref (the `rebindEachItem` host hook).
     // glimmer-next's compiler emits `key` as: `null` (no `key=`), `'@identity'`
-    // (explicit identity), or `'@index'` (made `'@identity'` above) → ALL of
-    // these key by object identity (a stable WeakMap), so a given key can NEVER
-    // bind to a different ref → rebind is impossible → the per-row `__gxtRev`
-    // cell is dead weight. Only an EXPLICIT property/function `key=` (e.g.
-    // `key="id"`) can stale a key (in-place mutate the keyed prop, then a
-    // ref-swap reuses the row by the stale key) → rebind possible → KEEP the
-    // rev cell. An each-in is keyed by its entries' `key` (`key="key"`): a kept
-    // row is rebound to the new entry object. So: rebindPossible = key is
-    // non-null and non-identity.
+    // (explicit identity), `'@index'` (positional, above) or a property name.
+    // Identity keys key by object identity (a stable WeakMap), so a given key
+    // can NEVER bind to a different ref → rebind is impossible → the per-row
+    // `__gxtRev` cell is dead weight; a positional row never hears of the hook.
+    // Only an EXPLICIT property/function `key=` (e.g. `key="id"`) can stale a
+    // key (in-place mutate the keyed prop, then a ref-swap reuses the row by
+    // the stale key) → rebind possible → KEEP the rev cell. An each-in is keyed
+    // by its entries' `key` (`key="key"`): a kept row is rebound to the new
+    // entry object. So: rebindPossible = key is a property name.
     const _keyIsIdentity = key === null || key === undefined || key === '' || key === '@identity';
-    const _rebindPossible = !_keyIsIdentity;
+    const _rebindPossible = !_keyIsIdentity && !_positional;
     // Capture the parent Ember component instance at the time $_eachSync is
     // called from the template body. `ctx` is the GXT render context (which
     // proxies the Ember component instance) — unwrap via __gxtRawTarget.
@@ -6983,7 +7000,9 @@ function patchGlobalEachSync() {
       // Wrap the item so `{{item.<prop>}}` reads in the body tap
       // `cellFor(rawItem, <prop>)` and the GXT formula becomes reactive
       // (otherwise it's isConst → torn down → text never updates).
-      const bodyItem = wrapEachItemForTracking(item, _rebindPossible);
+      const bodyItem = _positional
+        ? new GxtEachItemReference(item)
+        : wrapEachItemForTracking(item, _rebindPossible);
       // `ctx0` IS the row's gxt rowCtx (the `bodyCtx` gxt threads through
       // `buildRow`), the same object `onRowContextCreated` saw. Mark it current
       // for the duration of the row's synchronous body render so every Ember

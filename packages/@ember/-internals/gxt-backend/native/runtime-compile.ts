@@ -65,19 +65,6 @@ type Evaluator = (
 const RUNTIME = gxtRuntime as unknown as Record<string, unknown>;
 const runtimeValuesCache = new Map<string, readonly unknown[]>();
 
-// `{{#each … key="@index"}}` keys its rows by identity, as up to gxt 0.0.86,
-// whose compiler emitted `"@identity"` for it. gxt 0.0.87 keys them by
-// position: a row stays where it is and only the `rebindEachItem` host hook
-// hears that it now stands for another item. A row's block param is the item
-// it was built with, and nothing here can point it at another one, so the row
-// went on rendering the old item (an inner `{{#each}}` over it kept iterating
-// the old list).
-const gxtEachSync = gxtRuntime.$_eachSync as unknown as (...args: unknown[]) => unknown;
-function eachSync(items: unknown, fn: unknown, key: unknown, ...rest: unknown[]): unknown {
-  return gxtEachSync(items, fn, key === '@index' ? '@identity' : key, ...rest);
-}
-const RUNTIME_OVERRIDES: Record<string, unknown> = { $_eachSync: eachSync };
-
 function runtimeValues(names: readonly string[]): readonly unknown[] {
   const key = names.join(',');
   let values = runtimeValuesCache.get(key);
@@ -88,11 +75,7 @@ function runtimeValues(names: readonly string[]): readonly unknown[] {
         `native runtime compile: @lifeart/gxt does not export ${missing.join(', ')} (a symbol the gxt compiler emits under NATIVE_FLAGS)`
       );
     }
-    values = names.map((name) =>
-      Object.prototype.hasOwnProperty.call(RUNTIME_OVERRIDES, name)
-        ? RUNTIME_OVERRIDES[name]
-        : RUNTIME[name]
-    );
+    values = names.map((name) => RUNTIME[name]);
     runtimeValuesCache.set(key, values);
   }
   return values;
