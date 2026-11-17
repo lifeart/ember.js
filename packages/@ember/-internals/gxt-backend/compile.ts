@@ -523,7 +523,7 @@ import {
   stringDefinitionError,
 } from './ember-gxt-wrappers';
 import { defineEmberMountElement } from './mount-element';
-import { recordArgSource } from './arg-sources';
+import { inheritArgSources, recordArgSource } from './arg-sources';
 // A block param that follows a list row's item (`__componentThunk`).
 import { gxtIsItemSlotParam as _gxtIsItemSlotParam } from './gxt-next-exports';
 // Also installs the route-outlet hooks route.ts / router.ts call (gxt-bridge).
@@ -730,6 +730,9 @@ function copyOwnNamedArgs(args: any, namedArgs: any, unwrap: NamedArgUnwrap): vo
       Object.defineProperty(namedArgs, key, desc);
     }
   }
+  // Its arguments write where those of `args` do (a two-way write through
+  // `@x` of the template that reads `namedArgs`, arg-sources.ts).
+  inheritArgSources(namedArgs, args);
 }
 
 // A plain arrow/getter function standing for an argument value: the compiler's

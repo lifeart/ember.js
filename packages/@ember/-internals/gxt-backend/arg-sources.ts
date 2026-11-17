@@ -81,6 +81,26 @@ export function shareArgSources(target: object, args: object): void {
 }
 
 /**
+ * `target` was built from the arguments of `args` (the host copies an
+ * invocation's args object into its own, reading the arguments through
+ * getters): an argument of `args` it has no source for writes where that of
+ * `args` does.
+ */
+export function inheritArgSources(target: object, args: object): void {
+  if (target === args) return;
+  const sources = sourcesOf(args);
+  if (sources === undefined) return;
+  const own = argSources.get(target);
+  if (own === undefined) {
+    argSources.set(target, new Map(sources));
+    return;
+  }
+  sources.forEach((source, key) => {
+    if (!own.has(key)) own.set(key, source);
+  });
+}
+
+/**
  * The source of the argument `key` of `args`: `undefined` when gxt's compiler
  * told nothing about it (the manager guesses), `null` when the argument is
  * not writable, else where a write of it goes.
