@@ -58,7 +58,7 @@ import {
   getViewId,
 } from '@ember/-internals/views/lib/system/utils';
 import { sendCoreViewEvent } from '@ember/-internals/views/lib/views/core-view-utils';
-import { getOwner as _glimmerGetOwner } from '@glimmer/owner';
+import { getOwner as _glimmerGetOwner, setOwner as _glimmerSetOwner } from '@glimmer/owner';
 import { _getCurrentRunLoop, join, scheduleOnce } from '@ember/runloop';
 
 import { CustomHelperManager, FunctionHelperManager, FROM_CAPABILITIES } from './helper-manager';
@@ -9127,15 +9127,35 @@ const $_MANAGERS = {
         return _renderElementHelperDefinition(komp, args, fw, ctx);
       }
 
-      // Handle component with internal/custom manager (walk prototype chain)
+      // The definition's manager, found as Glimmer's `getInternalComponentManager`
+      // finds it: the definition's own, else the nearest one up its prototype
+      // chain — for a class, its base classes'.
       let manager = INTERNAL_MANAGERS.get(komp) || COMPONENT_MANAGERS.get(komp);
-      if (!manager && komp !== null && komp !== undefined && typeof komp === 'object') {
+      if (
+        !manager &&
+        komp !== null &&
+        komp !== undefined &&
+        (typeof komp === 'object' || typeof komp === 'function')
+      ) {
         let proto = Object.getPrototypeOf(komp);
-        while (proto && proto !== Object.prototype) {
+        while (proto && proto !== Object.prototype && proto !== Function.prototype) {
           manager = INTERNAL_MANAGERS.get(proto) || COMPONENT_MANAGERS.get(proto);
           if (manager) break;
           proto = Object.getPrototypeOf(proto);
         }
+      }
+      // A classic `@ember/component` class invoked as a value — from a strict
+      // template's scope (a co-located classic component a `.gjs` imports):
+      // the curly manager its base class registered makes it a classic
+      // component, with its instance, lifecycle and actions, as when invoked by
+      // name (not its template rendered alone, as a template-only one).
+      if (typeof komp === 'function' && komp.isViewFactory === true) {
+        if (!__GXT_CLASSIC_COMPONENTS__) {
+          throw new Error(
+            '[gxt] classic @ember/component requires the classic-components build (this is a native GXT build; the @ember/component emulation was DCE-stripped)'
+          );
+        }
+        return handleClassicComponent(_lexicalClassicFactory(komp, owner), args, fw, ctx, owner);
       }
       if (manager) {
         // Template-only components have an internal manager without a create() method.
@@ -13142,6 +13162,20 @@ function handleManagedComponent(
 /**
  * Handle a classic factory-based component.
  */
+// The factory of a classic component class invoked as a value (it is not
+// registered, so no `factoryFor` made one): it creates the instance with the
+// rendering owner, as Glimmer's curly manager creates it with the owner of the
+// template it renders in. (Instances are pooled by the class, not the factory.)
+function _lexicalClassicFactory(klass: any, owner: any): ComponentFactory {
+  return {
+    class: klass,
+    create(props: any) {
+      if (owner) _glimmerSetOwner(props, owner);
+      return klass.create(props);
+    },
+  };
+}
+
 function handleClassicComponent(factory: any, args: any, fw: any, ctx: any, owner: any): () => any {
   // Same parentView fallback as handleStringComponent.
   const _resolveParentViewFromCtx = (c: any): any => {
