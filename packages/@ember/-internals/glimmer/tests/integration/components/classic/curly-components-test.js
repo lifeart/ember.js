@@ -1983,6 +1983,12 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
               didUpdateAttrs() {
                 this.hooks.push(`didUpdateAttrs ${this.item.name}`);
               }
+              willUpdate() {
+                this.hooks.push(`willUpdate ${this.item.name}`);
+              }
+              didUpdate() {
+                this.hooks.push(`didUpdate ${this.item.name}`);
+              }
             }
           )
         );
@@ -2039,10 +2045,10 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
           this.assert.deepEqual(
             rowsOf(name).map((row) => [row.item.name, ...row.hooks]),
             [
-              ['b', 'didUpdateAttrs b', 'didReceiveAttrs b'],
-              ['a', 'didUpdateAttrs a', 'didReceiveAttrs a'],
+              ['b', 'didUpdateAttrs b', 'didReceiveAttrs b', 'willUpdate b', 'didUpdate b'],
+              ['a', 'didUpdateAttrs a', 'didReceiveAttrs a', 'willUpdate a', 'didUpdate a'],
             ],
-            `${name}: this.item is the new item; didUpdateAttrs and didReceiveAttrs once each`
+            `${name}: this.item is the new item; its update hooks once each`
           );
         }
       }
