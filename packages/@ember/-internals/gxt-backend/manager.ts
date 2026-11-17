@@ -129,6 +129,7 @@ import {
   // and the brand of an argument getter that object invokes when it is read.
   $_args as _gxtArgs,
   $_argThunk as _gxtArgThunk,
+  isArgThunk as _gxtIsArgThunk,
   // gxt's component invocation, its template-function preamble and slot
   // rendering, the instance-field key of a class-body `<template>`, and the
   // destructors gxt runs when it tears a render-tree node down.
@@ -11607,7 +11608,21 @@ function buildCustomManagedArgs(args: any) {
       if (key.startsWith('__') || key.startsWith('$') || key === 'class') continue;
       const desc = Object.getOwnPropertyDescriptor(args, key);
       const getter = desc?.get;
-      const value = getter ? getter() : args[key];
+      if (getter) {
+        // A getter of the args object reads the argument (gxt's `$_args`, the
+        // by-name invocation's args): what it returns is the argument's value,
+        // a function included (an action, a bound method), which is passed on
+        // as it is, never called. Only a getter gxt branded as one
+        // (`$_argThunk`) is read once more.
+        const read = () => {
+          const v = getter();
+          return argumentValue(_gxtIsArgThunk(v) ? v() : v);
+        };
+        namedArgs[key] = read();
+        argGetters[key] = read;
+        continue;
+      }
+      const value = args[key];
       if (
         typeof value === 'function' &&
         !value.prototype &&
@@ -11618,12 +11633,6 @@ function buildCustomManagedArgs(args: any) {
         argGetters[key] = () => argumentValue(value());
       } else {
         namedArgs[key] = argumentValue(value);
-        if (getter) {
-          argGetters[key] = () => {
-            const v = getter();
-            return argumentValue(typeof v === 'function' && !v.prototype ? v() : v);
-          };
-        }
       }
     }
   }
