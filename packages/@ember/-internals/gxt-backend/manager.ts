@@ -62,6 +62,7 @@ import { getOwner as _glimmerGetOwner } from '@glimmer/owner';
 import { _getCurrentRunLoop, join, scheduleOnce } from '@ember/runloop';
 
 import { CustomHelperManager, FunctionHelperManager, FROM_CAPABILITIES } from './helper-manager';
+import { compiledArgSource, resolveArgWrite, shareArgSources } from './arg-sources';
 import {
   gxtCaptureDebugNodes,
   gxtCreateDebugNode,
@@ -314,7 +315,7 @@ export function peekInstanceCapture(): any {
 const _gxtDestroyModifierDestroyable = _destroySyncNow;
 
 // PROPERTY_DID_CHANGE symbol — imported lazily to avoid circular dependency
-import { PROPERTY_DID_CHANGE, TrackedDescriptor } from '@ember/-internals/metal';
+import { PROPERTY_DID_CHANGE, TrackedDescriptor, set as _emberSet } from '@ember/-internals/metal';
 import { peekMeta } from '@ember/-internals/meta';
 import { _instrumentStart as _gxtInstrumentStart } from '@ember/instrumentation';
 export { CustomHelperManager, FunctionHelperManager, FROM_CAPABILITIES } from './helper-manager';
@@ -1953,6 +1954,10 @@ function registerInViewRegistry(instance: any): void {
   viewRegistry[viewId] = instance;
 }
 
+// The args object a classic component instance was last given, whose
+// arguments' sources its two-way bindings write to (createComponentInstance).
+const _gxtSourceArgs = new WeakMap<object, object>();
+
 /**
  * Create a new component instance with processed args.
  */
@@ -2315,10 +2320,64 @@ function createComponentInstance(
   if (__GXT_CLASSIC_COMPONENTS__) {
     const argKeySet = new Set(Object.keys(argGetters));
     if (argKeySet.size > 0 && instance) {
-      // Detect two-way binding sources by calling each arg getter with tracking enabled
-      const twoWayBindings: Record<string, { sourceCtx: any; sourceKey: string }> = {};
+      // Where a write of each argument goes. gxt's compiler gives the getter of
+      // a path argument its source (arg-sources.ts), as Glimmer's reference
+      // for the path writes: the binding reads it when the write happens, from
+      // the args object the instance was last given. An argument the compiler
+      // emitted without a source (a literal, a helper's result, a block param
+      // itself) is not writable (`notWritableKeys`): nothing is written
+      // upstream. Only an args object gxt's compiler told nothing about (built
+      // elsewhere, or a lexically invoked component's gxt args) falls back to
+      // the guesses below.
+      _gxtSourceArgs.set(instance, args);
+      const twoWayBindings: Record<string, { sourceCtx: any; sourceKey: string | null }> = {};
+      const notWritableKeys = new Set<string>();
+      const compiledKeys = new Set<string>();
+      const writeOf = (key: string): readonly [object, string] | null => {
+        const source = compiledArgSource(_gxtSourceArgs.get(instance) ?? args, key);
+        return source ? resolveArgWrite(source) : null;
+      };
+      // Write `value` where the argument `key` writes (`set`, as Glimmer's
+      // reference for the path does); false when it is not writable now (its
+      // source's parent is no object).
+      const writeCompiled = (key: string, value: unknown): boolean => {
+        const write = writeOf(key);
+        if (write === null) return true;
+        const target = (write[0] as any).__gxtRawTarget || write[0];
+        // Skip a stale re-read of a computed argument a deferred observer flush
+        // replays after the source moved on (see the guard of the guessed
+        // binding below).
+        const dispatched: Record<string, unknown> | undefined = (instance as any)
+          .__gxtCpArgDispatched;
+        if (dispatched && key in dispatched) {
+          const lastDispatched = dispatched[key];
+          if (value === lastDispatched && target[write[1]] !== lastDispatched) return true;
+        }
+        _emberSet(target, write[1], value);
+        getGxtRenderer()?.compilePipeline.triggerReRender?.(target, write[1]);
+        return true;
+      };
       for (const key of argKeySet) {
         if (key === 'id' || key === 'elementId') continue;
+        const compiledSource = compiledArgSource(args, key);
+        if (compiledSource === null) {
+          notWritableKeys.add(key);
+          continue;
+        }
+        if (compiledSource !== undefined) {
+          compiledKeys.add(key);
+          twoWayBindings[key] = {
+            get sourceCtx() {
+              const write = writeOf(key);
+              return write === null ? null : write[0];
+            },
+            get sourceKey() {
+              const write = writeOf(key);
+              return write === null ? null : write[1];
+            },
+          };
+          continue;
+        }
         const argGetter = argGetters[key]!;
         // Try proxy-based tracking first (works when parent has a proxy render context)
         // Clear the source slots to `null` before invoking the getter; the
@@ -2479,6 +2538,11 @@ function createComponentInstance(
                     }
                   }
 
+                  // Not writable (see `notWritableKeys`): nothing upstream.
+                  if (notWritableKeys.has(argKey)) continue;
+                  // A source gxt's compiler gave (`writeCompiled`).
+                  if (compiledKeys.has(argKey) && writeCompiled(argKey, cpValue)) continue;
+
                   // 2) Detected two-way binding source
                   const binding2 = twoWayBindings[argKey];
                   if (binding2?.sourceCtx && binding2?.sourceKey) {
@@ -2524,6 +2588,15 @@ function createComponentInstance(
             }
             return;
           }
+        }
+
+        // Not writable (see `notWritableKeys`): nothing upstream, as Glimmer
+        // does not update a reference that is not updatable.
+        if (notWritableKeys.has(key)) return;
+        // A source gxt's compiler gave: write there (`writeCompiled`).
+        if (compiledKeys.has(key)) {
+          writeCompiled(key, resolvedValue);
+          return;
         }
 
         // Try detected binding first
@@ -2694,6 +2767,11 @@ function _gxtNewRenderPass(): void {
  */
 function updateInstanceWithNewArgs(instance: any, args: any): boolean {
   if (!instance || !args) return false;
+  // A two-way bound argument writes where the instance's current args say
+  // (createComponentInstance).
+  if (__GXT_CLASSIC_COMPONENTS__ && _gxtSourceArgs.has(instance)) {
+    _gxtSourceArgs.set(instance, args);
+  }
 
   const argGetters = instance.__argGetters;
   const lastArgValues = instance.__lastArgValues;
@@ -6713,6 +6791,11 @@ function createRenderContext(instance: any, args: any, fw: any, _owner: any): an
   }
   // gxt reads `@foo` as `this['args'].foo` (its `$args` key).
   renderContext[$ARGS_KEY] = attrsProxy;
+  // A component argument `@foo` of the template writes where `args.foo` does
+  // (arg-sources.ts).
+  if (__GXT_CLASSIC_COMPONENTS__ && args && typeof args === 'object') {
+    shareArgSources(attrsProxy, args);
+  }
 
   if (instance) {
     // Always set attrs to the Ember-style object (with .value/.update() or plain values)

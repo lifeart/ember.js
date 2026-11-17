@@ -525,6 +525,7 @@ import {
   stringDefinitionError,
 } from './ember-gxt-wrappers';
 import { defineEmberMountElement } from './mount-element';
+import { recordArgSource } from './arg-sources';
 // Also installs the route-outlet hooks route.ts / router.ts call (gxt-bridge).
 import { defineEmberOutletElement } from './outlet';
 // Installs the glimmer host that glimmer's renderer modules call (gxt-bridge).
@@ -790,6 +791,7 @@ function namedArgsFromTagProps(tagProps: any): any {
           enumerable: true,
           configurable: true,
         });
+        recordArgSource(namedArgs, key, val);
       } else {
         namedArgs[key] = val;
       }
@@ -9758,6 +9760,9 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
                     enumerable: true,
                     configurable: true,
                   });
+                  // Where a write of the argument goes, as gxt's compiler emitted it
+                  // (arg-sources.ts; a classic component's two-way binding).
+                  recordArgSource(namedArgs, argName, value);
                 } else {
                   fwAttrs.push([key, value]);
                 }
@@ -9862,6 +9867,9 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
                     enumerable: true,
                     configurable: true,
                   });
+                  // Where a write of the argument goes, as gxt's compiler emitted it
+                  // (arg-sources.ts; a classic component's two-way binding).
+                  recordArgSource(dynArgs, argName, value);
                 }
               }
             }
@@ -10557,6 +10565,9 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
                     enumerable: true,
                     configurable: true,
                   });
+                  // Where a write of the argument goes, as gxt's compiler emitted it
+                  // (arg-sources.ts; a classic component's two-way binding).
+                  recordArgSource(args, argName, value);
                 } else {
                   // HTML attribute (like data-test, title): forwarded through
                   // ...attributes (fw[1]) only. As in Glimmer, an attribute is

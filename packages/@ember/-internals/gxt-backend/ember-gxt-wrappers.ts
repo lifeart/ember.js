@@ -40,6 +40,7 @@ import {
   type GxtArgLabels,
 } from './utils';
 import { GXT_ANGLE_BRACKET_KEY, GXT_HELPER_SITE_KEY } from './ast-transforms';
+import { recordArgSource } from './arg-sources';
 import { gxtDebugParent, gxtWithDebugParent, gxtRecordLexicalNames } from './debug-render-tree';
 import {
   destroy as destroyDestroyable,
@@ -1613,6 +1614,9 @@ function createEmberTag(original: Function) {
                   enumerable: true,
                   configurable: true,
                 });
+                // Where a write of the argument goes, as gxt's compiler emitted it
+                // (arg-sources.ts; a classic component's two-way binding).
+                recordArgSource(args, argName, value);
               } else {
                 // An attribute is forwarded through ...attributes only; as in
                 // Glimmer, it is never an argument.
