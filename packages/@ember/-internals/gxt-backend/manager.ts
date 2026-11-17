@@ -4112,11 +4112,49 @@ interface TrackedArgEntry {
       // The key is a tracked property of the instance: the sync leaves
       // `instance[key]` alone.
       skipInstanceAssign?: boolean;
+      // While the component holds a local value for the key: the gxt cells
+      // the argument's getter read on the last sync, with their revisions
+      // (`_readArgWithDeps`).
+      overrideDeps?: Map<any, number>;
     }
   >;
   instance?: any; // component instance for lifecycle hooks
 }
 const trackedArgCells = new Set<TrackedArgEntry>();
+
+// Reads an argument's getter in a tracking frame of its own: its value, the
+// gxt cells it read with their revisions, and whether one of `previous` (the
+// cells of the last read, with their revisions then) changed since — the
+// argument's reference was updated, whatever value it reads now. The cells
+// also go to the enclosing tracking frame, if any.
+function _readArgWithDeps(
+  getter: () => any,
+  previous: Map<any, number> | undefined
+): { value: any; deps: Map<any, number>; updated: boolean } {
+  const outer = _gxtGetTracker() as Set<any> | null;
+  const frame = new Set<any>();
+  _gxtSetTracker(frame);
+  let value: any;
+  try {
+    value = getter();
+  } finally {
+    _gxtSetTracker(outer);
+  }
+  // forEach, not for…of: gxt's reactive Map/Set iterator patch would register
+  // this bookkeeping with a reading formula.
+  const deps = new Map<any, number>();
+  frame.forEach((cell: any) => {
+    deps.set(cell, cell._revision);
+    if (outer !== null) outer.add(cell);
+  });
+  let updated = false;
+  if (previous !== undefined) {
+    previous.forEach((revision, cell) => {
+      if (cell._revision !== revision) updated = true;
+    });
+  }
+  return { value, deps, updated };
+}
 
 // Direct sync callbacks for internal components (Input, Textarea).
 // These are called from `_gxtSyncAllWrappers` to directly update DOM elements
@@ -4673,7 +4711,25 @@ function _gxtSyncAllWrappersBody(): void {
     for (const key of Object.keys(entry.cells)) {
       const cellEntry = entry.cells[key]!;
       const { cell, getter, extraCell, initOverridden } = cellEntry;
-      const newValue = getter();
+      // A key the component set locally (`incrementProperty`, `this.set`):
+      // Glimmer's curly manager sets every argument on the component again
+      // whenever the arguments' references are updated, also to an unchanged
+      // value, so the local value gives way to the argument then. The getter is
+      // read with its dependencies to tell whether its reference was updated
+      // since the last sync.
+      const isLocallyOverridden =
+        !initOverridden && entry.instance?.__gxtLocalOverrides?.has(key) === true;
+      let newValue: any;
+      let referenceUpdated = false;
+      if (isLocallyOverridden) {
+        const read = _readArgWithDeps(getter, cellEntry.overrideDeps);
+        newValue = read.value;
+        referenceUpdated = read.updated;
+        cellEntry.overrideDeps = read.deps;
+      } else {
+        newValue = getter();
+        if (cellEntry.overrideDeps !== undefined) cellEntry.overrideDeps = undefined;
+      }
       // Detect same-reference arg whose internals were mutated this cycle.
       if (newValue && typeof newValue === 'object' && _dirtiedNestedObjectsForHooks.has(newValue)) {
         hasNestedArgMutation = true;
@@ -4734,8 +4790,8 @@ function _gxtSyncAllWrappersBody(): void {
         const argActuallyChanged = lastKnownArg !== newValue;
         cellEntry.lastArgValue = newValue;
 
-        // Skip cell update if the key is locally overridden and the arg hasn't actually changed from parent
-        const isLocallyOverridden = entry.instance?.__gxtLocalOverrides?.has(key);
+        // Skip cell update if the key is locally overridden and neither the
+        // arg value nor its reference changed from the parent (see above).
         // Also skip when a locally-overridden arg transitions to undefined
         // while the last known arg value was defined. This protects against
         // GXT reactive getters that temporarily return undefined during
@@ -4745,10 +4801,11 @@ function _gxtSyncAllWrappersBody(): void {
         // with undefined, cascading incorrect values to child components.
         if (
           isLocallyOverridden &&
-          (!argActuallyChanged || (newValue === undefined && lastKnownArg !== undefined))
+          ((!argActuallyChanged && !referenceUpdated) ||
+            (newValue === undefined && lastKnownArg !== undefined))
         ) {
-          // Local override is in effect and arg hasn't changed (or getter returned stale undefined) — skip
-        } else if (argActuallyChanged) {
+          // Local override is in effect and the arg is unchanged (or the getter returned stale undefined) — skip
+        } else if (argActuallyChanged || referenceUpdated) {
           // Gate cell updates on whether the ARG value actually changed
           // (tracked via cellEntry.lastArgValue), not on `cell.__value`.
           // LazyCell stores its value in `__lazyValue` (not `__value`), so
