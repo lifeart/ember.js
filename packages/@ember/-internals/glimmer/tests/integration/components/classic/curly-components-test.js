@@ -1995,6 +1995,86 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
         this.assert.strictEqual(instances.length, 1, 'the same instance');
       }
 
+      ['@test a classic component class curried from the scope of a strict template is a classic component']() {
+        expectClassicComponentDeprecation();
+
+        let instances = [];
+        let Legacy = setComponentTemplate(
+          precompileTemplate('<span class="arg">{{this.value}}</span>'),
+          Component.extend({
+            init() {
+              this._super(...arguments);
+              instances.push(this);
+            },
+          })
+        );
+        let host;
+        this.owner.register(
+          'component:curry-host',
+          setComponentTemplate(
+            precompileTemplate(
+              '{{#let (component Legacy value=this.value) as |Curried|}}<Curried />{{/let}}',
+              { strictMode: true, scope: () => ({ Legacy }) }
+            ),
+            class extends Component {
+              value = 'a';
+              init() {
+                super.init(...arguments);
+                host = this;
+              }
+            }
+          )
+        );
+
+        this.render('{{curry-host}}');
+
+        this.assert.strictEqual(instances.length, 1, 'init runs');
+        this.assert.strictEqual(instances[0].value, 'a', 'the argument arrives');
+        this.assertText('a');
+        runTask(() => set(host, 'value', 'b'));
+        this.assert.strictEqual(instances[0].value, 'b', 'and updates');
+        this.assertText('b');
+      }
+
+      ['@test a classic component class with only a layout, from the scope of a strict template, is a classic component']() {
+        expectClassicComponentDeprecation();
+
+        let instances = [];
+        let Legacy = Component.extend({
+          layout: precompileTemplate('<span class="arg">{{this.value}}</span>'),
+          init() {
+            this._super(...arguments);
+            instances.push(this);
+          },
+        });
+        let host;
+        this.owner.register(
+          'component:layout-host',
+          setComponentTemplate(
+            precompileTemplate('<Legacy @value={{this.value}} />', {
+              strictMode: true,
+              scope: () => ({ Legacy }),
+            }),
+            class extends Component {
+              value = 'a';
+              init() {
+                super.init(...arguments);
+                host = this;
+              }
+            }
+          )
+        );
+
+        this.render('{{layout-host}}');
+
+        this.assert.strictEqual(instances.length, 1, 'init runs');
+        this.assert.strictEqual(instances[0].value, 'a', 'the argument arrives');
+        this.assertText('a');
+        runTask(() => set(host, 'value', 'b'));
+        this.assert.strictEqual(instances[0].value, 'b', 'and updates');
+        this.assertText('b');
+      }
+
       ['@test key="@index": the classic component of a kept row whose argument also changed fires each update hook once']() {
         expectClassicComponentDeprecation();
 
