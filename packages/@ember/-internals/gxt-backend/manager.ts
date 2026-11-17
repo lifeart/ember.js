@@ -8184,10 +8184,12 @@ function _untracked<T>(fn: () => T): T {
   }
 }
 
-// A helper argument as GXT passes it: a getter thunk (no prototype) is read;
-// helper and class values (with a prototype) pass through.
+// A positional helper argument as gxt passes it: only a getter gxt's compiler
+// branded (`$_argThunk`) is read; any other function — an arrow a helper
+// returned, a `(fn)` result, an action — is the argument's value, passed as it
+// is, as Glimmer passes it.
 function _unwrapHelperArg(v: any): any {
-  return typeof v === 'function' && !v.prototype ? v() : v;
+  return _gxtIsArgThunk(v) ? v() : v;
 }
 
 function _helperPositionalArgs(params: any): any[] {

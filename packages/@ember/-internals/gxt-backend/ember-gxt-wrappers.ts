@@ -9,7 +9,7 @@
  */
 
 import * as gxtModule from '@lifeart/gxt';
-import { $PROPS_SYMBOL, $SLOTS_SYMBOL, isArgThunk } from '@lifeart/gxt';
+import { $PROPS_SYMBOL, $SLOTS_SYMBOL, $_argThunk, isArgThunk } from '@lifeart/gxt';
 import { DEBUG } from '@glimmer/env';
 
 // Typed bridge populated by manager.ts at its module init (e.g. the
@@ -74,16 +74,26 @@ installCompilePipelinePart({
 // $_maybeHelper wrapper
 
 /**
- * Unwrap GXT args: GXT may pass getters (functions) for reactive values.
- * Helpers expect resolved values in positional/named args.
+ * Whether a positional argument of a helper is a getter to read: gxt's
+ * compiler brands the getter it emits for an argument (`$_argThunk`), and only
+ * such a getter is read. Any other function is the argument's value — an arrow
+ * a helper returned, a `(fn)` result, an action — and is passed on as it is,
+ * as Glimmer passes it.
  */
 function isGxtGetter(v: any): boolean {
-  return (
-    typeof v === 'function' &&
-    !v.prototype &&
-    !v.__isFnHelper &&
-    !v.__isMutCell &&
-    !v.__isHelperResult
+  return isArgThunk(v);
+}
+
+/**
+ * The children of a tag that names a helper (`$_tag` → `$_maybeHelper`), as
+ * the helper's positional arguments: a function among them is a getter gxt's
+ * compiler emitted for a child's value, branded here as the compiler brands an
+ * argument's getter, so the helper reads it (`isGxtGetter`).
+ */
+function tagChildrenAsArgs(children: any[] | undefined): any[] {
+  if (!children) return [];
+  return children.map((child) =>
+    typeof child === 'function' && !child.prototype ? $_argThunk(child) : child
   );
 }
 // A `(hash)`/`(array)` value passed as a component arg is `$__cached(() =>
@@ -102,8 +112,8 @@ function resolveGxtArg(a: any): any {
 }
 function unwrapArgs(args: any[]): any[] {
   if (!Array.isArray(args)) return Object.freeze([] as any[]) as any[];
-  // Only unwrap GXT getters (arrow fns with no prototype).
-  // Regular functions (like closures from (fn ...)) should be passed as-is.
+  // Only a getter gxt's compiler branded is read (`isGxtGetter`); any other
+  // function is the argument's value and is passed as it is.
   const result = args.map(resolveGxtArg);
   Object.freeze(result);
   return result;
@@ -766,28 +776,9 @@ function createEmberMaybeHelper(original: Function) {
       const positional = unwrapArgs(args || []);
       const named = lazyNamedArgs(hash);
 
-      // Mark user helper results that are functions so downstream
-      // unwrapArgs / unwrapHash do not treat them as GXT reactive getters
-      // and invoke them. For example, when a user function like `boundFn`
-      // is invoked via `(fn ...)` (shadowed), the returned closure must reach
-      // the outer helper (e.g. `invoke`) as-is rather than be eagerly called.
-      // A frozen function cannot take the mark.
-      const result = named === null ? nameOrFn(...positional) : nameOrFn(...positional, named);
-      if (
-        typeof result === 'function' &&
-        !result.prototype &&
-        !result.__isFnHelper &&
-        !result.__isMutCell &&
-        !result.__isHelperResult &&
-        Object.isExtensible(result)
-      ) {
-        Object.defineProperty(result, '__isHelperResult', {
-          value: true,
-          enumerable: false,
-          configurable: true,
-        });
-      }
-      return result;
+      // A function the helper returns is a value: an outer helper's argument
+      // reads only a getter gxt's compiler branded (`isGxtGetter`).
+      return named === null ? nameOrFn(...positional) : nameOrFn(...positional, named);
     }
 
     // Object-shaped HelperDefinitionState (`{}` returned by
@@ -822,9 +813,9 @@ function createEmberMaybeHelper(original: Function) {
         // A path argument's reference is labelled with its path (DEBUG), as
         // Glimmer's is: its `fn` assertion names the callback by it.
         const makeRef = (argVal: any, label: string | null | undefined) => {
-          // Use isGxtGetter so a marked helper result (e.g. the bound function a
-          // nested `(fn ...)` produces), a mut cell or an fn-helper is passed
-          // through as the value instead of being eagerly invoked as a getter.
+          // Only a branded getter is read (`isGxtGetter`): a function value — the
+          // bound function a nested `(fn ...)` produces, a mut cell — is passed
+          // through as the value instead of being invoked as a getter.
           const isGetter = isGxtGetter(argVal);
           const getter = isGetter ? () => argVal() : () => argVal;
           const ref = createComputeRef(getter, null, 'element-arg');
@@ -851,24 +842,8 @@ function createEmberMaybeHelper(original: Function) {
           ref && typeof ref === 'object' && typeof (ref as any).compute === 'function'
             ? valueForRef(ref)
             : ref;
-        // Mark a functional result (e.g. the bound function `(fn ...)` returns)
-        // so an outer helper's unwrapArgs / makeRef does not treat it as a GXT
-        // reactive getter and invoke it eagerly. Mirrors the user-helper branch.
-        // A frozen function cannot take the mark.
-        if (
-          typeof resultValue === 'function' &&
-          !resultValue.prototype &&
-          !resultValue.__isFnHelper &&
-          !resultValue.__isMutCell &&
-          !resultValue.__isHelperResult &&
-          Object.isExtensible(resultValue)
-        ) {
-          Object.defineProperty(resultValue, '__isHelperResult', {
-            value: true,
-            enumerable: false,
-            configurable: true,
-          });
-        }
+        // A function the helper returns (the bound function of `(fn ...)`) is
+        // a value: an outer helper reads only a branded getter (`isGxtGetter`).
         return resultValue;
       }
     }
@@ -1368,15 +1343,11 @@ function createEmberMaybeHelper(original: Function) {
               for (let i = 0; i < posList.length; i++) {
                 const val = posList[i];
                 const posKey = `__pos${i}__`;
-                // A getter takes no parameters (a function with parameters is
-                // the argument's value); what it throws propagates, as
-                // Glimmer's read of the argument does.
-                if (
-                  typeof val === 'function' &&
-                  !(val as any).__isCurriedComponent &&
-                  !(val as any).prototype &&
-                  val.length === 0
-                ) {
+                // Only a getter gxt's compiler branded is read (any other
+                // function — an arrow a helper returned, an action — is the
+                // argument's value); what it throws propagates, as Glimmer's
+                // read of the argument does.
+                if (isArgThunk(val)) {
                   Object.defineProperty(componentArgs, posKey, {
                     get: () => (val as any)(),
                     enumerable: true,
@@ -1584,7 +1555,7 @@ function createEmberTag(original: Function) {
         ) {
           const maybeHelper = g.$_maybeHelper;
           if (typeof maybeHelper === 'function') {
-            return maybeHelper(kebabName, children || [], {}, ctx);
+            return maybeHelper(kebabName, tagChildrenAsArgs(children), {}, ctx);
           }
         }
       }
@@ -1742,7 +1713,7 @@ function createEmberTag(original: Function) {
               // This is a helper, not a component. Use $_maybeHelper directly.
               const maybeHelper = g.$_maybeHelper;
               if (typeof maybeHelper === 'function') {
-                return maybeHelper(kebabName, children || [], {}, ctx);
+                return maybeHelper(kebabName, tagChildrenAsArgs(children), {}, ctx);
               }
             }
           }
@@ -1766,7 +1737,7 @@ function createEmberTag(original: Function) {
           if (helperFactory) {
             const maybeHelper = g.$_maybeHelper;
             if (maybeHelper) {
-              return maybeHelper(kebab, children || [], {}, ctx);
+              return maybeHelper(kebab, tagChildrenAsArgs(children), {}, ctx);
             }
           }
         }
