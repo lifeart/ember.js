@@ -337,8 +337,6 @@ import {
   // `(hash)` member: only a branded getter is read (`$__hash_ember`).
   $_argThunk as _gxtArgThunk,
   isArgThunk as _gxtIsArgThunk,
-  // A block param that follows a list row's item (`__componentThunk`).
-  isItemSlotParam as _gxtIsItemSlotParam,
 } from '@lifeart/gxt';
 // Module-local seam for Ember truthiness: the canonical `emberToBool` is
 // defined inside the wrapper-installer scope below; this ref lets other
@@ -526,6 +524,8 @@ import {
 } from './ember-gxt-wrappers';
 import { defineEmberMountElement } from './mount-element';
 import { recordArgSource } from './arg-sources';
+// A block param that follows a list row's item (`__componentThunk`).
+import { gxtIsItemSlotParam as _gxtIsItemSlotParam } from './gxt-next-exports';
 // Also installs the route-outlet hooks route.ts / router.ts call (gxt-bridge).
 import { defineEmberOutletElement } from './outlet';
 // Installs the glimmer host that glimmer's renderer modules call (gxt-bridge).
