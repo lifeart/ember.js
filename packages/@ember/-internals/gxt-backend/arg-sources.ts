@@ -76,6 +76,11 @@ export function resolveArgWrite(source: GxtArgSource): readonly [object, string]
     if (parent === null || (typeof parent !== 'object' && typeof parent !== 'function')) {
       return null;
     }
+    // A block param itself of a by-name component's block: compat reads it
+    // as a member `$_bp<i>` of the block's params (ast-transforms.ts
+    // `gxtBlockParamsTransform`). Glimmer updates only the block param's own
+    // reference: nothing is written.
+    if (/^\$_bp\d+$/.test(key)) return null;
     if (!key.startsWith('@')) return [parent, key];
     // The caller's argument: not writable, or nothing known about it (an
     // argument the compiler gave no source): nothing is written.
