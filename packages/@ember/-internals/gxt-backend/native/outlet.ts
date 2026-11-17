@@ -48,6 +48,7 @@ import { _instrumentStart } from '@ember/instrumentation';
 import { schedule } from '@ember/runloop';
 import {
   $_args,
+  $_argThunk,
   $_c,
   $_edp,
   $_fin,
@@ -228,11 +229,15 @@ export function Outlet(this: GxtNode): unknown {
     // Routable engines render with their own owner (classic outletOwner).
     if (render.owner !== undefined) provideContext(outlet as never, OWNER, render.owner);
     // `@model` follows the state while this definition is current, then stays
-    // frozen at its last value (classic).
+    // frozen at its last value (classic). gxt's args object calls only a getter
+    // branded `$_argThunk` when `@model` is read (any other function is the
+    // argument's value).
     let model = render.model;
     const args = $_args(
       {
-        model: () => (current === definition ? (model = ref.state?.render?.model) : model),
+        model: $_argThunk(() =>
+          current === definition ? (model = ref.state?.render?.model) : model
+        ),
         controller: definition.controller,
       },
       false,
