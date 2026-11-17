@@ -9150,12 +9150,7 @@ const $_MANAGERS = {
       // component, with its instance, lifecycle and actions, as when invoked by
       // name (not its template rendered alone, as a template-only one).
       if (typeof komp === 'function' && komp.isViewFactory === true) {
-        if (!__GXT_CLASSIC_COMPONENTS__) {
-          throw new Error(
-            '[gxt] classic @ember/component requires the classic-components build (this is a native GXT build; the @ember/component emulation was DCE-stripped)'
-          );
-        }
-        return handleClassicComponent(_lexicalClassicFactory(komp, owner), args, fw, ctx, owner);
+        return _renderClassicFactory(_lexicalClassicFactory(komp, owner), args, fw, ctx, owner);
       }
       if (manager) {
         // Template-only components have an internal manager without a create() method.
@@ -9201,16 +9196,7 @@ const $_MANAGERS = {
 
       // Handle classic factory-based component
       if (komp?.create && typeof komp.create === 'function') {
-        // Classic-curly entry (gated). Native builds DCE
-        // `handleClassicComponent` + `renderClassicComponent` + the
-        // wrapper/binding builders. Glimmer/template-only components never
-        // reach this branch (they resolve via the manager/template paths above).
-        if (!__GXT_CLASSIC_COMPONENTS__) {
-          throw new Error(
-            '[gxt] classic @ember/component requires the classic-components build (this is a native GXT build; the @ember/component emulation was DCE-stripped)'
-          );
-        }
-        return handleClassicComponent(komp, args, fw, ctx, owner);
+        return _renderClassicFactory(komp, args, fw, ctx, owner);
       }
 
       return null;
@@ -13162,6 +13148,21 @@ function handleManagedComponent(
 /**
  * Handle a classic factory-based component.
  */
+// A classic component, from its factory. The classic-curly entry is gated: a
+// build without the classic component emulation (`__GXT_CLASSIC_COMPONENTS__`
+// false — the compat backend's `GXT_NATIVE=1` comparison build; the gxt-native
+// build never loads this module) DCEs `handleClassicComponent` +
+// `renderClassicComponent` + the wrapper/binding builders. Glimmer and
+// template-only components never reach it.
+function _renderClassicFactory(factory: any, args: any, fw: any, ctx: any, owner: any): () => any {
+  if (!__GXT_CLASSIC_COMPONENTS__) {
+    throw new Error(
+      '[gxt] classic @ember/component requires the classic-components build (this is a native GXT build; the @ember/component emulation was DCE-stripped)'
+    );
+  }
+  return handleClassicComponent(factory, args, fw, ctx, owner);
+}
+
 // The factory of a classic component class invoked as a value (it is not
 // registered, so no `factoryFor` made one): it creates the instance with the
 // rendering owner, as Glimmer's curly manager creates it with the owner of the
