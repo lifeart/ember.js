@@ -50,15 +50,22 @@ const lookedUp = new WeakSet<object>();
 /**
  * The sources of the arguments of `args`. An args object the host did not
  * build — gxt's angle-bracket invocation (`<Outer @value={{this.local}} />`)
- * builds it with `$_args` — has its arguments' sources looked up once in gxt
- * (`argumentOf`: the getters as the compiler passed them).
+ * builds it with `$_args`, which a component's template can read as its `@`
+ * arguments, or the host copies its properties — has its arguments' sources
+ * looked up once: the getters as gxt's compiler passed them, which gxt gives
+ * (`argumentOf`) or the object holds as a property's value.
  */
 function sourcesOf(args: object): Map<string, GxtArgSource | null> | undefined {
   const recorded = argSources.get(args);
   if (recorded !== undefined || lookedUp.has(args)) return recorded;
   lookedUp.add(args);
   for (const key of Object.keys(args)) {
-    recordArgSource(args, key, gxtArgumentOf(args, key));
+    let compiled = gxtArgumentOf(args, key);
+    if (compiled === undefined) {
+      const descriptor = Object.getOwnPropertyDescriptor(args, key);
+      if (descriptor !== undefined && 'value' in descriptor) compiled = descriptor.value;
+    }
+    recordArgSource(args, key, compiled);
   }
   return argSources.get(args);
 }
@@ -104,8 +111,10 @@ export function resolveArgWrite(source: GxtArgSource): readonly [object, string]
     if (/^\$_bp\d+$/.test(key)) return null;
     if (!key.startsWith('@')) return [parent, key];
     // The caller's argument: not writable, or nothing known about it (an
-    // argument the compiler gave no source): nothing is written.
-    const outer = argSources.get(parent)?.get(key.slice(1));
+    // argument the compiler gave no source): nothing is written. The args
+    // object a template reads its `@` arguments from may be one gxt built
+    // (`sourcesOf`).
+    const outer = sourcesOf(parent)?.get(key.slice(1));
     if (outer === undefined || outer === null) return null;
     parent = outer.parent();
     key = outer.key;
