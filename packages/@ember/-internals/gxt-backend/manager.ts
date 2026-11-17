@@ -8536,6 +8536,10 @@ function _templateOnlyArgs(args: any): any {
       Object.defineProperty(tplArgs, key, desc);
     }
   }
+  // The template's `@x` is the invocation's argument: a two-way write through
+  // it (`{{two-way bar=@x}}`) goes where the invocation's argument writes
+  // (arg-sources.ts), as through a classic component's arguments.
+  if (__GXT_CLASSIC_COMPONENTS__) shareArgSources(tplArgs, args);
   return tplArgs;
 }
 
