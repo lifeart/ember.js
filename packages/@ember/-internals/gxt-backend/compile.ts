@@ -6852,20 +6852,29 @@ function patchGlobalEachSync() {
     // `hasIndex` makes the list build a reactive index MergedCell whose formula
     // re-locates the item in the current source array on every revalidation.
     //
+    // `key="@index"` keys the rows by identity, as up to gxt 0.0.86, whose
+    // compiler emitted `'@identity'` for it. gxt 0.0.87 keys them by position:
+    // a row stays where it is and the `rebindEachItem` host hook is told that
+    // it now stands for another item. But a row's block param is the item it
+    // was built with, and only an object item, read through its body proxy
+    // (`wrapEachItemForTracking`), can be pointed at another one; an array, a
+    // collection or a primitive cannot, so its row went on rendering the old
+    // item (an inner `{{#each}}` over it kept iterating the old list).
+    if (key === '@index') key = '@identity';
+    //
     // Determine whether this list's keying can ever STALE a key and rebind a
     // reused row to a NEW object ref (the `rebindEachItem` host hook).
     // glimmer-next's compiler emits `key` as: `null` (no `key=`), `'@identity'`
-    // (explicit identity), or `'@index'` (rare; compiler warns +
-    // downgrades to identity) → ALL of these key by object identity (a stable
-    // WeakMap), so a given key can NEVER bind to a different ref → rebind is
-    // impossible → the per-row `__gxtRev` cell is dead weight. Only an EXPLICIT
-    // property/function `key=` (e.g. `key="id"`) can stale a key (in-place
-    // mutate the keyed prop, then a ref-swap reuses the row by the stale key) →
-    // rebind possible → KEEP the rev cell. An each-in is keyed by its entries'
-    // `key` (`key="key"`): a kept row is rebound to the new entry object. So:
-    // rebindPossible = key is non-null, non-identity, non-index.
-    const _keyIsIdentity =
-      key === null || key === undefined || key === '' || key === '@identity' || key === '@index';
+    // (explicit identity), or `'@index'` (made `'@identity'` above) → ALL of
+    // these key by object identity (a stable WeakMap), so a given key can NEVER
+    // bind to a different ref → rebind is impossible → the per-row `__gxtRev`
+    // cell is dead weight. Only an EXPLICIT property/function `key=` (e.g.
+    // `key="id"`) can stale a key (in-place mutate the keyed prop, then a
+    // ref-swap reuses the row by the stale key) → rebind possible → KEEP the
+    // rev cell. An each-in is keyed by its entries' `key` (`key="key"`): a kept
+    // row is rebound to the new entry object. So: rebindPossible = key is
+    // non-null and non-identity.
+    const _keyIsIdentity = key === null || key === undefined || key === '' || key === '@identity';
     const _rebindPossible = !_keyIsIdentity;
     // Capture the parent Ember component instance at the time $_eachSync is
     // called from the template body. `ctx` is the GXT render context (which
