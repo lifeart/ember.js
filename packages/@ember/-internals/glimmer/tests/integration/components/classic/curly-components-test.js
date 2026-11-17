@@ -20,6 +20,7 @@ import { trackedArray } from '@ember/reactive/collections';
 import { ClassicRenderingTestCase } from '../../../utils/classic-rendering-test-case';
 import { Component } from '../../../utils/helpers';
 import GlimmerComponent from '@glimmer/component';
+import templateOnly from '@ember/component/template-only';
 import { template } from '@ember/template-compiler/runtime';
 import { setComponentTemplate } from '@glimmer/manager';
 import { precompileTemplate } from '@ember/template-compilation';
@@ -1852,6 +1853,73 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
         this.assert.strictEqual(this.context.curly, 'C', 'the curly caller source');
       }
 
+      ['@test a two way binding through @x of a lexically invoked component writes the caller source']() {
+        expectClassicComponentDeprecation();
+
+        // gxt's own angle-bracket invocation path (a component in a strict
+        // template's scope): a classic, a Glimmer and a template-only outer
+        // component pass `@value` to a classic child, whose `set('bar')` writes
+        // the caller's `this.<name>`, as Glimmer's `@value` is its reference.
+        let components = {};
+        this.owner.register(
+          'component:two-way',
+          setComponentTemplate(
+            precompileTemplate('{{this.bar}}'),
+            class extends Component {
+              init() {
+                super.init(...arguments);
+                components[this.name] = this;
+              }
+            }
+          )
+        );
+        let ClassicOuter = setComponentTemplate(
+          precompileTemplate('{{two-way name=@name bar=@value}}'),
+          class extends Component {}
+        );
+        let GlimmerOuter = setComponentTemplate(
+          precompileTemplate('{{two-way name=@name bar=@value}}'),
+          class extends GlimmerComponent {}
+        );
+        let TemplateOnlyOuter = setComponentTemplate(
+          precompileTemplate('{{two-way name=@name bar=@value}}'),
+          templateOnly()
+        );
+        let host;
+        this.owner.register(
+          'component:lexical-host',
+          setComponentTemplate(
+            precompileTemplate(
+              '<ClassicOuter @name="classic" @value={{this.classic}} /><GlimmerOuter @name="glimmer" @value={{this.glimmer}} /><TemplateOnlyOuter @name="template-only" @value={{this.templateOnly}} />',
+              {
+                strictMode: true,
+                scope: () => ({ ClassicOuter, GlimmerOuter, TemplateOnlyOuter }),
+              }
+            ),
+            class extends Component {
+              classic = 'a';
+              glimmer = 'b';
+              templateOnly = 'c';
+              init() {
+                super.init(...arguments);
+                host = this;
+              }
+            }
+          )
+        );
+
+        this.render('{{lexical-host}}');
+        this.assertText('abc');
+
+        runTask(() => components.classic.set('bar', 'A'));
+        this.assert.strictEqual(host.classic, 'A', 'through a classic outer');
+        runTask(() => components.glimmer.set('bar', 'B'));
+        this.assert.strictEqual(host.glimmer, 'B', 'through a Glimmer outer');
+        runTask(() => components['template-only'].set('bar', 'C'));
+        this.assert.strictEqual(host.templateOnly, 'C', 'through a template-only outer');
+        this.assertText('ABC');
+      }
+
       ['@test a helper arrow passed positionally to a component is the value']() {
         expectClassicComponentDeprecation();
 
@@ -1899,21 +1967,21 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
           )
         );
         let rows = [];
-        let hooks = [];
         this.owner.register(
           'component:item-row',
           setComponentTemplate(
             precompileTemplate('{{this.item.name}}'),
             class extends Component {
+              hooks = [];
               init() {
                 super.init(...arguments);
                 rows.push(this);
               }
               didReceiveAttrs() {
-                hooks.push(`didReceiveAttrs ${this.item.name}`);
+                this.hooks.push(`didReceiveAttrs ${this.item.name}`);
               }
               didUpdateAttrs() {
-                hooks.push(`didUpdateAttrs ${this.item.name}`);
+                this.hooks.push(`didUpdateAttrs ${this.item.name}`);
               }
             }
           )
@@ -1952,33 +2020,31 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
         for (let name of cases) this.assert.deepEqual(texts(name), ['a', 'b'], name);
         let created = rows.slice();
         this.assert.strictEqual(created.length, 8, 'a row component per row');
-        hooks = [];
+        // The row components of each case, in row order.
+        let rowsOf = (name) =>
+          Array.from(this.element.querySelectorAll(`.${name} li`)).map((li) =>
+            created.find((row) => li.contains(row.element))
+          );
+        for (let row of created) row.hooks = [];
 
         runTask(() => set(this.context, 'list', [b, a]));
 
+        this.assert.deepEqual(rows, created, 'the same instances');
         for (let name of cases) {
           this.assert.deepEqual(
             texts(name),
             ['b', 'a'],
             `${name}: the rows show the items now at them`
           );
+          this.assert.deepEqual(
+            rowsOf(name).map((row) => [row.item.name, ...row.hooks]),
+            [
+              ['b', 'didUpdateAttrs b', 'didReceiveAttrs b'],
+              ['a', 'didUpdateAttrs a', 'didReceiveAttrs a'],
+            ],
+            `${name}: this.item is the new item; didUpdateAttrs and didReceiveAttrs once each`
+          );
         }
-        this.assert.deepEqual(rows, created, 'the same instances');
-        this.assert.deepEqual(
-          created.map((row) => row.item.name),
-          ['b', 'a', 'b', 'a', 'b', 'a', 'b', 'a'],
-          'this.item is the new item'
-        );
-        this.assert.strictEqual(
-          hooks.filter((hook) => hook.startsWith('didUpdateAttrs')).length,
-          8,
-          'didUpdateAttrs once each'
-        );
-        this.assert.strictEqual(
-          hooks.filter((hook) => hook.startsWith('didReceiveAttrs')).length,
-          8,
-          'didReceiveAttrs once each'
-        );
       }
 
       ['@test a two way binding flows upstream through a CP when consumed in the template']() {
