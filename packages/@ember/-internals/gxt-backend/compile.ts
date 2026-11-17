@@ -333,6 +333,10 @@ import {
   // gxt's dynamic-content binding, registered for the content mustaches gxt
   // renders itself (`contentBinding` below).
   bindNativeContent as _gxtBindNativeContent,
+  // The brand of a getter the gxt compiler emits for an argument or a
+  // `(hash)` member: only a branded getter is read (`$__hash_ember`).
+  $_argThunk as _gxtArgThunk,
+  isArgThunk as _gxtIsArgThunk,
 } from '@lifeart/gxt';
 // Module-local seam for Ember truthiness: the canonical `emberToBool` is
 // defined inside the wrapper-installer scope below; this ref lets other
@@ -2352,9 +2356,11 @@ function _gxtWalkHashGetterPaths(getter: any, ctx: any): void {
         const wrappedObj: Record<string, any> = {};
         for (const key of Object.keys(inputObj)) {
           const val = inputObj[key];
+          // A member's getter is one the gxt compiler branded
+          // (`$_argThunk`); any other function — an action, a `(fn)` result —
+          // is the member's value, which gxt's `$__hash` returns as it is.
           if (
-            typeof val === 'function' &&
-            !val.prototype &&
+            _gxtIsArgThunk(val) &&
             !val.__isCurriedComponent &&
             !(val as any).__emberHashGetterWrapped
           ) {
@@ -2379,7 +2385,8 @@ function _gxtWalkHashGetterPaths(getter: any, ctx: any): void {
             (wrappedGetter as any).__origHashGetter = val;
             (wrappedGetter as any).__hashConstructionCtx = mutCtx;
             (wrappedGetter as any).__emberHashGetterWrapped = true;
-            wrappedObj[key] = wrappedGetter;
+            // Branded, as the getter it wraps, so gxt's `$__hash` reads it.
+            wrappedObj[key] = _gxtArgThunk(wrappedGetter);
           } else {
             wrappedObj[key] = val;
           }
@@ -2402,7 +2409,7 @@ function _gxtWalkHashGetterPaths(getter: any, ctx: any): void {
         if (pathCtx) {
           for (const key of Object.keys(inputObj)) {
             const val = inputObj[key];
-            if (typeof val === 'function' && !val.prototype && !val.__isCurriedComponent) {
+            if (_gxtIsArgThunk(val) && !val.__isCurriedComponent) {
               _gxtLinkHashMemberSources(val, pathCtx, result, key);
             }
           }
