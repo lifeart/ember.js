@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-11-13T09:27:40.509Z",
-    "gxtVersion": "0.0.86",
-    "emberCommit": "315393f",
+    "capturedAt": "2026-11-17T11:02:34.122Z",
+    "gxtVersion": "0.0.87",
+    "emberCommit": "df85f82",
     "totalTests": 7208,
     "totalModules": 684,
     "quarantinedTests": 0,
-    "totalAssertions": 36302,
-    "totalAssertionsPassing": 36267
+    "totalAssertions": 36306,
+    "totalAssertionsPassing": 36273
   },
   "modules": {
     "<LinkTo /> component (URL sanitization of forwarded attributes)": {
@@ -1011,14 +1011,10 @@
     },
     "Basic Custom Modifier Manager: 3.22": {
       "total": 18,
-      "passing": 16,
-      "assertionsTotal": 68,
-      "assertionsPassing": 65,
+      "passing": 17,
+      "assertionsTotal": 70,
+      "assertionsPassing": 69,
       "failingTests": [
-        {
-          "name": " destroys a dynamic modifier that was set after the initial render",
-          "category": "gxt:triage"
-        },
         {
           "name": " provides a helpful assertion when mutating a tracked value that was consumed already within the constructor",
           "category": "gxt:triage"
@@ -1196,8 +1192,8 @@
     "Components test: contextual components": {
       "total": 43,
       "passing": 35,
-      "assertionsTotal": 63,
-      "assertionsPassing": 44,
+      "assertionsTotal": 65,
+      "assertionsPassing": 46,
       "failingTests": [
         {
           "name": " GH#13742 keeps nested rest positional parameters if rendered with no positional parameters",
@@ -5330,6 +5326,6 @@
     }
   },
   "categories": {
-    "gxt:triage": 19
+    "gxt:triage": 18
   }
 }
