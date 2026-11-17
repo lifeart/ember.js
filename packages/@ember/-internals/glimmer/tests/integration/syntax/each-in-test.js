@@ -505,6 +505,34 @@ moduleFor(
 
       this.assertText('[0:1][1:2][2:3][foo:bar]');
     }
+
+    [`@test a nested each-in's rows read the outer row's key and value`]() {
+      this.render(
+        strip`
+        {{#each-in this.groups as |groupName group|}}
+          {{#each-in group as |field value|}}
+            [{{groupName}}.{{field}}={{value}}/{{group.title}}]
+          {{/each-in}}
+        {{/each-in}}`,
+        {
+          groups: {
+            first: { title: 'One', a: 1 },
+            second: { title: 'Two', b: 2 },
+          },
+        }
+      );
+
+      this.assertText('[first.title=One/One][first.a=1/One][second.title=Two/Two][second.b=2/Two]');
+
+      runTask(() =>
+        set(this.context, 'groups', {
+          second: { title: 'Two', b: 3 },
+          first: { title: 'One', a: 1 },
+        })
+      );
+
+      this.assertText('[second.title=Two/Two][second.b=3/Two][first.title=One/One][first.a=1/One]');
+    }
   }
 );
 
