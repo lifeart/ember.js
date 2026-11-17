@@ -1706,6 +1706,73 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
         this.assertText('initial value - initial value');
       }
 
+      ['@test a two way binding writes each shape of argument where Glimmer writes it']() {
+        expectClassicComponentDeprecation();
+
+        let components = {};
+        this.owner.register(
+          'component:two-way',
+          setComponentTemplate(
+            precompileTemplate('{{this.bar}}'),
+            class extends Component {
+              init() {
+                super.init(...arguments);
+                components[this.name] = this;
+              }
+            }
+          )
+        );
+        this.owner.register(
+          'component:two-way-outer',
+          setComponentTemplate(
+            precompileTemplate('{{two-way name="arg" bar=@value}}'),
+            class extends Component {}
+          )
+        );
+
+        let model = { myProp: 'm' };
+        let item = { name: 'i' };
+        let items = [item];
+        this.render(
+          strip`
+          {{two-way name="dot" bar=this.model.myProp}}
+          {{two-way-outer value=this.local}}
+          {{#each this.items as |it|}}{{two-way name="param" bar=it.name}}{{two-way name="item" bar=it}}{{/each}}
+          {{#let this.aliased as |a|}}{{two-way name="let" bar=a}}{{/let}}
+          {{two-way name="helper" bar=(concat this.local "!")}}
+          {{two-way name="literal" bar="lit"}}`,
+          { model, local: 'l', items, aliased: 'a' }
+        );
+
+        // `this.a.b`: written to `this.a`'s `b`.
+        runTask(() => components.dot.set('bar', 'M'));
+        this.assert.strictEqual(model.myProp, 'M', 'this.model.myProp');
+
+        // `@x`: the caller's reference, through to its source.
+        runTask(() => components.arg.set('bar', 'L'));
+        this.assert.strictEqual(this.context.local, 'L', '@value, through the outer component');
+
+        // A block param's path: written to the item.
+        runTask(() => components.param.set('bar', 'I'));
+        this.assert.strictEqual(item.name, 'I', 'it.name');
+
+        // A {{#let}} binding: written where its value's path writes.
+        runTask(() => components.let.set('bar', 'A'));
+        this.assert.strictEqual(this.context.aliased, 'A', '{{#let}} alias of this.aliased');
+
+        // Not writable: a block param itself, a helper's result, a literal.
+        runTask(() => components.item.set('bar', 'X'));
+        this.assert.strictEqual(items[0], item, 'an each block param itself is not written');
+        runTask(() => components.helper.set('bar', 'H'));
+        this.assert.strictEqual(this.context.local, 'L', 'a helper result is not written');
+        runTask(() => components.literal.set('bar', 'Y'));
+        this.assert.strictEqual(
+          components.literal.get('bar'),
+          'Y',
+          'a literal keeps the set value'
+        );
+      }
+
       ['@test a two way binding flows upstream through a CP when consumed in the template']() {
         expectClassicComponentDeprecation();
 
