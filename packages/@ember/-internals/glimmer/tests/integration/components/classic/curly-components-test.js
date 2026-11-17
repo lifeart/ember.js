@@ -1943,7 +1943,7 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
         let inserted = [];
         let Legacy = setComponentTemplate(
           precompileTemplate(
-            '<span class="local">{{this.local}}</span><span class="arg">{{this.value}}</span><button {{action "bump"}}>{{this.count}}</button>'
+            '<span class="local">{{this.local}}</span><span class="arg">{{this.value}}</span><button {{on "click" this.bump}}>{{this.count}}</button>'
           ),
           Component.extend({
             count: 0,
@@ -1955,11 +1955,9 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
             didInsertElement() {
               inserted.push(this.element.querySelector('.arg').textContent);
             },
-            actions: {
-              bump() {
-                this.incrementProperty('count');
-              },
-            },
+            bump: action(function () {
+              this.incrementProperty('count');
+            }),
           })
         );
         let host;
