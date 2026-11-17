@@ -12,7 +12,7 @@
  * guessing the source from the reads the getter makes.
  */
 import { isArgThunk as gxtIsArgThunk } from '@lifeart/gxt';
-import { gxtArgSource } from './gxt-next-exports';
+import { gxtArgSource, gxtArgumentOf } from './gxt-next-exports';
 
 export interface GxtArgSource {
   /** Reads the object the write sets a property of (when the write happens). */
@@ -44,13 +44,33 @@ export function recordArgSource(args: object, key: string, value: unknown): void
   sources.set(key, source === null ? null : { parent: source[0], key: source[1] });
 }
 
+// The args objects whose sources were looked for in gxt (`sourcesOf`).
+const lookedUp = new WeakSet<object>();
+
+/**
+ * The sources of the arguments of `args`. An args object the host did not
+ * build — gxt's angle-bracket invocation (`<Outer @value={{this.local}} />`)
+ * builds it with `$_args` — has its arguments' sources looked up once in gxt
+ * (`argumentOf`: the getters as the compiler passed them).
+ */
+function sourcesOf(args: object): Map<string, GxtArgSource | null> | undefined {
+  const recorded = argSources.get(args);
+  if (recorded !== undefined || lookedUp.has(args)) return recorded;
+  lookedUp.add(args);
+  for (const key of Object.keys(args)) {
+    recordArgSource(args, key, gxtArgumentOf(args, key));
+  }
+  return argSources.get(args);
+}
+
 /**
  * `target` reads the arguments of `args` (a component's render-context args
  * object): its arguments' sources are those of `args`.
  */
 export function shareArgSources(target: object, args: object): void {
-  const sources = argSources.get(args);
-  if (sources !== undefined && target !== args) argSources.set(target, sources);
+  if (target === args) return;
+  const sources = sourcesOf(args);
+  if (sources !== undefined) argSources.set(target, sources);
 }
 
 /**
@@ -59,7 +79,7 @@ export function shareArgSources(target: object, args: object): void {
  * not writable, else where a write of it goes.
  */
 export function compiledArgSource(args: object, key: string): GxtArgSource | null | undefined {
-  return argSources.get(args)?.get(key);
+  return sourcesOf(args)?.get(key);
 }
 
 /**

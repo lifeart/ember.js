@@ -9,6 +9,7 @@ import * as gxt from '@lifeart/gxt';
 
 const next = gxt as unknown as {
   argSource?: (fn: unknown) => readonly [() => unknown, string] | null | undefined;
+  argumentOf?: (args: object, key: string) => unknown;
   isItemSlotParam?: (param: unknown) => boolean;
 };
 
@@ -19,6 +20,14 @@ const next = gxt as unknown as {
  */
 export const gxtArgSource: (fn: unknown) => readonly [() => unknown, string] | null | undefined =
   next.argSource ?? (() => undefined);
+
+/**
+ * The argument `key` of an args object gxt's `$_args` built (its angle-bracket
+ * invocations), as the compiler passed it: its getter, which carries its
+ * source (gxt `argumentOf`); `undefined` for any other object.
+ */
+export const gxtArgumentOf: (args: object, key: string) => unknown =
+  next.argumentOf ?? (() => undefined);
 
 /**
  * Whether a yielded param follows a list row's item (gxt `isItemSlotParam`).

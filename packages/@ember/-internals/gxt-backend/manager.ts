@@ -2327,8 +2327,8 @@ function createComponentInstance(
       // emitted without a source (a literal, a helper's result, a block param
       // itself) is not writable (`notWritableKeys`): nothing is written
       // upstream. Only an args object gxt's compiler told nothing about (built
-      // elsewhere, or a lexically invoked component's gxt args) falls back to
-      // the guesses below.
+      // elsewhere) falls back to the guesses below; a lexically invoked
+      // component's gxt args give their sources through gxt `argumentOf`.
       _gxtSourceArgs.set(instance, args);
       const twoWayBindings: Record<string, { sourceCtx: any; sourceKey: string | null }> = {};
       const notWritableKeys = new Set<string>();
