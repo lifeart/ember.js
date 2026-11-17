@@ -337,7 +337,7 @@ import {
   // `(hash)` member: only a branded getter is read (`$__hash_ember`).
   $_argThunk as _gxtArgThunk,
   isArgThunk as _gxtIsArgThunk,
-  // A block param that follows a list row's item (`unwrapReactiveValue`).
+  // A block param that follows a list row's item (`__componentThunk`).
   isItemSlotParam as _gxtIsItemSlotParam,
 } from '@lifeart/gxt';
 // Module-local seam for Ember truthiness: the canonical `emberToBool` is
@@ -9154,10 +9154,6 @@ const _gxtGetFwFn = () => _gxtCurrentFw;
 const _gxtScopeStore = new Map<string, any>();
 const _gxtGetScopeFn = (key: string) => _gxtScopeStore.get(key);
 
-// The tracker of the renderable a by-name component's thunk is creating the
-// component under (`__componentThunk`), `undefined` outside one.
-let _gxtComponentCreationTracker: unknown = undefined;
-
 // A block param's value: a reactive param (a GXT formula, as `$_slot` passes a
 // yielded value that reads cells) is re-evaluated on each read, so the read
 // depends on the cells it reads. What it throws propagates, as Glimmer's read
@@ -9167,22 +9163,6 @@ function unwrapReactiveValue(value: any): any {
 
   // Check if it's a GXT reactive cell (has 'fn' property and 'isConst')
   if (typeof value === 'object' && 'fn' in value && 'isConst' in value) {
-    // Read directly by the creation of a by-name component of the block (the
-    // tracker is that of its renderable thunk): a param following a list
-    // row's item is read untracked (see `__componentThunk`).
-    const tracker = _gxtGetTracker();
-    if (
-      tracker !== null &&
-      tracker === _gxtComponentCreationTracker &&
-      _gxtIsItemSlotParam(value)
-    ) {
-      _gxtSetTracker(null);
-      try {
-        return value.fn();
-      } finally {
-        _gxtSetTracker(tracker);
-      }
-    }
     return value.fn();
   }
 
@@ -10975,7 +10955,7 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
           }
           const thunkId = args[GXT_THUNK_ID];
 
-          const renderComponentBody = function __componentThunkBody() {
+          const renderComponentBody = function __componentThunk() {
             // Now evaluate args and render the component
             // The args getters will access block params from the stack
             // Pass the stable thunkId to enable instance caching
@@ -11095,21 +11075,27 @@ if (g.$_tag && !g.$_tag.__compileWrapped) {
             return rendered;
           };
           // gxt renders this thunk as a tracked renderable: whatever the
-          // component's creation reads would make it render the component again
-          // — a new instance — when that changes. The creation reads its
-          // arguments; one that reads a block param following a list row's
-          // item (`isItemSlotParam`) is read untracked here
-          // (`unwrapReactiveValue`): as in Glimmer, the component stays and
-          // follows the item through its arguments.
-          const renderComponent = function __componentThunk() {
-            const outerCreation = _gxtComponentCreationTracker;
-            _gxtComponentCreationTracker = _gxtGetTracker();
-            try {
-              return renderComponentBody();
-            } finally {
-              _gxtComponentCreationTracker = outerCreation;
-            }
-          };
+          // component's creation reads (its arguments, its args revision cell)
+          // would make it render the component again — a new instance — when
+          // that changes. In a block whose params follow a list row's item
+          // (gxt `isItemSlotParam`: a kept `key="@index"` row), the component
+          // is created untracked: as in Glimmer, it stays when another item
+          // comes to stand at the row, and its arguments, which read the
+          // params, update it.
+          const bpTop = blockParamsStack[blockParamsStack.length - 1];
+          const followsItem =
+            Array.isArray(bpTop) && bpTop.some((param) => _gxtIsItemSlotParam(param));
+          const renderComponent = followsItem
+            ? function __componentThunk() {
+                const tracker = _gxtGetTracker();
+                _gxtSetTracker(null);
+                try {
+                  return renderComponentBody();
+                } finally {
+                  _gxtSetTracker(tracker);
+                }
+              }
+            : renderComponentBody;
           // Mark as component thunk for debugging
           (renderComponent as any).__isComponentThunk = true;
           (renderComponent as any).__componentName = kebabName;
