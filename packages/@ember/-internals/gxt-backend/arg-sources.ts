@@ -11,7 +11,8 @@
  * manager (manager.ts) writes a two-way bound argument there instead of
  * guessing the source from the reads the getter makes.
  */
-import { argSource as gxtArgSource, isArgThunk as gxtIsArgThunk } from '@lifeart/gxt';
+import { isArgThunk as gxtIsArgThunk } from '@lifeart/gxt';
+import { gxtArgSource } from './gxt-next-exports';
 
 export interface GxtArgSource {
   /** Reads the object the write sets a property of (when the write happens). */

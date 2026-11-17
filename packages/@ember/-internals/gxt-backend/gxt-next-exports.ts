@@ -8,8 +8,17 @@
 import * as gxt from '@lifeart/gxt';
 
 const next = gxt as unknown as {
+  argSource?: (fn: unknown) => readonly [() => unknown, string] | null | undefined;
   isItemSlotParam?: (param: unknown) => boolean;
 };
+
+/**
+ * Where a write of a component argument gxt's compiler emitted goes (gxt
+ * `argSource`): `[parent, key]`, `null` (not writable) or `undefined` (gxt said
+ * nothing).
+ */
+export const gxtArgSource: (fn: unknown) => readonly [() => unknown, string] | null | undefined =
+  next.argSource ?? (() => undefined);
 
 /**
  * Whether a yielded param follows a list row's item (gxt `isItemSlotParam`).
