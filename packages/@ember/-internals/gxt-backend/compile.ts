@@ -6650,6 +6650,29 @@ const _gxtRebindEachItemHook = function gxtRebindEachItem(oldRawItem: any, newRa
 };
 _gxtRegisterHostHooks({ rebindEachItem: _gxtRebindEachItemHook });
 
+// Whether a list kept rows for other items (gxt `itemReferencesChanged`: a
+// `key="@index"` or `{{#each-in}}` row's item reference now holds another
+// item) since `_gxtSyncDomNow` last ran its argument pass. The components of
+// such a row read the new item through gxt's cells, except a classic
+// component, which gets its argument values only in that pass
+// (`syncAllWrappers`): when the list updated after the pass — its items reach
+// it through a classic component's argument, which the pass itself updates —
+// the sync runs the pass again, so the row's classic component gets the new
+// item, and its `didUpdateAttrs` / `didReceiveAttrs`, in the same render, as
+// Glimmer's update of the row does.
+let _gxtItemReferencesChanged = false;
+// (Typed loosely: the hook is newer than the gxt release whose types Ember
+// checks against.)
+const _gxtItemReferenceHooks: Record<string, unknown> = {
+  itemReferencesChanged: () => {
+    _gxtItemReferencesChanged = true;
+  },
+};
+_gxtRegisterHostHooks(_gxtItemReferenceHooks as Parameters<typeof _gxtRegisterHostHooks>[0]);
+// How many times one sync runs the argument pass again for kept rows: each
+// round reaches one more level of classic lists nested in kept rows.
+const _GXT_ITEM_REFERENCE_ROUNDS = 8;
+
 // Gated bridge: resolve an each-item body-PROXY back to its RAW source object.
 // `wrapEachItemForTracking` (above) is module-local, so `_eachItemProxyToRaw`
 // can't be read by manager.ts directly. manager.ts's `_gxtSyncAllWrappersBody`
@@ -7664,6 +7687,10 @@ function _gxtSyncDomNow(): void {
       try {
         const syncAll = getGxtRenderer()?.compilePipeline.syncAllWrappers;
         if (typeof syncAll === 'function') {
+          // Rows a list keeps for other items from here on are the ones the
+          // pass below has not given their new arguments (see
+          // `_gxtItemReferencesChanged`).
+          _gxtItemReferencesChanged = false;
           syncAll(); // Pre-render hooks + arg cell updates
           // Drain queued each-row rebinds — bump each holder's revision cell so
           // the SECOND gxtSyncDom() pass below re-executes the
@@ -7672,9 +7699,29 @@ function _gxtSyncDomNow(): void {
           // clear, before this pass) or it would be wiped. Inert when no rebinds
           // are queued (no keyed-reuse ref-swap).
           _gxtDrainPendingEachRebinds();
+          // Whether the revalidations of this phase stayed under the rerender
+          // limit (the rounds below stop when one does not).
+          let phaseSettled = settled;
           if (settled && (_gxtGetHadPendingSync() || _gxtGetPendingSync())) {
             try {
-              _gxtRevalidate();
+              phaseSettled = _gxtRevalidate();
+            } catch (syncError) {
+              _gxtCaptureUpdateError(syncError);
+            }
+          }
+          // A list that kept rows for other items during the pass or the
+          // revalidation after it: its rows' classic components get the new
+          // items now, in this render (`_gxtItemReferencesChanged`).
+          for (
+            let round = 0;
+            phaseSettled && _gxtItemReferencesChanged && round < _GXT_ITEM_REFERENCE_ROUNDS;
+            round++
+          ) {
+            _gxtItemReferencesChanged = false;
+            syncAll();
+            _gxtDrainPendingEachRebinds();
+            try {
+              phaseSettled = _gxtRevalidate();
             } catch (syncError) {
               _gxtCaptureUpdateError(syncError);
             }
