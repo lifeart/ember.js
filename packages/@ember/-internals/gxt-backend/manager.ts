@@ -10715,15 +10715,16 @@ function handleStringComponent(
 
         // Only set if not already defined as a named arg
         if (!(paramName in args) && rawValue !== undefined) {
+          // The argument's getter: the args object's own (for reactivity), or
+          // the getter gxt's compiler branded for it (`$_args` keeps it as the
+          // property's value and reads it); any other value — a function
+          // included, an arrow a helper returned — is the argument's value.
+          const compiled = posDesc && 'value' in posDesc ? posDesc.value : undefined;
           const getValue = posGetter
-            ? posGetter // Use the original getter for reactivity
-            : () => {
-                const v =
-                  typeof rawValue === 'function' && !rawValue.__isCurriedComponent
-                    ? rawValue()
-                    : rawValue;
-                return v;
-              };
+            ? posGetter
+            : _gxtIsArgThunk(compiled)
+              ? () => compiled()
+              : () => rawValue;
           Object.defineProperty(args, paramName, {
             get: getValue,
             enumerable: true,
@@ -10759,10 +10760,15 @@ function handleStringComponent(
           const rawValue = args[posKey];
           if (rawValue !== undefined) {
             const desc = Object.getOwnPropertyDescriptor(args, posKey);
+            const compiled = desc && 'value' in desc ? desc.value : undefined;
             if (desc?.get) {
               posGetters.push(desc.get);
+            } else if (_gxtIsArgThunk(compiled)) {
+              // gxt's compiler's getter (see above); any other value — a
+              // function included — is the argument's value.
+              posGetters.push(() => compiled());
             } else {
-              posGetters.push(typeof rawValue === 'function' ? rawValue : () => rawValue);
+              posGetters.push(() => rawValue);
             }
           }
         }
