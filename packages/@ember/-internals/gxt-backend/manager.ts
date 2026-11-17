@@ -125,8 +125,10 @@ import {
   // gxt's render-context keys for the slots and the forwarded-attributes tuple.
   $SLOTS_SYMBOL,
   $PROPS_SYMBOL,
-  // gxt's component args object (named args, slots, forwarded attributes).
+  // gxt's component args object (named args, slots, forwarded attributes),
+  // and the brand of an argument getter that object invokes when it is read.
   $_args as _gxtArgs,
+  $_argThunk as _gxtArgThunk,
   // gxt's component invocation, its template-function preamble and slot
   // rendering, the instance-field key of a class-body `<template>`, and the
   // destructors gxt runs when it tears a render-tree node down.
@@ -10143,12 +10145,16 @@ function _gxtFwTuple(args: any, fw: any): any[] {
 // As Glimmer's args proxy, the object tags an argument with the tag of what
 // the argument reads (`_gxtNamedArgTag`), so a dependent key through an
 // argument (`@computed('args.hash.firstName')`) follows it.
+// gxt's args object calls only the getters branded `$_argThunk` when an
+// argument is read, and hands any other function out as the argument's value
+// (an action, a `(fn)` result), so each getter here carries the brand.
 function _gxtInvocationArgs(invocation: any, fw: any): any {
   const named: Record<string, () => unknown> = {};
   for (const key of Object.keys(invocation || {})) {
     if (key.startsWith('__') || key.startsWith('$') || key === 'args') continue;
-    named[key] = () =>
-      isReadingArgumentReference() ? invocation[key] : argumentValue(invocation[key]);
+    named[key] = _gxtArgThunk(() =>
+      isReadingArgumentReference() ? invocation[key] : argumentValue(invocation[key])
+    );
   }
   const slots = _gxtInvocationSlots(invocation?.[$SLOTS_SYMBOL] || invocation?.$slots);
   // @ts-expect-error -- gxt types $_args slots as render functions; these are the invocation's slots
