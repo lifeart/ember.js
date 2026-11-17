@@ -71,6 +71,33 @@ moduleFor(
       assert.deepEqual(calls, ['save 1', 'save 2', 'act'], 'and calls them when it likes');
     }
 
+    ['@test an arrow a helper returns, passed positionally to another helper, is the value'](
+      assert
+    ) {
+      let received = [];
+      this.registerHelper('make-arrow', () => () => 'called');
+      this.registerHelper('describe', ([fn]) => {
+        received.push(fn);
+        return typeof fn;
+      });
+      this.registerHelper('describe-class', {
+        compute([fn]) {
+          received.push(fn);
+          return typeof fn;
+        },
+      });
+
+      this.render('{{describe (make-arrow)}} {{describe-class (make-arrow)}}');
+
+      this.assertText('function function');
+      assert.strictEqual(received.length, 2);
+      assert.deepEqual(
+        received.map((fn) => fn()),
+        ['called', 'called'],
+        'the arrows, not their results'
+      );
+    }
+
     ['@test it cannot override built-in syntax']() {
       this.registerHelper('array', () => 'Nope');
       expectAssertion(() => {

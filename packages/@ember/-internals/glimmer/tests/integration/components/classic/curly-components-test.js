@@ -19,6 +19,7 @@ import { set, get, computed, observer } from '@ember/object';
 import { trackedArray } from '@ember/reactive/collections';
 import { ClassicRenderingTestCase } from '../../../utils/classic-rendering-test-case';
 import { Component } from '../../../utils/helpers';
+import GlimmerComponent from '@glimmer/component';
 import { template } from '@ember/template-compiler/runtime';
 import { setComponentTemplate } from '@glimmer/manager';
 import { precompileTemplate } from '@ember/template-compilation';
@@ -1770,6 +1771,213 @@ if (!DEPRECATIONS.DEPRECATE_EMBER_COMPONENT.isRemoved) {
           components.literal.get('bar'),
           'Y',
           'a literal keeps the set value'
+        );
+      }
+
+      ['@test a two way binding through a {{#let}} alias writes where the alias was made']() {
+        expectClassicComponentDeprecation();
+
+        let components = [];
+        this.owner.register(
+          'component:two-way',
+          setComponentTemplate(
+            precompileTemplate('{{this.bar}}'),
+            class extends Component {
+              init() {
+                super.init(...arguments);
+                components.push(this);
+              }
+            }
+          )
+        );
+
+        let friend = { name: 'f', profile: 'friend profile' };
+        let outer = { profile: 'outer profile', friends: [friend] };
+        let a = { profile: 'a' };
+        let b = { profile: 'b' };
+        this.render(
+          strip`
+          {{#each this.items as |item|}}{{#let item.profile as |p|}}{{#each item.friends as |item|}}{{two-way bar=p}}{{/each}}{{/let}}{{/each}}
+          {{#each this.rows key="@index" as |row|}}{{#let row.profile as |p|}}{{two-way bar=p}}{{/let}}{{/each}}`,
+          { items: [outer], rows: [a, b] }
+        );
+
+        // The alias `p` of the outer row's `item.profile`, used under an inner
+        // block param of the same name: written to the outer item.
+        runTask(() => components[0].set('bar', 'written'));
+        this.assert.strictEqual(outer.profile, 'written', 'the outer item is written');
+        this.assert.strictEqual(friend.profile, 'friend profile', 'the inner item is not');
+
+        // An alias of a positional row's path: written to the item now at the row.
+        runTask(() => set(this.context, 'rows', [b, a]));
+        runTask(() => components[1].set('bar', 'B'));
+        this.assert.strictEqual(b.profile, 'B', 'the item now at the first row');
+        this.assert.strictEqual(a.profile, 'a', 'not the item the row had before');
+      }
+
+      ['@test a two way binding through @x of an angle-bracket caller writes the caller source']() {
+        expectClassicComponentDeprecation();
+
+        let components = {};
+        this.owner.register(
+          'component:two-way',
+          setComponentTemplate(
+            precompileTemplate('{{this.bar}}'),
+            class extends Component {
+              init() {
+                super.init(...arguments);
+                components[this.name] = this;
+              }
+            }
+          )
+        );
+        this.owner.register(
+          'component:two-way-outer',
+          setComponentTemplate(
+            precompileTemplate('{{two-way name=@name bar=@value}}'),
+            class extends Component {}
+          )
+        );
+
+        this.render(
+          strip`
+          <TwoWayOuter @name="angle" @value={{this.angle}} />
+          {{two-way-outer name="curly" value=this.curly}}`,
+          { angle: 'a', curly: 'c' }
+        );
+
+        runTask(() => components.angle.set('bar', 'A'));
+        this.assert.strictEqual(this.context.angle, 'A', 'the angle-bracket caller source');
+        runTask(() => components.curly.set('bar', 'C'));
+        this.assert.strictEqual(this.context.curly, 'C', 'the curly caller source');
+      }
+
+      ['@test a helper arrow passed positionally to a component is the value']() {
+        expectClassicComponentDeprecation();
+
+        let received;
+        this.registerHelper('make-arrow', () => () => 'called');
+        this.owner.register(
+          'component:receives-fn',
+          setComponentTemplate(
+            precompileTemplate('{{this.kind}}'),
+            class extends Component {
+              static positionalParams = ['fn'];
+              get kind() {
+                received = this.fn;
+                return typeof this.fn;
+              }
+            }
+          )
+        );
+
+        this.render('{{receives-fn (make-arrow)}}');
+
+        this.assertText('function');
+        this.assert.strictEqual(received(), 'called', 'the arrow, not its result');
+      }
+
+      ['@test key="@index": a classic component in a kept row gets the item now at its row in the same render']() {
+        expectClassicComponentDeprecation();
+
+        this.owner.register(
+          'component:positional-list',
+          setComponentTemplate(
+            precompileTemplate(
+              '<ul>{{#each this.items key="@index" as |i|}}<li>{{yield i}}</li>{{/each}}</ul>'
+            ),
+            class extends Component {}
+          )
+        );
+        this.owner.register(
+          'component:glimmer-positional-list',
+          setComponentTemplate(
+            precompileTemplate(
+              '<ul>{{#each @items key="@index" as |i|}}<li>{{yield i}}</li>{{/each}}</ul>'
+            ),
+            class extends GlimmerComponent {}
+          )
+        );
+        let rows = [];
+        let hooks = [];
+        this.owner.register(
+          'component:item-row',
+          setComponentTemplate(
+            precompileTemplate('{{this.item.name}}'),
+            class extends Component {
+              init() {
+                super.init(...arguments);
+                rows.push(this);
+              }
+              didReceiveAttrs() {
+                hooks.push(`didReceiveAttrs ${this.item.name}`);
+              }
+              didUpdateAttrs() {
+                hooks.push(`didUpdateAttrs ${this.item.name}`);
+              }
+            }
+          )
+        );
+        let parentTemplate =
+          '{{#positional-list items=@list as |item|}}{{item-row item=item}}{{/positional-list}}';
+        this.owner.register(
+          'component:classic-parent',
+          setComponentTemplate(precompileTemplate(parentTemplate), class extends Component {})
+        );
+        this.owner.register(
+          'component:glimmer-parent',
+          setComponentTemplate(
+            precompileTemplate(parentTemplate),
+            class extends GlimmerComponent {}
+          )
+        );
+
+        let a = { name: 'a' };
+        let b = { name: 'b' };
+        // A classic list (top level, in a classic parent, in a Glimmer parent)
+        // and a Glimmer list, each yielding its row's item to a classic row.
+        this.render(
+          strip`
+          <div class="top">{{#positional-list items=this.list as |item|}}{{item-row item=item}}{{/positional-list}}</div>
+          <div class="glimmer-list"><GlimmerPositionalList @items={{this.list}} as |item|>{{item-row item=item}}</GlimmerPositionalList></div>
+          <div class="classic-parent"><ClassicParent @list={{this.list}} /></div>
+          <div class="glimmer-parent"><GlimmerParent @list={{this.list}} /></div>`,
+          { list: [a, b] }
+        );
+        let cases = ['top', 'glimmer-list', 'classic-parent', 'glimmer-parent'];
+        let texts = (name) =>
+          Array.from(this.element.querySelectorAll(`.${name} li`)).map((li) =>
+            li.textContent.trim()
+          );
+        for (let name of cases) this.assert.deepEqual(texts(name), ['a', 'b'], name);
+        let created = rows.slice();
+        this.assert.strictEqual(created.length, 8, 'a row component per row');
+        hooks = [];
+
+        runTask(() => set(this.context, 'list', [b, a]));
+
+        for (let name of cases) {
+          this.assert.deepEqual(
+            texts(name),
+            ['b', 'a'],
+            `${name}: the rows show the items now at them`
+          );
+        }
+        this.assert.deepEqual(rows, created, 'the same instances');
+        this.assert.deepEqual(
+          created.map((row) => row.item.name),
+          ['b', 'a', 'b', 'a', 'b', 'a', 'b', 'a'],
+          'this.item is the new item'
+        );
+        this.assert.strictEqual(
+          hooks.filter((hook) => hook.startsWith('didUpdateAttrs')).length,
+          8,
+          'didUpdateAttrs once each'
+        );
+        this.assert.strictEqual(
+          hooks.filter((hook) => hook.startsWith('didReceiveAttrs')).length,
+          8,
+          'didReceiveAttrs once each'
         );
       }
 
