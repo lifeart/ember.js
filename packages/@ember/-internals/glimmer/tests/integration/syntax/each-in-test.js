@@ -524,6 +524,18 @@ moduleFor(
 
       this.assertText('[first.title=One/One][first.a=1/One][second.title=Two/Two][second.b=2/Two]');
 
+      // The outer rows stay (the same group objects); an inner row is
+      // replaced and reads the outer row's key and value.
+      runTask(() => set(this.context.groups.first, 'a', 5));
+
+      this.assertText('[first.title=One/One][first.a=5/One][second.title=Two/Two][second.b=2/Two]');
+
+      runTask(() => set(this.context.groups.second, 'title', 'Deux'));
+
+      this.assertText(
+        '[first.title=One/One][first.a=5/One][second.title=Deux/Deux][second.b=2/Deux]'
+      );
+
       runTask(() =>
         set(this.context, 'groups', {
           second: { title: 'Two', b: 3 },

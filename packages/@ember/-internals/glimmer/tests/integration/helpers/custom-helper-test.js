@@ -19,6 +19,10 @@ moduleFor(
     ['@test a class helper and a function helper get `(fn)` results and actions passed as named arguments as they are'](
       assert
     ) {
+      // In the compat build a helper's named arguments were read by calling
+      // every function among them. The native build passes every argument as
+      // a literal or a getter it reads with exactly one call, so a function
+      // value is never taken for a getter there; the test guards both.
       let received = {};
       let calls = [];
       this.registerHelper('class-helper', {
