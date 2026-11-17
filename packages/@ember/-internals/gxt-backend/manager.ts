@@ -4751,7 +4751,7 @@ function _gxtSyncAllWrappers(): void {
   // thrown after them.
   const errors: unknown[] = [];
   try {
-    _gxtSyncAllWrappersBody();
+    _gxtSyncAllWrappersBody(__curCycle);
   } catch (error) {
     errors.push(error);
   }
@@ -4769,8 +4769,15 @@ function _gxtSyncAllWrappers(): void {
 // Exposed on `compilePipeline.syncAllWrappers` (see the `setGxtRenderer`
 // install below); all in-source readers route through the bridge.
 
-function _gxtSyncAllWrappersBody(): void {
-  _updatedInstances.length = 0;
+// The sync cycle whose argument passes `_updatedInstances` holds the updated
+// instances of: a sync that runs the pass again in the same cycle (compile.ts,
+// after a list kept rows for other items) adds to the instances its first pass
+// updated, whose post-render hooks are still to fire, instead of dropping them.
+let _updatedInstancesCycle = 0;
+
+function _gxtSyncAllWrappersBody(cycle: number): void {
+  if (cycle === 0 || cycle !== _updatedInstancesCycle) _updatedInstances.length = 0;
+  _updatedInstancesCycle = cycle;
   const hasForced = _forcedRerenderInstances.size > 0;
 
   // Phase 1: Update arg cells and trigger pre-render lifecycle hooks.
