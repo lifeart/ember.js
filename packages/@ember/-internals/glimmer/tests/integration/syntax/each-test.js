@@ -1273,6 +1273,85 @@ moduleFor(
       );
     }
 
+    ['@test key="@index": a yielded item follows the item now at its row']() {
+      this.owner.register(
+        'component:positional-list',
+        setComponentTemplate(
+          precompileTemplate(
+            '<ul>{{#each @items key="@index" as |item|}}<li>{{yield item}}</li>{{/each}}</ul>'
+          ),
+          class extends Component {}
+        )
+      );
+      let a = { name: 'a' };
+      let b = { name: 'b' };
+
+      this.render(`<PositionalList @items={{this.list}} as |item|>{{item.name}}</PositionalList>`, {
+        list: [a, b],
+      });
+
+      let before = this.items();
+      this.assert.deepEqual(
+        before.map((li) => li.textContent),
+        ['a', 'b']
+      );
+
+      runTask(() => set(this.context, 'list', [b, a]));
+
+      let after = this.items();
+      this.assert.deepEqual(after, before, 'the rows stay where they are');
+      this.assert.deepEqual(
+        after.map((li) => li.textContent),
+        ['b', 'a'],
+        'and yield the items now at them'
+      );
+
+      runTask(() => set(this.context, 'list', [{ name: 'c' }]));
+
+      after = this.items();
+      this.assert.deepEqual(
+        after.map((li) => li.textContent),
+        ['c'],
+        'a new list'
+      );
+      this.assert.strictEqual(after[0], before[0], 'the first row stays');
+    }
+
+    ['@test key="@index": an item invoked as a component follows the component now at its row']() {
+      let First = setComponentTemplate(precompileTemplate('first'), class extends Component {});
+      let Second = setComponentTemplate(precompileTemplate('second'), class extends Component {});
+
+      this.render(`<ul>{{#each this.list key="@index" as |Item|}}<li><Item /></li>{{/each}}</ul>`, {
+        list: [First, Second],
+      });
+
+      let before = this.items();
+      this.assert.deepEqual(
+        before.map((li) => li.textContent),
+        ['first', 'second']
+      );
+
+      runTask(() => set(this.context, 'list', [Second, First]));
+
+      let after = this.items();
+      this.assert.deepEqual(after, before, 'the rows stay where they are');
+      this.assert.deepEqual(
+        after.map((li) => li.textContent),
+        ['second', 'first'],
+        'and invoke the components now at them'
+      );
+
+      runTask(() => set(this.context, 'list', [Second]));
+
+      after = this.items();
+      this.assert.deepEqual(
+        after.map((li) => li.textContent),
+        ['second'],
+        'a new list'
+      );
+      this.assert.strictEqual(after[0], before[0], 'the first row stays');
+    }
+
     ['@test @identity moves the nodes of objects when they are reordered']() {
       let a = { name: 'a' };
       let b = { name: 'b' };
