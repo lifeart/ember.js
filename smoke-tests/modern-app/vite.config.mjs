@@ -22,11 +22,12 @@
 // and the app flavor by MODERN_APP_FLAVOR (strict .gjs = default | loose).
 // Driven by scripts/bundle-modern-app.mjs (run from the repo root: rollup.config
 // reads broccoli/ files relative to cwd).
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import rootConfig from '../../vite.config.mjs';
 import { resolvePackages, exposedDependencies, hiddenDependencies } from '../../rollup.config.mjs';
-import { bundleStats, strictResolverEntry } from './harness-shared.mjs';
+import { GXT_SHIM_DIR } from '../../scripts/gxt-alias-map.mjs';
+import { EMBER_ROOT, bundleStats, strictResolverEntry } from './harness-shared.mjs';
 
 const APP_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -63,6 +64,7 @@ function prodResolvePackages() {
       ...hiddenDependencies(),
       '@lifeart/gxt/glimmer-compatibility': '@lifeart/gxt',
       '@lifeart/gxt/runtime-compiler': '@lifeart/gxt',
+      '@lifeart/gxt/runtime-scope': '@lifeart/gxt',
       '@babel/core': '@lifeart/gxt',
       typescript: '@lifeart/gxt',
       'content-tag': '@lifeart/gxt',
@@ -96,6 +98,25 @@ export default async (env) => {
   const extraAliases = [
     { find: /^ember-strict-application-resolver$/, replacement: strictResolverEntry() },
   ];
+  if (variant === 'gxt') {
+    // Compat, as the rollup dist resolves it (`entryShim` in the alias table):
+    // Ember's own modules import `@ember/template-compilation` as the lean
+    // render layer (compile.ts); the app imports the published entry, which
+    // also loads the gxt runtime compiler. So a precompiled app's closure
+    // carries no compiler, and a loose app, which imports the entry for its
+    // `precompileTemplate` strings, compiles them at runtime.
+    const shimDir = resolve(EMBER_ROOT, GXT_SHIM_DIR);
+    const packagesDir = resolve(EMBER_ROOT, 'packages') + sep;
+    const entry = resolve(shimDir, 'template-compilation-entry.ts');
+    const renderLayer = resolve(shimDir, 'compile.ts');
+    extraAliases.push({
+      find: /^@ember\/template-compilation$/,
+      replacement: entry,
+      customResolver(_source, importer) {
+        return importer !== undefined && importer.startsWith(packagesDir) ? renderLayer : entry;
+      },
+    });
+  }
   return {
     ...base,
     root: APP_DIR,

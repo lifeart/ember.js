@@ -14,11 +14,10 @@ import type {
   BaseClassTemplateOptions,
   BaseTemplateOptions,
 } from '@ember/template-compiler/lib/template';
-import {
-  compileTemplate as gxtCompileTemplate,
-  escapeBindingName,
-  type AstTransform,
-} from '@lifeart/gxt/runtime-compiler';
+import type { AstTransform } from '@lifeart/gxt/runtime-compiler';
+// The runtime compiler, installed by the entry the app compiles through
+// (runtime-compiler-install.ts); a precompiled app ships none.
+import { gxtRuntimeCompiler } from './runtime-compiler-seam';
 import { getGxtRenderer, installCompilePipelinePart } from './gxt-bridge';
 import { gxtExplicitThisTransform, gxtTemplateLocals } from './ast-transforms';
 
@@ -36,7 +35,7 @@ function _extractScopeFromEval(
   for (const name of gxtTemplateLocals(parseGxtTemplate(templateString))) {
     // A name that is not a plain JS identifier (`has-block`, `-in-element`,
     // a reserved word such as `if`) is not a variable of the caller's scope.
-    if (escapeBindingName(name) !== name) continue;
+    if (gxtRuntimeCompiler().escapeBindingName(name) !== name) continue;
     // Skip GXT/Ember built-in keywords. These are part of the template
     // language (resolved by the compiler/runtime), so the user must opt-in
     // to shadowing them via the explicit `scope` form. The implicit form
@@ -85,7 +84,7 @@ export function parseGxtTemplate(source: string): unknown {
       _gxtSyntax.parse = env.syntax.parse;
       return { name: 'ember-gxt-parser', visitor: {} };
     };
-    gxtCompileTemplate('', { transforms: [capture as unknown as AstTransform] });
+    gxtRuntimeCompiler().compileTemplate('', { transforms: [capture as unknown as AstTransform] });
   }
   if (_gxtSyntax.parse === undefined) {
     throw new Error(

@@ -57,16 +57,27 @@ jobs:
       # The same strict app on the compat build (EMBER_RENDER_BACKEND=gxt), as
       # a compat app consumes Ember: built from source through the repo
       # pipeline (the compat dist has no entry for the gxt-wrapper redirect
-      # its templates need), boot-checked and gated like the apps above.
-      - name: Compat modern app from source, strict (boot-check)
+      # its templates need), boot-checked and gated like the apps above. It is
+      # precompiled, so its closure must carry no gxt template compiler: only
+      # the entries an app compiles templates through at runtime load it.
+      - name: Compat modern app from source, strict (boot-check, no runtime compiler)
         run: |
-          node scripts/bundle-modern-app.mjs --variants gxt --boot \
+          node scripts/bundle-modern-app.mjs --variants gxt --boot --assert-no-runtime-compiler \
             --json "$RUNNER_TEMP/modern-app-compat.json"
+      # The loose app on the compat build: its templates are
+      # `precompileTemplate` strings, which it compiles at runtime through the
+      # published `@ember/template-compilation` (that entry loads the gxt
+      # runtime compiler).
+      - name: Compat modern app from source, loose (boot-check, runtime compile)
+        run: |
+          node scripts/bundle-modern-app.mjs --variants gxt --flavor loose --boot \
+            --json "$RUNNER_TEMP/modern-app-compat-loose.json"
       - name: Boot-check gate and bytes (job summary)
         run: |
           node scripts/bundle-modern-app-gate.mjs \
             "$RUNNER_TEMP/modern-app-strict.json" "$RUNNER_TEMP/modern-app-loose.json" \
-            "$RUNNER_TEMP/modern-app-lists.json" "$RUNNER_TEMP/modern-app-compat.json"
+            "$RUNNER_TEMP/modern-app-lists.json" "$RUNNER_TEMP/modern-app-compat.json" \
+            "$RUNNER_TEMP/modern-app-compat-loose.json"
       - name: Build the ember-source-gxt-native package
         run: |
           node scripts/build-gxt-native-package.mjs \
@@ -94,6 +105,7 @@ jobs:
             ${{ runner.temp }}/modern-app-loose.json
             ${{ runner.temp }}/modern-app-lists.json
             ${{ runner.temp }}/modern-app-compat.json
+            ${{ runner.temp }}/modern-app-compat-loose.json
             smoke-tests/modern-app/dist/*.log
             smoke-tests/modern-app/dist/*-boot.json
             ${{ runner.temp }}/consumer-app/*.json

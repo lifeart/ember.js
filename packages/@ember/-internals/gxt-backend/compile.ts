@@ -233,16 +233,19 @@ import { isEmberArray } from '@ember/array/-internals';
 import { RECOMPUTE_TAG } from '@ember/-internals/glimmer/lib/helper';
 // The class of `templateOnly()` component definitions.
 import { TemplateOnlyComponentDefinition } from '@glimmer/runtime/lib/component/template-only';
-// Import the GXT runtime compiler
+// The runtime symbol table and `setupGlobalScope`, from gxt's compiler-free
+// entry. The runtime compiler itself (`compileTemplate`, and
+// `escapeBindingName`: the identifier gxt declares and references a template
+// binding under — `some-helper` → `__bp_some$2d$helper`, `debugger` →
+// `__bp_debugger`) is read through the seam when a template is compiled at
+// runtime; the entries an app compiles through install it
+// (runtime-compiler-install.ts), so a precompiled app ships no compiler.
 import {
-  compileTemplate as gxtCompileTemplate,
   setupGlobalScope,
   isGlobalScopeReady,
   GXT_RUNTIME_SYMBOLS,
-  // The identifier gxt declares and references a template binding under
-  // (`some-helper` → `__bp_some$2d$helper`, `debugger` → `__bp_debugger`).
-  escapeBindingName as _gxtEscapeBindingName,
-} from '@lifeart/gxt/runtime-compiler';
+} from '@lifeart/gxt/runtime-scope';
+import { gxtRuntimeCompiler } from './runtime-compiler-seam';
 // The GXT Ember-dialect AST transforms live in ./ast-transforms.
 // `precompileTemplate` calls `buildGxtDialectTransforms` and annotates its
 // findings object with `GxtAssertFindings`; the `__gxtCommentLookup` resolver
@@ -12031,11 +12034,11 @@ let _functionCodeCache: Map<string, _GxtTemplateFn> | null = null;
 // the native path $_GET_ARGS puts the render context into gxt's component TREE
 // (fresh id via `??= cId()`, addToTree under the ambient gxtRoot parent),
 // which gives ember components gxt-native destroy sequencing.
-// scopeValues are threaded into gxtCompileTemplate (gxt binds them as real
+// scopeValues are threaded into the runtime compiler's compileTemplate (gxt binds them as real
 // Function parameters) when EVERY key is a plain valid JS identifier —
 // matching gxt's emitted identifier references verbatim. Keys that are not
 // (hyphenated names, reserved words) keep the legacy path, which declares each
-// under the identifier gxt references it under (`_gxtEscapeBindingName`); a
+// under the identifier gxt references it under (`escapeBindingName`); a
 // leading `$` is rejected too so user scope can never collide with gxt's own
 // `$a`/`$slots`/`$fw` preamble locals or `$_*` params.
 const _GXT_NATIVE_SCOPE_IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
@@ -12122,7 +12125,7 @@ function _gxtNativeTemplateEligible(
   if (!cr || typeof cr.templateFn !== 'function') return false;
   if (cr.errors && cr.errors.length > 0) return false;
   // NON-STRICT scoped templates are eligible when their scopeValues were
-  // threaded into gxtCompileTemplate as native Function params (all keys plain
+  // threaded into the runtime compiler's compileTemplate as native Function params (all keys plain
   // identifiers — see _gxtScopeValuesNativeSafe) AND no key collides with the
   // ember builtin-helper table (the legacy helperInjections deliberately
   // SHADOW such keys with ember-spec callable implementations — e.g. a
@@ -12388,8 +12391,9 @@ export function precompileTemplate(
     inElementIds: [],
   };
 
-  // Compile using GXT runtime compiler
-  const compilationResult = gxtCompileTemplate(templateString, {
+  // Compile using GXT runtime compiler (installed by the entry this template
+  // was compiled through; throws when the app loaded none)
+  const compilationResult = gxtRuntimeCompiler().compileTemplate(templateString, {
     moduleName: options?.moduleName || 'gxt-runtime-template',
     bindings: scopeBindings,
     // The emission flags are set in the `flags:` key below (after
@@ -12574,7 +12578,7 @@ export function precompileTemplate(
   }
 
   // Eligible templates keep gxt's OWN templateFn (built inside
-  // gxtCompileTemplate from the unmodified code) and skip the legacy assembly
+  // the runtime compiler's compileTemplate from the unmodified code) and skip the legacy assembly
   // below. Otherwise the template function is rebuilt around a rewritten copy
   // of the code plus the legacy injections ($a alias for @named args,
   // $slots/$fw accessors, helper and scope locals).
@@ -12594,14 +12598,14 @@ export function precompileTemplate(
     //
     // Only keys the compiler reports as quoted lookups (`maybeHelperNames`) are
     // rewritten. A binding gxt references as a variable is referenced under the
-    // identifier gxt declares it under (`_gxtEscapeBindingName`), which the
+    // identifier gxt declares it under (`escapeBindingName`), which the
     // scope injection below declares.
     if (options?.scopeValues && Object.keys(options.scopeValues).length > 0) {
       const quotedLookups = new Set(compilationResult.maybeHelperNames);
       const scopeKeySet = new Set(Object.keys(options.scopeValues));
       for (const key of scopeKeySet) {
         if (!quotedLookups.has(key)) continue;
-        const jsKey = _gxtEscapeBindingName(key);
+        const jsKey = gxtRuntimeCompiler().escapeBindingName(key);
         const escapedKey = key.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
         // Replace $_maybeHelper("key", with $_maybeHelper(jsKey,
         // Use a regex that matches both quote styles
@@ -12725,7 +12729,7 @@ export function precompileTemplate(
           // The identifier gxt references the binding under: the key itself,
           // or for a key that is not a plain JS identifier (`some-helper`,
           // `debugger`) its escaped name.
-          const jsKey = _gxtEscapeBindingName(key);
+          const jsKey = gxtRuntimeCompiler().escapeBindingName(key);
           // Block-param shadow fix for scoped helpers like `hash`, `get`,
           // `fn` that the template also shadows via `{{#let ... as |hash|}}`.
           // GXT emits `(() => { let hash = () => $_maybeHelper(hash, ...); })()`

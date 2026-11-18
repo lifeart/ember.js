@@ -19,7 +19,7 @@
 // Public AST-transform hook type. `transforms: AstTransform[]` runs
 // `@glimmer/syntax`-style visitors on the parsed template AST after preprocess,
 // before glimmer-next codegen.
-import { type AstTransform as GxtAstTransform } from '@lifeart/gxt/runtime-compiler';
+import type { AstTransform as GxtAstTransform } from '@lifeart/gxt/runtime-compiler';
 import { DEBUG } from '@glimmer/env';
 
 // The `{{on}}` → `{{on-ext}}` rewrite contract: `gxtOnModifierTransform` (below)

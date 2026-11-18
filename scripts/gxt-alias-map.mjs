@@ -46,6 +46,12 @@ export const GXT_SHIM_DIR = 'packages/@ember/-internals/gxt-backend';
  * paths used by `@ember/reactive/collections` and the (purged) VM opcode core
  * route to the `-vm-compat` module via GXT_SUBPATH_REDIRECTS below.
  *
+ * `exact: true` marks a specifier whose deep paths must stay REAL (the shim is
+ * a facade over the classic entry's `lib/*`): vite gets an anchored regex for
+ * the bare specifier instead of a string alias, which would also rewrite
+ * `find/…`; rollup matches exact keys anyway and never collapses a
+ * non-`subpathTolerant` alias's deep paths.
+ *
  * ORDER IS SIGNIFICANT for the vite alias array (first match wins, and Vite
  * string aliases match on a `find + '/'` prefix).
  *
@@ -55,7 +61,20 @@ export const GXT_SHIM_DIR = 'packages/@ember/-internals/gxt-backend';
  */
 export const GXT_SHIM_ALIASES = [
   { find: 'ember-template-compiler', shim: 'ember-template-compiler' },
-  { find: '@ember/template-compilation', shim: 'compile' },
+  // The render layer (compile.ts) is what Ember's own modules import; the
+  // PUBLISHED entry (`entryShim`) adds the gxt runtime compiler, so an app
+  // compiling a `precompileTemplate` string at runtime through it can, and a
+  // precompiled app, which never imports the entry, ships no compiler.
+  { find: '@ember/template-compilation', shim: 'compile', entryShim: 'template-compilation-entry' },
+  // `template()` at runtime: the classic entries' surface plus the runtime
+  // compiler. `exact`: the bare specifier only — the classic `lib/*` deep paths
+  // stay real (the facades re-export them).
+  { find: '@ember/template-compiler', shim: 'template-compiler-entry', exact: true },
+  {
+    find: '@ember/template-compiler/runtime',
+    shim: 'template-compiler-runtime-entry',
+    exact: true,
+  },
   { find: '@glimmer/application', shim: 'glimmer-application' },
   { find: '@glimmer/utils', shim: 'glimmer-util' },
   { find: '@glimmer/manager', shim: 'manager', subpathTolerant: true },
@@ -104,6 +123,7 @@ export const GXT_EXTERNAL_PACKAGES = new Set([
   '@lifeart/gxt',
   '@lifeart/gxt/glimmer-compatibility',
   '@lifeart/gxt/runtime-compiler',
+  '@lifeart/gxt/runtime-scope',
   '@lifeart/gxt/compiler',
 ]);
 
@@ -189,6 +209,15 @@ export const GXT_DROPPED_ENTRIES = new Set([
 export function gxtSubpathRegExp(find) {
   const escaped = find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp('^' + escaped + '(/.*)?$');
+}
+
+/**
+ * Anchored regex for the bare specifier only (an `exact` alias): a vite string
+ * alias would also rewrite `find/…` deep paths, which these entries keep real.
+ */
+export function gxtExactRegExp(find) {
+  const escaped = find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('^' + escaped + '$');
 }
 
 /**

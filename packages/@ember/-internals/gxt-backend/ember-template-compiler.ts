@@ -28,6 +28,9 @@ export interface EmberPrecompileOptions {
  * Delegates to compile.ts which uses the GXT runtime compiler for proper
  * component invocation (e.g., <XBlah /> -> $_c('x-blah', ...)).
  */
+// This entry compiles at runtime: it installs the gxt runtime compiler when it
+// loads (the test page loads it first for that) and when it compiles.
+import { installRuntimeCompiler } from './runtime-compiler-install';
 import { compileTemplate } from './compile';
 import { templateCacheCounters } from '@glimmer/opcode-compiler';
 import { ENV } from '@ember/-internals/environment';
@@ -36,7 +39,10 @@ import VERSION from 'ember/version';
 // Block params named like keywords and block keywords that the scope shadows
 // are handled on the template's AST, in compile.ts (`buildGxtLexicalTransforms`
 // in ast-transforms.ts).
+installRuntimeCompiler();
+
 export function compile(templateString: string, options?: any) {
+  installRuntimeCompiler();
   return _instrumentFactory(compileTemplate(templateString, options), options);
 }
 

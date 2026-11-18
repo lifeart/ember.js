@@ -190,8 +190,12 @@ function esmInputs() {
       // lean runtime `shim` via exposedDependencies()/resolvePackages, so the
       // test-only surface only ever lands in this separate entry chunk.
       const target = resolve(compatRoot, `${entryShim ?? shim}.ts`);
-      if (inputs[bareKey] !== undefined && inputs[indexKey] === undefined) {
+      if (inputs[bareKey] !== undefined) {
+        // A module entry (`@ember/template-compiler/runtime` is runtime.ts):
+        // the shim takes its place. The `…/index` key the exposed-dependency
+        // map adds for it names no module of the package.
         inputs[bareKey] = target;
+        delete inputs[indexKey];
       } else {
         inputs[indexKey] = target;
       }

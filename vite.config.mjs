@@ -25,6 +25,7 @@ import {
   gxtNativeAliasMatcher,
   gxtNativeSpecifierForPath,
   gxtSubpathRegExp,
+  gxtExactRegExp,
   isGxtEnabled,
   isGxtNative,
   matchGxtNativeAlias,
@@ -196,6 +197,7 @@ export default defineConfig(({ mode }) => {
           // GXT subpath exports need explicit entries for resolvePackages
           '@lifeart/gxt/glimmer-compatibility': '@lifeart/gxt',
           '@lifeart/gxt/runtime-compiler': '@lifeart/gxt',
+          '@lifeart/gxt/runtime-scope': '@lifeart/gxt',
           // `decorator-transforms` (bare and /runtime) resolves to real file
           // paths via hiddenDependencies: a bare-string mapping here makes vite
           // 404 on /@id/decorator-transforms.
@@ -223,6 +225,7 @@ export default defineConfig(({ mode }) => {
       exclude: [
         '@lifeart/gxt',
         '@lifeart/gxt/runtime-compiler',
+        '@lifeart/gxt/runtime-scope',
         '@lifeart/gxt/glimmer-compatibility',
         '@lifeart/gxt/item-references',
       ],
@@ -298,6 +301,7 @@ export default defineConfig(({ mode }) => {
             '@lifeart/gxt/glimmer-compatibility',
             '@lifeart/gxt/runtime-compiler',
             '@lifeart/gxt/item-references',
+            '@lifeart/gxt/runtime-scope',
           ],
           alias: [
             GLIMMER_COMPONENT_SOURCE_ALIAS,
@@ -319,8 +323,9 @@ export default defineConfig(({ mode }) => {
               find: gxtSubpathRegExp(find),
               replacement: fileURLToPath(new URL(`./${GXT_SHIM_DIR}/${shim}`, owerrideRoot)),
             })),
-            ...GXT_SHIM_ALIASES.map(({ find, shim, entryShim, subpathTolerant }) => ({
-              find: subpathTolerant ? gxtSubpathRegExp(find) : find,
+            ...GXT_SHIM_ALIASES.map(({ find, shim, entryShim, subpathTolerant, exact }) => ({
+              // `exact`: the bare specifier only; its `lib/*` deep paths stay real.
+              find: subpathTolerant ? gxtSubpathRegExp(find) : exact ? gxtExactRegExp(find) : find,
               // The vite test tree resolves the FULL classic surface: a split
               // package (`entryShim` set) aliases to its full-surface entry
               // facade (runtime shim + `-vm-compat`); others to the single shim.
@@ -334,6 +339,12 @@ export default defineConfig(({ mode }) => {
               find: /^internal-test-helpers\/lib\/compile$/,
               replacement: fileURLToPath(
                 new URL(`./packages/@ember/-internals/gxt-backend/test-compile`, owerrideRoot)
+              ),
+            },
+            {
+              find: '@lifeart/gxt/runtime-scope',
+              replacement: resolveGxtPath(
+                `./node_modules/@lifeart/gxt/dist/gxt.runtime-scope.es.js`
               ),
             },
             {
@@ -634,6 +645,7 @@ function nativeConfig(mode) {
           '@glimmer/component': resolve(projectRoot, 'packages/@glimmer/component/src/index.ts'),
           '@lifeart/gxt/glimmer-compatibility': '@lifeart/gxt',
           '@lifeart/gxt/runtime-compiler': '@lifeart/gxt',
+          '@lifeart/gxt/runtime-scope': '@lifeart/gxt',
           '@babel/core': '@lifeart/gxt',
           typescript: '@lifeart/gxt',
           'content-tag': '@lifeart/gxt',
@@ -652,6 +664,7 @@ function nativeConfig(mode) {
       exclude: [
         '@lifeart/gxt',
         '@lifeart/gxt/runtime-compiler',
+        '@lifeart/gxt/runtime-scope',
         '@lifeart/gxt/glimmer-compatibility',
         '@lifeart/gxt/item-references',
       ],
@@ -669,6 +682,7 @@ function nativeConfig(mode) {
         '@lifeart/gxt/glimmer-compatibility',
         '@lifeart/gxt/runtime-compiler',
         '@lifeart/gxt/item-references',
+        '@lifeart/gxt/runtime-scope',
       ],
       alias: [
         GLIMMER_COMPONENT_SOURCE_ALIAS,
@@ -677,6 +691,10 @@ function nativeConfig(mode) {
           find: gxtNativeAliasMatcher(entry),
           replacement: fileURLToPath(new URL(`./${entry.target}`, owerrideRoot)),
         })),
+        {
+          find: '@lifeart/gxt/runtime-scope',
+          replacement: resolveGxtPath(`./node_modules/@lifeart/gxt/dist/gxt.runtime-scope.es.js`),
+        },
         {
           find: '@lifeart/gxt/runtime-compiler',
           replacement: resolveGxtPath(

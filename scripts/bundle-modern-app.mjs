@@ -36,6 +36,12 @@
 //                                     # fail if the native closure ships
 //                                     # any Glimmer-VM / compat-bridge / runtime-
 //                                     # template-compiler module (see FORBIDDEN_NATIVE)
+//   node scripts/bundle-modern-app.mjs --variants gxt --assert-no-runtime-compiler
+//                                     # fail if the precompiled compat app ships a
+//                                     # template compiler module (gxt's compiler,
+//                                     # @glimmer/syntax, @handlebars/parser,
+//                                     # simple-html-tokenizer; see
+//                                     # RUNTIME_COMPILER_MODULES)
 //
 // FROM-DIST variants (`--from-dist`): the same app built against a ROLLUP dist
 // snapshot of ember-source — how apps consume ember — through
@@ -122,6 +128,10 @@ const doBuildDists = flag('--build-dists');
 const doBoot = flag('--boot');
 const showInventory = flag('--inventory');
 const assertNativeFlag = flag('--assert-native');
+// A precompiled app compiles no template at runtime, so its closure must not
+// carry the gxt template compiler (compat: only the entries an app compiles
+// through at runtime load it).
+const assertNoRuntimeCompilerFlag = flag('--assert-no-runtime-compiler');
 const jsonOut = opt('--json', null);
 const buildTimeoutMs = Number(opt('--build-timeout', '900')) * 1000;
 // strict (default): app/ — <template> .gjs, build-time compiled on every variant.
@@ -907,6 +917,42 @@ if (assertNativeFlag) {
   for (const r of native) {
     r.assertNative = assertNative(r);
     if (r.assertNative.violations.length) process.exitCode = 1;
+  }
+}
+
+// --assert-no-runtime-compiler: a precompiled app's closure carries no template
+// compiler: no module of gxt's compiler (`plugins/compiler/*`, which the gxt
+// dist ships in its compiler chunk, `flags-*`, shared by the runtime-compiler
+// and the build-time compiler entries), no `@glimmer/syntax`,
+// `@handlebars/parser` or `simple-html-tokenizer` module, and not the compat
+// module that installs the runtime compiler. Judged on the shipped (minified)
+// bytes, attributed to their source modules by the bundle's sourcemap.
+const RUNTIME_COMPILER_MODULES = [
+  [/^gxt:dist\/(compile-|flags-|gxt\.runtime-compiler\.|gxt\.compiler\.)/, 'gxt template compiler'],
+  [/(^|\/)plugins\/compiler\//, 'gxt template compiler'],
+  [/^npm:@glimmer\/syntax\/|^packages\/@glimmer\/syntax\//, '@glimmer/syntax'],
+  [/^npm:@handlebars\/parser\/|^packages\/@handlebars\/parser\//, '@handlebars/parser'],
+  [/^npm:simple-html-tokenizer\//, 'simple-html-tokenizer'],
+  [/gxt-backend\/runtime-compiler-install\.ts$/, 'installs the gxt runtime compiler'],
+];
+if (assertNoRuntimeCompilerFlag) {
+  for (const r of results) {
+    const violations = [];
+    for (const [src, bytes] of r.inventory.shippedAbs) {
+      if (bytes === 0) continue;
+      const path = normalize(src);
+      const reason = RUNTIME_COMPILER_MODULES.find(([re]) => re.test(path))?.[1];
+      if (reason !== undefined) violations.push({ id: path, reason, shipped: bytes });
+    }
+    r.assertNoRuntimeCompiler = { violations };
+    console.log(
+      violations.length
+        ? `[assert-no-runtime-compiler] FAIL: ${r.variant} ships a template compiler:\n${violations
+            .map((v) => `  - ${shortId(v.id)} [${v.reason}] ${fmt(v.shipped)} B (min)`)
+            .join('\n')}`
+        : `[assert-no-runtime-compiler] OK: no template compiler module in ${r.variant} (${r.inventory.shippedAbs.size} source modules checked)`
+    );
+    if (violations.length) process.exitCode = 1;
   }
 }
 
