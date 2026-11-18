@@ -1,14 +1,14 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-11-17T11:02:34.122Z",
-    "gxtVersion": "0.0.87",
-    "emberCommit": "df85f82",
-    "totalTests": 7208,
+    "capturedAt": "2026-11-18T07:26:47.409Z",
+    "gxtVersion": "0.0.88",
+    "emberCommit": "cdefb50",
+    "totalTests": 7216,
     "totalModules": 684,
     "quarantinedTests": 0,
-    "totalAssertions": 36306,
-    "totalAssertionsPassing": 36273
+    "totalAssertions": 36345,
+    "totalAssertionsPassing": 36321
   },
   "modules": {
     "<LinkTo /> component (URL sanitization of forwarded attributes)": {
@@ -1192,8 +1192,8 @@
     "Components test: contextual components": {
       "total": 43,
       "passing": 35,
-      "assertionsTotal": 65,
-      "assertionsPassing": 46,
+      "assertionsTotal": 63,
+      "assertionsPassing": 44,
       "failingTests": [
         {
           "name": " GH#13742 keeps nested rest positional parameters if rendered with no positional parameters",
@@ -1996,10 +1996,10 @@
       ]
     },
     "Helpers test: custom helpers": {
-      "total": 35,
-      "passing": 35,
-      "assertionsTotal": 91,
-      "assertionsPassing": 91,
+      "total": 37,
+      "passing": 37,
+      "assertionsTotal": 101,
+      "assertionsPassing": 101,
       "failingTests": [],
       "skippedTests": [
         " class-based helper used in subexpression can recompute component",
@@ -3672,10 +3672,10 @@
       "failingTests": []
     },
     "Syntax test: {{#each-in}} with POJOs": {
-      "total": 11,
-      "passing": 11,
-      "assertionsTotal": 65,
-      "assertionsPassing": 65,
+      "total": 12,
+      "passing": 12,
+      "assertionsTotal": 69,
+      "assertionsPassing": 69,
       "failingTests": []
     },
     "Syntax test: {{#each-in}} with `ObjectProxy`": {
@@ -3704,43 +3704,17 @@
     },
     "Syntax test: {{#each-in}} with the key option": {
       "total": 5,
-      "passing": 0,
+      "passing": 5,
       "assertionsTotal": 30,
-      "assertionsPassing": 22,
-      "failingTests": [
-        {
-          "name": " by default the entry's value is the key, so changing a value replaces its DOM",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " key=\"@key\" uses the property name, so a changed value updates in place",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " key=\"@index\" keys on the property name, not the position or the value",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " a path key is looked up on the entry's value",
-          "category": "gxt:triage"
-        },
-        {
-          "name": " key=\"@index\" collides when a Map is keyed by objects",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 30,
+      "failingTests": []
     },
     "Syntax test: {{#each}} keys and DOM identity": {
-      "total": 7,
-      "passing": 6,
-      "assertionsTotal": 19,
-      "assertionsPassing": 18,
-      "failingTests": [
-        {
-          "name": " @key keys items by position",
-          "category": "gxt:triage"
-        }
-      ]
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 43,
+      "assertionsPassing": 43,
+      "failingTests": []
     },
     "Syntax test: {{#each}} with array proxies, arrangedContent depends on external content": {
       "total": 23,
@@ -4632,10 +4606,10 @@
       "failingTests": []
     },
     "gxt-native | components": {
-      "total": 21,
-      "passing": 21,
-      "assertionsTotal": 47,
-      "assertionsPassing": 47,
+      "total": 22,
+      "passing": 22,
+      "assertionsTotal": 50,
+      "assertionsPassing": 50,
       "failingTests": []
     },
     "gxt-native | content": {
@@ -5326,6 +5300,6 @@
     }
   },
   "categories": {
-    "gxt:triage": 18
+    "gxt:triage": 12
   }
 }

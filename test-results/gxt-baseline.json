@@ -1,15 +1,15 @@
 {
   "meta": {
     "runner": "scripts/gxt-test-runner/runner.mjs@v1",
-    "capturedAt": "2026-11-17T11:02:32.709Z",
-    "gxtVersion": "0.0.87",
-    "emberCommit": "df85f82",
-    "totalTests": 10465,
+    "capturedAt": "2026-11-18T07:26:59.943Z",
+    "gxtVersion": "0.0.88",
+    "emberCommit": "cdefb50",
+    "totalTests": 10482,
     "totalModules": 1065,
     "quarantinedTests": 0,
-    "totalAssertions": 62109,
-    "totalAssertionsPassing": 61826,
-    "note": "Compat full run on #21340 with gxt 0.0.87 (rebased onto main 9ed291512e, with the gxt-native memory fixes); written by runner.mjs in the GitHub Actions GXT full workflow, merged from 5 shards. 10230/10465 green, 1065 modules, no timeouts, no harness errors. Against the previous baseline (gxt 0.0.86, 10227/10465): three tests went from red to green (contextual components 'renders with dot path and updates attributes'; {{fn}} 'can be used on the result of mut', with and without a falsy value). No test went from green to red."
+    "totalAssertions": 62206,
+    "totalAssertionsPassing": 61941,
+    "note": "Compat full run on #21340 with gxt 0.0.88; written by runner.mjs in the GitHub Actions GXT full workflow, merged from 5 shards. 10250/10482 green, 1065 modules, no timeouts, no harness errors. Against the previous baseline (gxt 0.0.87): three tests went from red to green (the each helper's @index key test; {{#each}} '@key keys items by position'; contextual components 'renders with dot path and updates attributes'). No test went from green to red."
   },
   "modules": {
     "<LinkTo /> component (URL sanitization of forwarded attributes)": {
@@ -1591,15 +1591,10 @@
     },
     "Components test: contextual components (classic component)": {
       "total": 23,
-      "passing": 22,
+      "passing": 23,
       "assertionsTotal": 79,
-      "assertionsPassing": 78,
-      "failingTests": [
-        {
-          "name": " renders with dot path and updates attributes",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 79,
+      "failingTests": []
     },
     "Components test: contextual components -- mutable params": {
       "total": 2,
@@ -1628,10 +1623,10 @@
       ]
     },
     "Components test: curly components (classic component)": {
-      "total": 77,
-      "passing": 77,
-      "assertionsTotal": 515,
-      "assertionsPassing": 515,
+      "total": 87,
+      "passing": 87,
+      "assertionsTotal": 576,
+      "assertionsPassing": 576,
       "failingTests": []
     },
     "Components test: dynamic components": {
@@ -3012,10 +3007,10 @@
       ]
     },
     "Helpers test: custom helpers": {
-      "total": 35,
-      "passing": 35,
-      "assertionsTotal": 101,
-      "assertionsPassing": 101,
+      "total": 37,
+      "passing": 37,
+      "assertionsTotal": 111,
+      "assertionsPassing": 111,
       "failingTests": []
     },
     "Helpers test: default helper manager": {
@@ -4910,10 +4905,10 @@
       "failingTests": []
     },
     "Syntax test: {{#each-in}} with POJOs": {
-      "total": 11,
-      "passing": 11,
-      "assertionsTotal": 65,
-      "assertionsPassing": 65,
+      "total": 12,
+      "passing": 12,
+      "assertionsTotal": 69,
+      "assertionsPassing": 69,
       "failingTests": []
     },
     "Syntax test: {{#each-in}} with `ObjectProxy`": {
@@ -4952,16 +4947,11 @@
       "failingTests": []
     },
     "Syntax test: {{#each}} keys and DOM identity": {
-      "total": 7,
-      "passing": 6,
-      "assertionsTotal": 19,
-      "assertionsPassing": 18,
-      "failingTests": [
-        {
-          "name": " @key keys items by position",
-          "category": "gxt:triage"
-        }
-      ]
+      "total": 11,
+      "passing": 11,
+      "assertionsTotal": 43,
+      "assertionsPassing": 43,
+      "failingTests": []
     },
     "Syntax test: {{#each}} over a list that is no Array, by the path to the list": {
       "total": 3,
@@ -6004,15 +5994,10 @@
     },
     "[integration] jit :: Updating": {
       "total": 66,
-      "passing": 65,
+      "passing": 66,
       "assertionsTotal": 834,
-      "assertionsPassing": 818,
-      "failingTests": [
-        {
-          "name": "The each helper yields the index of the current item current item when using the @index key",
-          "category": "gxt:triage"
-        }
-      ]
+      "assertionsPassing": 834,
+      "failingTests": []
     },
     "[integration] jit :: Updating - Content": {
       "total": 18,
@@ -6096,8 +6081,8 @@
     "[integration] jit :: [owner]": {
       "total": 2,
       "passing": 2,
-      "assertionsTotal": 7,
-      "assertionsPassing": 7,
+      "assertionsTotal": 5,
+      "assertionsPassing": 5,
       "failingTests": []
     },
     "[integration] jit :: `component` keyword syntax errors": {
@@ -8655,6 +8640,6 @@
     }
   },
   "categories": {
-    "gxt:triage": 235
+    "gxt:triage": 232
   }
 }
