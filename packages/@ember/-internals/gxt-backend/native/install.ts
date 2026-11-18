@@ -1,12 +1,10 @@
 // gxt NATIVE layer — the one place the native layer wires itself into gxt.
 // Imported for its side effect by native/renderer.ts (the module every Ember
 // render path and the application registry load, the edge classic uses for its
-// VM global context). Registers once; named imports only (and one member of
-// the Glimmer compatibility entry, read by name), so nothing else of gxt is
-// retained.
+// VM global context). Registers once; named imports only, so nothing else of
+// gxt is retained.
 import { DEBUG } from '@glimmer/env';
 import { registerHostHooks, registerHostManagers } from '@lifeart/gxt';
-import * as gxtCompat from '@lifeart/gxt/glimmer-compatibility';
 import {
   installRenderLoop,
   normalizeAttrValue,
@@ -24,15 +22,12 @@ import { classifyContent, eachInEntries, getProp, hostAssert } from './content';
 
 let installed = false;
 
-// gxt's item reference follow runtime: a yielded block and an `{{#in-element}}`
-// of a `key="@index"` or `{{#each-in}}` row follow the item now at the row when
-// the list keeps it for another item, as Glimmer's references do. gxt keeps it
-// out of its main runtime; a host whose templates key lists by position
-// installs it before it renders. (Read by name: it is newer than the gxt
-// release whose types Ember checks against; a gxt without it has it built in.)
-const registerItemReferenceRuntime = (
-  gxtCompat as unknown as { registerItemReferenceRuntime?: () => void }
-).registerItemReferenceRuntime;
+// gxt's item reference follow runtime (a yielded block and an `{{#in-element}}`
+// of a `key="@index"` or `{{#each-in}}` row follow the item now at the row) is
+// not installed here for every app: a template that keys a list by position
+// or renders `{{#each-in}}` installs it from `@lifeart/gxt/item-references`
+// where it is compiled, and the runtime compiler installs it for a template
+// compiled at runtime (gxt `setupGlobalScope`).
 
 function debuggerHook(self: unknown, get: (path: string) => unknown): void {
   const context =
@@ -87,7 +82,6 @@ export function install(): void {
     modifier: modifierManager as never,
   });
   installRenderLoop();
-  registerItemReferenceRuntime?.();
 }
 
 install();
