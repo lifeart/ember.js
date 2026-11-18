@@ -1,17 +1,10 @@
 /**
- * gxt exports newer than the `@lifeart/gxt` release Ember pins: the gxt this
- * branch builds and tests with has them, the pinned release's types do not
- * yet. They are read from the module by name, so the type check against the
- * pinned release passes; with a gxt that lacks them, each falls back to the
- * behaviour Ember had before it (the feature it serves is off).
+ * gxt exports the compat bridge reads through one module: `argSource`,
+ * `argumentOf` and `isItemSlotParam` (gxt 0.0.88, the release Ember pins).
+ * Named imports: the bundler keeps these three functions and nothing else of
+ * gxt's main entry for them.
  */
-import * as gxt from '@lifeart/gxt';
-
-const next = gxt as unknown as {
-  argSource?: (fn: unknown) => readonly [() => unknown, string] | null | undefined;
-  argumentOf?: (args: object, key: string) => unknown;
-  isItemSlotParam?: (param: unknown) => boolean;
-};
+import { argSource, argumentOf, isItemSlotParam } from '@lifeart/gxt';
 
 /**
  * Where a write of a component argument gxt's compiler emitted goes (gxt
@@ -19,18 +12,16 @@ const next = gxt as unknown as {
  * nothing).
  */
 export const gxtArgSource: (fn: unknown) => readonly [() => unknown, string] | null | undefined =
-  next.argSource ?? (() => undefined);
+  argSource as unknown as (fn: unknown) => readonly [() => unknown, string] | null | undefined;
 
 /**
  * The argument `key` of an args object gxt's `$_args` built (its angle-bracket
  * invocations), as the compiler passed it: its getter, which carries its
  * source (gxt `argumentOf`); `undefined` for any other object.
  */
-export const gxtArgumentOf: (args: object, key: string) => unknown =
-  next.argumentOf ?? (() => undefined);
+export const gxtArgumentOf: (args: object, key: string) => unknown = argumentOf;
 
 /**
  * Whether a yielded param follows a list row's item (gxt `isItemSlotParam`).
  */
-export const gxtIsItemSlotParam: (param: unknown) => boolean =
-  next.isItemSlotParam ?? (() => false);
+export const gxtIsItemSlotParam: (param: unknown) => boolean = isItemSlotParam;
