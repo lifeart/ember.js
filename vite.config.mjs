@@ -214,6 +214,7 @@ export default defineConfig(({ mode }) => {
         '@lifeart/gxt',
         '@lifeart/gxt/runtime-compiler',
         '@lifeart/gxt/glimmer-compatibility',
+        '@lifeart/gxt/item-references',
       ],
     },
     publicDir: 'tests/public',
@@ -286,6 +287,7 @@ export default defineConfig(({ mode }) => {
             '@lifeart/gxt',
             '@lifeart/gxt/glimmer-compatibility',
             '@lifeart/gxt/runtime-compiler',
+            '@lifeart/gxt/item-references',
           ],
           alias: [
             GLIMMER_COMPONENT_SOURCE_ALIAS,
@@ -340,6 +342,16 @@ export default defineConfig(({ mode }) => {
               find: '@lifeart/gxt/glimmer-compatibility',
               replacement: resolveGxtPath(
                 `./node_modules/@lifeart/gxt/dist/gxt.glimmer-compat.es.js`
+              ),
+            },
+            // The item reference runtime, which a compiled template that keys a
+            // list by position or renders `{{#each-in}}` imports. Before the
+            // bare `@lifeart/gxt` alias: a string alias also matches `find/…`,
+            // which would resolve this entry inside the main one.
+            {
+              find: '@lifeart/gxt/item-references',
+              replacement: resolveGxtPath(
+                `./node_modules/@lifeart/gxt/dist/gxt.item-references.es.js`
               ),
             },
             {
@@ -590,6 +602,7 @@ function nativeConfig(mode) {
         '@lifeart/gxt',
         '@lifeart/gxt/runtime-compiler',
         '@lifeart/gxt/glimmer-compatibility',
+        '@lifeart/gxt/item-references',
       ],
     },
     publicDir: 'tests/public',
@@ -604,6 +617,7 @@ function nativeConfig(mode) {
         '@lifeart/gxt',
         '@lifeart/gxt/glimmer-compatibility',
         '@lifeart/gxt/runtime-compiler',
+        '@lifeart/gxt/item-references',
       ],
       alias: [
         GLIMMER_COMPONENT_SOURCE_ALIAS,
@@ -627,6 +641,12 @@ function nativeConfig(mode) {
         {
           find: '@lifeart/gxt/glimmer-compatibility',
           replacement: resolveGxtPath(`./node_modules/@lifeart/gxt/dist/gxt.glimmer-compat.es.js`),
+        },
+        // Before the bare `@lifeart/gxt` alias, which would also match it (see
+        // the compat config above).
+        {
+          find: '@lifeart/gxt/item-references',
+          replacement: resolveGxtPath(`./node_modules/@lifeart/gxt/dist/gxt.item-references.es.js`),
         },
         {
           find: '@lifeart/gxt',
