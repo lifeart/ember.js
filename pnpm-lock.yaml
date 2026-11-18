@@ -113,8 +113,8 @@ importers:
         specifier: workspace:*
         version: link:packages/@glimmer/component
       '@lifeart/gxt':
-        specifier: 0.0.87
-        version: 0.0.87(typescript@5.9.3)
+        specifier: 0.0.88
+        version: 0.0.88(typescript@5.9.3)
       '@nullvoxpopuli/release-plan':
         specifier: ^0.22.0
         version: 0.22.0
@@ -3094,8 +3094,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/@glimmer/component
       '@lifeart/gxt':
-        specifier: 0.0.87
-        version: 0.0.87(typescript@5.9.3)
+        specifier: 0.0.88
+        version: 0.0.88(typescript@5.9.3)
       decorator-transforms:
         specifier: ^2.3.1
         version: 2.4.0(@babel/core@7.29.7)
@@ -4804,8 +4804,8 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
-  '@lifeart/gxt@0.0.87':
-    resolution: {integrity: sha512-relBMvchClTNzjgskSuZ/8NN8r7ZuU6OsaHKUfWkkiIrwPHqYTjz4bGSG07TYwcHX4J2pysIS1rfFOvu5vgOYA==}
+  '@lifeart/gxt@0.0.88':
+    resolution: {integrity: sha512-ddzLUv0PqRcWkKxv4ViDoIUO4lsT56adPZYHr5BKQwg42sG4v2JYNUPjtgRi6edkdLNo5pPYuPcPhwirpHulsA==}
     peerDependencies:
       '@glint/template': ^1.3.0
       typescript: '>=5.0.0'
@@ -15302,7 +15302,7 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@lifeart/gxt@0.0.87(typescript@5.9.3)':
+  '@lifeart/gxt@0.0.88(typescript@5.9.3)':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       '@babel/preset-typescript': 7.29.7(@babel/core@7.29.7)
