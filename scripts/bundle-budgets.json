@@ -35,19 +35,19 @@
     ]
   },
   "gxt-native": {
-    "_comment": "RE-BASELINED 2026-10-20 at the measured floor + 5% headroom: prod raw/gz/br 972,890 / 212,192 / 169,175 -> 971,995 / 211,994 / 169,047, dev 1,828,302 / 459,160 / 355,874 -> 1,831,845 / 459,926 / 356,570 (native builds the classic source, so it loses the same classic leftovers; dev also keeps the template() option JSDoc again). gxt NATIVE layer dist (EMBER_RENDER_BACKEND=gxt-native npx rollup --config): classic Ember source with __GXT_MODE__=false + the GXT_NATIVE_ALIASES boundary (gxt-backend/native/*), templates compiled by the gxt compiler under NATIVE_FLAGS, @lifeart/gxt EXTERNAL (the app resolves it), VM-only @glimmer packages dropped from the entry map. Baselined 2026-10-11 at the measured floor + 5% headroom (same method as classic/gxt). Whole-tree reference at that commit, prod / dev brotli: classic 197,648 / 390,651 \u00b7 gxt compat 279,577 / 716,838 \u00b7 gxt-native 158,496 / 327,591 (raw prod: 1,173,306 / 1,646,359 / 916,539). Whole-tree still includes the build-time Glimmer template compiler entries (ember-template-compiler, @ember/template-compiler/lib/*) and the native runtime compiler entry, none of which an app loads: the app-relevant number is the modern-app consumer measurement (node scripts/bundle-modern-app.mjs --from-dist --build-dists --boot: boot JS incl. gxt, brotli, strict 67,103 native vs 79,556 classic). scripts/assert-native-dist.mjs asserts the app closure of this dist is VM-free. CI: the gxt-native leg of .github/workflows/gxt-dual-build.yml (this check + scripts/assert-native-dist.mjs), against the @lifeart/gxt pinned in package.json.",
+    "_comment": "RE-BASELINED 2026-11-18 at the measured floor + 5% headroom after the dist stopped emitting the Glimmer wire-format compiler entries (ember-template-compiler, @ember/template-compiler/lib/*, its primitives, the classic renderer barrel: GXT_NATIVE_DIST_DROPPED_ENTRY_PATTERNS; the package build already pruned them with the ~310 KB compiler chunk only they reach): prod raw/gz/br 973,471 / 213,098 / 169,853 -> 632,055 / 138,268 / 110,094, dev 1,839,625 / 463,894 / 359,648 -> 1,423,790 / 364,754 / 281,660. PRIOR: RE-BASELINED 2026-10-20 at the measured floor + 5% headroom: prod raw/gz/br 972,890 / 212,192 / 169,175 -> 971,995 / 211,994 / 169,047, dev 1,828,302 / 459,160 / 355,874 -> 1,831,845 / 459,926 / 356,570 (native builds the classic source, so it loses the same classic leftovers; dev also keeps the template() option JSDoc again). gxt NATIVE layer dist (EMBER_RENDER_BACKEND=gxt-native npx rollup --config): classic Ember source with __GXT_MODE__=false + the GXT_NATIVE_ALIASES boundary (gxt-backend/native/*), templates compiled by the gxt compiler under NATIVE_FLAGS, @lifeart/gxt EXTERNAL (the app resolves it), VM-only @glimmer packages dropped from the entry map. Baselined 2026-10-11 at the measured floor + 5% headroom (same method as classic/gxt). Whole-tree reference at that commit, prod / dev brotli: classic 197,648 / 390,651 \u00b7 gxt compat 279,577 / 716,838 \u00b7 gxt-native 158,496 / 327,591 (raw prod: 1,173,306 / 1,646,359 / 916,539). Whole-tree still includes the build-time Glimmer template compiler entries (ember-template-compiler, @ember/template-compiler/lib/*) and the native runtime compiler entry, none of which an app loads: the app-relevant number is the modern-app consumer measurement (node scripts/bundle-modern-app.mjs --from-dist --build-dists --boot: boot JS incl. gxt, brotli, strict 67,103 native vs 79,556 classic). scripts/assert-native-dist.mjs asserts the app closure of this dist is VM-free. CI: the gxt-native leg of .github/workflows/gxt-dual-build.yml (this check + scripts/assert-native-dist.mjs), against the @lifeart/gxt pinned in package.json.",
     "entries": [
       {
         "path": "dist/prod",
-        "maxRaw": 1020595,
-        "maxGz": 222594,
-        "maxBr": 177500
+        "maxRaw": 663658,
+        "maxGz": 145181,
+        "maxBr": 115599
       },
       {
         "path": "dist/dev",
-        "maxRaw": 1923438,
-        "maxGz": 482923,
-        "maxBr": 374399
+        "maxRaw": 1494980,
+        "maxGz": 382992,
+        "maxBr": 295743
       }
     ]
   }

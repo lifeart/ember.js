@@ -15,7 +15,7 @@ import {
   GXT_EXTERNAL_PACKAGES,
   GXT_DROPPED_ENTRIES,
   GXT_DIST_VM_STUBS,
-  GXT_NATIVE_DIST_DROPPED_ENTRIES,
+  isGxtNativeDistDroppedEntry,
   NATIVE_FLAGS,
   NATIVE_DEBUG_FLAGS,
   gxtNativeSpecifierForPath,
@@ -202,7 +202,7 @@ function esmInputs() {
     // all.
     for (const key of Object.keys(inputs)) {
       const specifier = key.replace(/^packages\//, '').replace(/\/index$/, '');
-      if (GXT_NATIVE_DIST_DROPPED_ENTRIES.has(specifier)) {
+      if (isGxtNativeDistDroppedEntry(specifier)) {
         delete inputs[key];
         continue;
       }

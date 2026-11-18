@@ -656,3 +656,28 @@ export const GXT_NATIVE_DIST_DROPPED_ENTRIES = new Set([
   '@glimmer/node',
   '@glimmer/global-context',
 ]);
+
+/**
+ * Entries with no native meaning that reach the Glimmer wire-format template
+ * compiler (@glimmer/compiler + @glimmer/syntax + @handlebars/parser): the
+ * build-time `ember-template-compiler`, the `@ember/template-compiler/lib/*`
+ * internals (the native runtime compiler is `@ember/template-compiler` itself,
+ * the gxt runtime compiler), its primitives, and the classic renderer's private
+ * barrel. The native package build (scripts/build-gxt-native-package.mjs)
+ * already prunes them from what it ships; dropping them from the rollup entry
+ * map keeps them, and the ~310 KB compiler chunk only they reach, out of the
+ * native dist altogether.
+ */
+export const GXT_NATIVE_DIST_DROPPED_ENTRY_PATTERNS = [
+  /^ember-template-compiler(\/|$)/,
+  /^@ember\/template-compiler\/lib\//,
+  /^@ember\/template-compiler\/-internal-primitives$/,
+  /^@ember\/-internals\/glimmer$/,
+];
+
+export function isGxtNativeDistDroppedEntry(specifier) {
+  return (
+    GXT_NATIVE_DIST_DROPPED_ENTRIES.has(specifier) ||
+    GXT_NATIVE_DIST_DROPPED_ENTRY_PATTERNS.some((re) => re.test(specifier))
+  );
+}
