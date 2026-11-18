@@ -380,8 +380,6 @@ for (const mode of ['dev', 'prod']) {
     `${mode}: pruned ${pruned.length} non-app entries (${manifest.packagePruned.entries.join(', ')}) — ${removed.length} files, ${removedBytes.toLocaleString('en-US')} B`
   );
 }
-const prunedSpecifiers = [...prunedEntries].map(specifierOf).sort();
-
 // renamed-modules: every non-shared-chunk packages/**/*.js except the internal
 // copies of deprecated mixins (`foo-internal.js`, `-internal.js`), as in
 // packageMeta (rollup.config.mjs)
@@ -468,9 +466,10 @@ const contract = {
   },
   entries,
   droppedEntries: [...GXT_NATIVE_DIST_DROPPED_ENTRIES].sort(),
-  prunedEntries: PRUNABLE.filter((p) => prunedSpecifiers.some((s) => p.match.test(s))).map(
-    ({ specifier, reason }) => ({ specifier, reason })
-  ),
+  // Every non-app entry the package does not ship, whether the dist never
+  // emitted it (GXT_NATIVE_DIST_DROPPED_ENTRY_PATTERNS) or the prune above
+  // removed it: the preset refuses each with its reason.
+  prunedEntries: PRUNABLE.map(({ specifier, reason }) => ({ specifier, reason })),
 };
 writeFileSync(join(DIST, 'gxt-native-contract.json'), JSON.stringify(contract, null, 2) + '\n');
 log(
