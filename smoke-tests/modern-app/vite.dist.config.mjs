@@ -16,7 +16,7 @@
 //
 // Env: MODERN_APP_DIST_FLAVOR = classic | gxt-native, MODERN_APP_EMBER_DIST = a
 // snapshot of one rollup build (`<dir>/prod/packages/**`, `<dir>/glimmer-component/`),
-// MODERN_APP_FLAVOR = strict | loose, MODERN_APP_OUT_DIR. Driven by
+// MODERN_APP_FLAVOR = strict | loose | lists, MODERN_APP_OUT_DIR. Driven by
 // `node scripts/bundle-modern-app.mjs --from-dist` (which builds the snapshots).
 //
 // Everything else matches the source harness so the two measurements compare:
@@ -170,17 +170,23 @@ export function distAppConfig({ mode, appDir, input, outDir, statsDir, flavor, d
 
 export default ({ mode }) => {
   const flavor = process.env.MODERN_APP_DIST_FLAVOR;
-  const loose = process.env.MODERN_APP_FLAVOR === 'loose';
-  const tag = `${flavor}-dist${loose ? '-loose' : ''}`;
+  // strict (app/), loose (app-loose/: precompileTemplate strings) or lists
+  // (app-lists/: a list keyed by position and an each-in).
+  const appFlavor = process.env.MODERN_APP_FLAVOR || 'strict';
+  const html = { strict: 'index.html', loose: 'loose.html', lists: 'lists.html' }[appFlavor];
+  if (html === undefined) {
+    throw new Error(`MODERN_APP_FLAVOR must be strict | loose | lists, got ${appFlavor}`);
+  }
+  const tag = `${flavor}-dist${appFlavor === 'strict' ? '' : `-${appFlavor}`}`;
   const outDir = process.env.MODERN_APP_OUT_DIR || resolve(APP_DIR, 'dist', tag);
   return distAppConfig({
     mode,
     appDir: APP_DIR,
-    input: resolve(APP_DIR, loose ? 'loose.html' : 'index.html'),
+    input: resolve(APP_DIR, html),
     outDir,
     statsDir: resolve(outDir, '..', `${tag}-stats`),
     flavor,
     distDir: process.env.MODERN_APP_EMBER_DIST,
-    include: [`${APP_DIR}/app/**`, `${APP_DIR}/app-loose/**`],
+    include: [`${APP_DIR}/app/**`, `${APP_DIR}/app-loose/**`, `${APP_DIR}/app-lists/**`],
   });
 };

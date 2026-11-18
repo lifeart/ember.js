@@ -127,12 +127,15 @@ const buildTimeoutMs = Number(opt('--build-timeout', '900')) * 1000;
 // strict (default): app/ — <template> .gjs, build-time compiled on every variant.
 // loose: app-loose/ — same app with resolver-mode precompileTemplate() templates
 // (wire-format at build time on classic, RUNTIME-compiled on gxt).
+// lists: app-lists/ — a small app with a list keyed by position and an
+// each-in, the two list shapes that need gxt's item reference runtime
+// (`@lifeart/gxt/item-references`); the strict and loose apps have neither.
 const flavor = opt('--flavor', 'strict');
-if (flavor !== 'strict' && flavor !== 'loose') {
-  console.error(`unknown --flavor ${flavor}; expected strict | loose`);
+if (flavor !== 'strict' && flavor !== 'loose' && flavor !== 'lists') {
+  console.error(`unknown --flavor ${flavor}; expected strict | loose | lists`);
   process.exit(2);
 }
-const tagOf = (variant) => (flavor === 'loose' ? `${variant}-loose` : variant);
+const tagOf = (variant) => (flavor === 'strict' ? variant : `${variant}-${flavor}`);
 
 const log = (msg) => process.stdout.write(`[bundle-modern-app] ${msg}\n`);
 
@@ -259,7 +262,14 @@ function bootCheck(variant) {
   const out = join(DIST_ROOT, `${tagOf(variant)}-boot.json`);
   const r = spawnSync(
     process.execPath,
-    [join(APP_DIR, 'boot-check.mjs'), join(DIST_ROOT, tagOf(variant)), '--json', out],
+    [
+      join(APP_DIR, 'boot-check.mjs'),
+      join(DIST_ROOT, tagOf(variant)),
+      '--flavor',
+      flavor,
+      '--json',
+      out,
+    ],
     { cwd: EMBER_ROOT, encoding: 'utf8', timeout: 180_000 }
   );
   if (r.error) throw new Error(`${variant} boot-check did not run: ${r.error.message}`);
@@ -690,6 +700,37 @@ function assertNative(result) {
     const len = rendered.get(id) ?? 0;
     (len > 0 ? preTerserOnly : graphOnly).push({ id, reason, shipped: 0, rendered: len });
   }
+  // The item reference runtime (`@lifeart/gxt/item-references`) ships only
+  // with a template that keys a list by position or renders `{{#each-in}}`,
+  // installed by that template: the `lists` flavor has both, the strict and
+  // loose apps neither. Checked both ways.
+  const itemRefsChunks = Object.keys(stats.graph).filter(
+    (id) =>
+      /@lifeart\/gxt\/dist\/gxt\.item-references\.es\.js$/.test(id) && (rendered.get(id) ?? 0) > 0
+  );
+  if (result.flavor === 'lists' && itemRefsChunks.length === 0) {
+    violations.push({
+      id: '@lifeart/gxt/item-references',
+      reason:
+        'the lists flavor keys a list by position and renders {{#each-in}}, but the item reference runtime is not in its closure',
+      shipped: 0,
+      rendered: 0,
+    });
+  }
+  if (result.flavor !== 'lists') {
+    for (const id of itemRefsChunks) {
+      violations.push({
+        id,
+        reason:
+          'the item reference runtime ships although no template keys a list by position or renders {{#each-in}}',
+        shipped: 0,
+        rendered: rendered.get(id) ?? 0,
+      });
+    }
+  }
+  console.log(
+    `[assert-native] ${result.variant}: item reference runtime in the closure: ${itemRefsChunks.length ? 'yes' : 'no'} (flavor ${result.flavor}: ${result.flavor === 'lists' ? 'required' : 'forbidden'})`
+  );
   const print = (title, list, withChain) => {
     console.log(`\n${title}: ${list.length}`);
     for (const v of list) {

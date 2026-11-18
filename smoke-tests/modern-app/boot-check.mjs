@@ -5,10 +5,16 @@
 // URL sanitization of a bound attribute, LinkTo navigation across both routes,
 // and that the app's decorators need no `dt7948` global.
 //
-//   node smoke-tests/modern-app/boot-check.mjs <distDir> [--json out.json]
+//   node smoke-tests/modern-app/boot-check.mjs <distDir> [--json out.json] [--flavor strict|loose|lists]
 //   node smoke-tests/modern-app/boot-check.mjs --url <running app URL> [--json out.json]
 //     (--url: check an already-served app, e.g. a vite dev server, instead of
 //     static-serving a build)
+//
+// `--flavor lists` checks the lists app (app-lists/) instead: a list keyed by
+// position and an `{{#each-in}}` render their rows, and after each list's
+// source is replaced the rows update in place (a positional row keeps its DOM
+// node and shows the item now at its position; the each-in rows are keyed by
+// entry).
 //
 // Exit 0 = every check passed; 1 = some check failed (details printed).
 import { createServer } from 'node:http';
@@ -22,6 +28,11 @@ const argOf = (name) => {
 };
 const jsonOut = argOf('--json');
 const appUrl = argOf('--url');
+const flavor = argOf('--flavor') ?? 'strict';
+if (!['strict', 'loose', 'lists'].includes(flavor)) {
+  console.error(`[boot-check] unknown --flavor ${flavor}; expected strict | loose | lists`);
+  process.exit(2);
+}
 const distDir = appUrl ? null : resolve(process.argv[2] || '');
 
 let server = null;
@@ -89,8 +100,72 @@ try {
     }
   };
   const count = (sel) => page.$$eval(sel, (els) => els.length);
+  const texts = (sel) =>
+    page.$$eval(sel, (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
+  // Wait until the elements' texts are exactly `expected`.
+  const waitTexts = async (name, sel, expected, timeout = 5000) => {
+    try {
+      await page.waitForFunction(
+        ([s, e]) =>
+          JSON.stringify(
+            [...document.querySelectorAll(s)].map((el) => el.textContent.replace(/\s+/g, ' ').trim())
+          ) === e,
+        [sel, JSON.stringify(expected)],
+        { timeout }
+      );
+      record(name, true, `${sel} = ${JSON.stringify(expected)}`);
+      return true;
+    } catch {
+      record(name, false, `${sel}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(await texts(sel))}`);
+      return false;
+    }
+  };
+  // Tag each element matching `sel` with its position, so a later read tells
+  // whether the same DOM nodes are still there.
+  const mark = (sel) =>
+    page.$$eval(sel, (els) => els.forEach((el, i) => (el.__bootCheckMark = i)));
+  const marks = (sel) => page.$$eval(sel, (els) => els.map((el) => el.__bootCheckMark ?? null));
 
   await page.goto(url, { waitUntil: 'load' });
+  if (flavor === 'lists') {
+    const booted = await waitText('render: lists app', '[data-test-title]', 'Lists app', 15000);
+    if (booted) {
+      await waitTexts(
+        'render: list keyed by position (key="@index")',
+        '[data-test-positional] li',
+        ['0: apple', '1: pear', '2: plum']
+      );
+      await waitTexts('render: {{#each-in}} rows', '[data-test-each-in] li', ['ann=1', 'bob=2']);
+      await mark('[data-test-positional] li');
+      await mark('[data-test-each-in] li');
+
+      await page.click('[data-test-shift]');
+      await waitTexts(
+        'update: positional rows show the items now at their positions',
+        '[data-test-positional] li',
+        ['0: pear', '1: plum']
+      );
+      const kept = await marks('[data-test-positional] li');
+      record(
+        'update: positional rows keep their DOM nodes (the first two rows)',
+        JSON.stringify(kept) === JSON.stringify([0, 1]),
+        `row marks ${JSON.stringify(kept)}`
+      );
+
+      await page.click('[data-test-add-score]');
+      await waitTexts(
+        'update: each-in rows follow the replaced object',
+        '[data-test-each-in] li',
+        ['ann=1', 'bob=2', 'cid=3']
+      );
+      const keptEachIn = await marks('[data-test-each-in] li');
+      record(
+        'update: each-in rows of the kept entries keep their DOM nodes',
+        JSON.stringify(keptEachIn) === JSON.stringify([0, 1, null]),
+        `row marks ${JSON.stringify(keptEachIn)}`
+      );
+    }
+  } else {
   const booted = await waitText(
     'render: route template + h1',
     '[data-test-title]',
@@ -151,6 +226,7 @@ try {
     await page.click('[data-test-link-index]');
     await waitText('route: LinkTo -> index again', '[data-test-title]', 'Modern app');
     await waitText('route: service state survives navigation', '[data-test-item-count]', '2 items');
+  }
   }
   record(
     'no uncaught page errors',

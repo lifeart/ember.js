@@ -82,9 +82,15 @@ export default async (env) => {
   }
   const variant = variantName();
   // MODERN_APP_FLAVOR=loose builds the resolver-mode twin (loose.html ->
-  // app-loose/): same app, templates as precompileTemplate strings.
-  const loose = process.env.MODERN_APP_FLAVOR === 'loose';
-  const tag = loose ? `${variant}-loose` : variant;
+  // app-loose/): same app, templates as precompileTemplate strings. `lists`
+  // (lists.html -> app-lists/) is the small app with a list keyed by position
+  // and an each-in (the item reference runtime's two users).
+  const appFlavor = process.env.MODERN_APP_FLAVOR || 'strict';
+  const html = { strict: 'index.html', loose: 'loose.html', lists: 'lists.html' }[appFlavor];
+  if (html === undefined) {
+    throw new Error(`MODERN_APP_FLAVOR must be strict | loose | lists, got ${appFlavor}`);
+  }
+  const tag = appFlavor === 'strict' ? variant : `${variant}-${appFlavor}`;
   const outDir = process.env.MODERN_APP_OUT_DIR || resolve(APP_DIR, 'dist', tag);
   const statsDir = resolve(outDir, '..', `${tag}-stats`);
   const extraAliases = [
@@ -116,7 +122,7 @@ export default async (env) => {
       modulePreload: { polyfill: false },
       reportCompressedSize: false,
       rollupOptions: {
-        input: resolve(APP_DIR, loose ? 'loose.html' : 'index.html'),
+        input: resolve(APP_DIR, html),
         treeshake: { moduleSideEffects: prodModuleSideEffects },
       },
     },
