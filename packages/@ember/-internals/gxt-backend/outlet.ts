@@ -34,14 +34,13 @@ import { DEBUG } from '@glimmer/env';
 import { templateOnlyComponent } from '@glimmer/runtime/lib/component/template-only';
 import { invokableFor } from 'router_js';
 import type Route from '@ember/routing/route';
-import { $_GET_ARGS, $_edp, $_fin } from '@lifeart/gxt';
 import {
   componentCapabilities,
   hasInternalComponentManager,
   setComponentManager,
   setComponentTemplate,
 } from './manager';
-import { $_tag } from './ember-gxt-wrappers';
+import { OutletTemplate, routeWrapperTemplate } from './templates';
 import {
   getClassicRouteWrapper,
   getGxtRenderer,
@@ -280,20 +279,6 @@ function classicLevelContext(nestedOutlet: GxtOutletState): any {
   }
 
   return nestedContext;
-}
-
-/**
- * `{{outlet}}` in a template compiled at build time: the compat build compiles
- * it with gxt's EMBER_OUTLET flag to `$_outlet(ctx)`, which renders this gxt
- * component, the `outletComponent` host hook (compile.ts registers it). It
- * renders `<ember-outlet>`, the element a runtime-compiled `{{outlet}}`
- * becomes, which renders the next level of the current outlet state. It is
- * the function gxt compiles `<template><ember-outlet /></template>` to: gxt
- * constructs it with the invocation's arguments, as a template-only component.
- */
-export function OutletKeyword(this: object): object {
-  $_GET_ARGS(this as never, arguments);
-  return $_fin([$_tag('ember-outlet', $_edp, this, [])], this as never);
 }
 
 export function defineEmberOutletElement(): void {
@@ -668,7 +653,7 @@ function buildRenderState(route: ClassicRouteLike): GxtRenderState {
       template = isGxtTemplateFn
         ? (templateForFunction(
             templateFactoryOrComponent as Function,
-            templateName
+            `template:${templateName}`
           )(owner) as object)
         : isRawGxtFn
           ? templateFactoryOrComponent
@@ -864,23 +849,14 @@ function templateForFunction(
 ): (owner: InternalOwner) => unknown {
   let forFunction = getGxtRenderer()?.compilePipeline.templateForFunction;
   assert('[gxt] the GXT template layer is not installed', typeof forFunction === 'function');
-  return forFunction(templateFn, `template:${moduleName}`) as (owner: InternalOwner) => unknown;
-}
-
-function compileTemplate(source: string, options: object): object {
-  let compile = getGxtRenderer()?.compilePipeline.compileTemplate;
-  assert('[gxt] the GXT template compiler is not installed', typeof compile === 'function');
-  return compile(source, options) as object;
+  return forFunction(templateFn, moduleName) as (owner: InternalOwner) => unknown;
 }
 
 let outletTemplateFactory: object | undefined;
 
-/** `{{outlet}}`: GXT compiles it to `<ember-outlet />`, which renders the next level. */
+/** `{{outlet}}`: `<ember-outlet />`, which renders the next level (templates.gts). */
 function outletTemplate(): object {
-  outletTemplateFactory ??= compileTemplate('<ember-outlet />', {
-    strictMode: true,
-    moduleName: 'gxt-route-outlet',
-  });
+  outletTemplateFactory ??= templateForFunction(OutletTemplate, 'gxt-route-outlet');
   return outletTemplateFactory;
 }
 
@@ -911,16 +887,10 @@ function outletComponent(): object {
 /** wrapper → the template that invokes it with a level's state. */
 const WRAPPER_TEMPLATES = new WeakMap<object, object>();
 
-let wrapperTemplateCount = 0;
-
 function wrapperTemplate(wrapper: object): object {
   let template = WRAPPER_TEMPLATES.get(wrapper);
   if (template === undefined) {
-    let tag = `GxtRouteWrapper${++wrapperTemplateCount}`;
-    template = compileTemplate(
-      `<${tag} @Component={{this.Component}} @bucket={{this.bucket}} @context={{this.context}} @outlet={{this.outlet}} />`,
-      { strictMode: true, scopeValues: { [tag]: wrapper }, moduleName: 'gxt-route-wrapper' }
-    );
+    template = templateForFunction(routeWrapperTemplate(wrapper), 'gxt-route-wrapper');
     WRAPPER_TEMPLATES.set(wrapper, template);
   }
   return template;

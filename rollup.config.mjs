@@ -18,6 +18,9 @@ import {
   isGxtNativeDistDroppedEntry,
   NATIVE_FLAGS,
   NATIVE_DEBUG_FLAGS,
+  COMPAT_TEMPLATE_FLAGS,
+  COMPAT_DEBUG_TEMPLATE_FLAGS,
+  isGxtCompatOwnTemplateModule,
   gxtNativeSpecifierForPath,
   gxtSubpathRegExp,
   matchGxtNativeAlias,
@@ -102,9 +105,11 @@ if (process.env.BUNDLE_VISUALIZER === '1') {
   visualizerPlugin = visualizer;
 }
 
-// The gxt template compiler, loaded only for the native dist (the classic and
-// compat rollup builds never compile templates with it).
-const gxtCompiler = USE_GXT_NATIVE ? (await import('@lifeart/gxt/compiler')).compiler : null;
+// The gxt template compiler, loaded for the native and the compat dists (the
+// classic build never compiles templates with it).
+const gxtCompilerModule =
+  USE_GXT_NATIVE || USE_GXT_BACKEND ? await import('@lifeart/gxt/compiler') : null;
+const gxtCompiler = gxtCompilerModule?.compiler ?? null;
 
 // GXT_EXTERNAL_PACKAGES (externalized shim deps) and GXT_DROPPED_ENTRIES
 // (VM packages dropped from the entry map) are imported from
@@ -247,6 +252,9 @@ function sharedESMConfig({ input, debugMacrosMode, includePackageMeta = false })
     ...(USE_GXT_NATIVE
       ? [gxtNativeResolve(), gxtNativeCompiler(debugMacrosMode ? 'development' : 'production')]
       : []),
+    // compat: Ember's own templates compile at build time, as the compat vite
+    // pipeline compiles them, and see the Ember wrappers of the gxt runtime.
+    ...(USE_GXT_BACKEND ? gxtCompatTemplates(debugMacrosMode ? 'development' : 'production') : []),
     babel({
       babelHelpers: 'bundled',
       extensions: ['.js', '.ts'],
@@ -1061,6 +1069,81 @@ function gxtNativeCompiler(mode) {
     );
   }
   return { name: 'gxt-native-compiler', transform: plugin.transform };
+}
+
+// ---------------------------------------------------------------------------
+// gxt COMPAT dist (EMBER_RENDER_BACKEND=gxt): Ember's own templates
+// ---------------------------------------------------------------------------
+
+// Ember's own templates compile at build time in the compat dist: the
+// `precompileTemplate(…)` call sites of its modules (a call's template string
+// becomes a template maker, which gxt-backend/compile.ts's `precompileTemplate`
+// takes) and gxt-backend's `templates.gts`, under COMPAT_TEMPLATE_FLAGS (the
+// flags of the compat runtime compile), as vite.config.mjs compiles them for
+// the compat vite pipeline. A compat app then compiles none of Ember's
+// templates at runtime.
+//   - The compiler adapter calls the plugin's `config` hook once (rollup never
+//     does; it merges the flags) and verifies the flags, as gxtNativeCompiler.
+//   - A compiled module's `@lifeart/gxt` import resolves to a facade that
+//     re-exports the gxt runtime with Ember's `$_tag` / `$_maybeHelper` /
+//     `$_dc` wrappers (ember-gxt-wrappers.ts) in place of gxt's, as
+//     vite.config.mjs's gxtEmberWrapperRedirect does: the runtime compile
+//     binds the same wrappers.
+//   - gxt-backend imports its `.gts` templates without the extension.
+function gxtCompatTemplates(mode) {
+  const FACADE = '\0gxt-compat-template-runtime';
+  const packagesDir = resolve(projectRoot, 'packages') + '/';
+  const wrappers = resolve(projectRoot, GXT_SHIM_DIR, 'ember-gxt-wrappers.ts');
+  const flags = mode === 'development' ? COMPAT_DEBUG_TEMPLATE_FLAGS : COMPAT_TEMPLATE_FLAGS;
+  const plugin = gxtCompiler(mode, {
+    flags: { ...flags },
+    precompileTemplate: true,
+    disableHMR: true,
+  });
+  const define = plugin.config({}, { mode, command: 'build' })?.define ?? {};
+  const drift = Object.entries(flags).filter(([flag, value]) => define[flag] !== value);
+  if (drift.length > 0 || typeof plugin.transform !== 'function') {
+    throw new Error(
+      `[gxt] the gxt compiler plugin did not take COMPAT_TEMPLATE_FLAGS (${drift
+        .map(([flag]) => flag)
+        .join(', ')}); refusing to emit templates compiled with gxt default flags`
+    );
+  }
+  const compiled = new Set();
+  return [
+    {
+      name: 'gxt-compat-template-resolve',
+      resolveId(source, importer) {
+        if (importer === undefined) return null;
+        if (source === '@lifeart/gxt' && compiled.has(importer)) return FACADE;
+        if (source.startsWith('.') && importer.includes(`/${GXT_SHIM_DIR}/`)) {
+          const template = resolve(dirname(importer), source) + '.gts';
+          if (existsSync(template)) return template;
+        }
+        return null;
+      },
+      load(id) {
+        if (id !== FACADE) return null;
+        return (
+          "export * from '@lifeart/gxt';\n" +
+          `export { $_tag, $_maybeHelper, $_dc } from ${JSON.stringify(wrappers)};\n`
+        );
+      },
+    },
+    {
+      name: 'gxt-compat-template-compiler',
+      transform(code, id) {
+        const own =
+          isGxtCompatOwnTemplateModule(id, packagesDir) &&
+          (/\.g[jt]s$/.test(id) || gxtCompilerModule.mayCallPrecompileTemplate(code));
+        if (!own) return null;
+        const result = plugin.transform.call(this, code, id);
+        if (result === undefined || result === null) return null;
+        compiled.add(id);
+        return result;
+      },
+    },
+  ];
 }
 
 // Emits `gxt-native-manifest.json` next to the native dist (dist/<mode>/,

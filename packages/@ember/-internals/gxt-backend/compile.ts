@@ -527,7 +527,9 @@ import { inheritArgSources, recordArgSource } from './arg-sources';
 // A block param that follows a list row's item (`__componentThunk`).
 import { gxtIsItemSlotParam as _gxtIsItemSlotParam } from './gxt-next-exports';
 // Also installs the route-outlet hooks route.ts / router.ts call (gxt-bridge).
-import { defineEmberOutletElement, OutletKeyword } from './outlet';
+import { defineEmberOutletElement } from './outlet';
+// The compat backend's own templates, compiled at build time.
+import { OutletTemplate, buildTimeComponentTemplate } from './templates';
 // Installs the glimmer host that glimmer's renderer modules call (gxt-bridge).
 import './glimmer-host';
 // Installs the GXT `template()` of @ember/template-compiler (gxt-bridge), and
@@ -12192,12 +12194,30 @@ interface GxtPrecompileOptions {
 }
 
 /**
+ * The template maker the gxt compiler makes of a `precompileTemplate(…)` call's
+ * template string at build time: called with the values of the call's
+ * `scope`, it returns the template's gxt template function.
+ */
+type GxtTemplateMaker = (scopeValues: Record<string, unknown>) => Function;
+
+/**
  * Runtime precompileTemplate implementation using GXT runtime compiler
  * Returns a template factory function that takes an owner and returns a template.
  *
+ * A call site the gxt compiler compiled at build time passes the template
+ * maker in place of the string (`_gxtPrecompiledTemplateFactory`): the compat
+ * build compiles Ember's own `precompileTemplate` calls so (vite.config.mjs,
+ * rollup.config.mjs).
+ *
  * A template the GXT compiler cannot compile throws the compiler's error.
  */
-export function precompileTemplate(templateString: string, options?: GxtPrecompileOptions) {
+export function precompileTemplate(
+  templateString: string | GxtTemplateMaker,
+  options?: GxtPrecompileOptions
+) {
+  if (typeof templateString === 'function') {
+    return _gxtPrecompiledTemplateFactory(templateString, options);
+  }
   // `precompileTemplate(…, { scope: () => ({ Foo, bar }) })` (the form of a
   // strict-mode template that babel-plugin-ember-template-compilation emits):
   // the compile pipeline reads `scopeValues`, so the scope's values of the
@@ -13021,6 +13041,37 @@ export function precompileTemplate(templateString: string, options?: GxtPrecompi
   templateCache.set(cacheKey, templateFactory);
 
   return templateFactory;
+}
+
+/**
+ * The template factory of a `precompileTemplate(…)` call the gxt compiler
+ * compiled at build time: its template renders the template function the
+ * maker makes, as a runtime-compiled template renders gxt's own template
+ * function. The maker runs when the template first renders, with the values
+ * of the call's `scope`, read then (as Glimmer reads a template's scope
+ * lazily).
+ */
+function _gxtPrecompiledTemplateFactory(
+  maker: GxtTemplateMaker,
+  options: GxtPrecompileOptions | undefined
+) {
+  let templateFn: Function | undefined;
+  const madeTemplateFn = function (this: unknown, ...args: unknown[]): unknown {
+    if (templateFn === undefined) {
+      const scopeValues = options?.scope?.() ?? {};
+      // The debug render tree names a component the template invokes through
+      // its scope by its name there, as for a runtime-compiled template.
+      if (DEBUG) gxtRecordLexicalNames(scopeValues);
+      templateFn = maker(scopeValues);
+    }
+    return templateFn.apply(this, args);
+  };
+  return _gxtTemplateFactory(
+    { templateFn: madeTemplateFn, code: '', __gxtNativePath: true },
+    options,
+    `[template ${options?.moduleName ?? 'compiled at build time'}]`,
+    []
+  );
 }
 
 /** gxt template function compiled at build time → its template factory. */
@@ -14154,6 +14205,9 @@ _gxtRegisterHostHooks({
 installCompilePipelinePart({
   compileTemplate: compileTemplate,
   templateForFunction: _gxtTemplateFactoryForFunction,
+  // manager.ts renders a component compiled at build time and resolved by name
+  // through it (it cannot import templates.gts: see gxt-bridge.ts).
+  buildTimeComponentTemplate,
   currentTemplateThis: _gxtGetTemplateThisFn,
   withTemplateThis: _gxtWithTemplateThis,
   resetIntervalBudget: _gxtResetIntervalBudget,
@@ -14363,8 +14417,10 @@ defineEmberMountElement();
 defineEmberOutletElement();
 // `{{outlet}}` in a template compiled at build time (an app's `.gjs` / `.gts`):
 // the compat build compiles it with gxt's EMBER_OUTLET flag (vite.config.mjs)
-// to `$_outlet(ctx)`, which renders this host hook's component.
-_gxtRegisterHostHooks({ outletComponent: OutletKeyword });
+// to `$_outlet(ctx)`, which renders this host hook's component: the
+// `<ember-outlet />` template function of templates.gts, which gxt constructs
+// with the invocation's arguments, as a template-only component.
+_gxtRegisterHostHooks({ outletComponent: OutletTemplate });
 
 // Host hook that runs inside manager.ts's `checkBacktracking` body,
 // transforming the assembled assertion message before it reaches `_assertFn`.

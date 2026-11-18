@@ -321,6 +321,61 @@ export const NATIVE_DEBUG_FLAGS = Object.freeze({
   EMBER_ARG_LABELS: true,
 });
 
+/**
+ * gxt compiler flags for the compat build's OWN templates
+ * (EMBER_RENDER_BACKEND=gxt): Ember's `precompileTemplate(…)` call sites and
+ * the compat backend's `templates.gts`, compiled at build time by
+ * vite.config.mjs and rollup.config.mjs (isGxtCompatOwnTemplateModule). They
+ * are the flags of the compat runtime compile (`precompileTemplate` in
+ * gxt-backend/compile.ts), so a template compiled at build time is the one the
+ * runtime compile made: a change to either must be made to both. An app's own
+ * `.gjs` / `.gts` compile with the app flags of vite.config.mjs.
+ */
+export const COMPAT_TEMPLATE_FLAGS = Object.freeze({
+  IS_GLIMMER_COMPAT_MODE: true,
+  WITH_EMBER_INTEGRATION: true,
+  WITH_HELPER_MANAGER: true,
+  WITH_MODIFIER_MANAGER: true,
+  WITH_CONTEXT_API: true,
+  TRY_CATCH_ERROR_HANDLING: false,
+  FORCE_SYNC_LIST: true,
+  EMBER_ATTR_CONCAT: true,
+  EMBER_IN_ELEMENT: true,
+  EMBER_WHITESPACE: true,
+  EMBER_ARG_LABELS: false,
+  // The runtime compile leaves it off; the vite plugin would turn it on under
+  // WITH_EMBER_INTEGRATION.
+  EMBER_PROPERTY_TAGS: false,
+  // The plugin's transform returns its result, not a promise.
+  ASYNC_COMPILE_TRANSFORMS: false,
+});
+
+/**
+ * COMPAT_TEMPLATE_FLAGS of a DEBUG build: argument labels on, as the runtime
+ * compile has them in DEBUG.
+ */
+export const COMPAT_DEBUG_TEMPLATE_FLAGS = Object.freeze({
+  ...COMPAT_TEMPLATE_FLAGS,
+  EMBER_ARG_LABELS: true,
+});
+
+/**
+ * Whether the compat build compiles module `id` as Ember's own template module
+ * (COMPAT_TEMPLATE_FLAGS, its `precompileTemplate` call sites included): a
+ * module of `packagesDir` (the repo's `packages/`, with a trailing slash),
+ * outside the tests, the test helpers and the native layer.
+ */
+export function isGxtCompatOwnTemplateModule(id, packagesDir) {
+  const file = id.split('?')[0];
+  return (
+    file.startsWith(packagesDir) &&
+    /\.(ts|js|gts|gjs)$/.test(file) &&
+    !/\/(tests?|__tests__|type-tests)\//.test(file) &&
+    !file.startsWith(`${packagesDir}internal-test-helpers/`) &&
+    !file.includes('/gxt-backend/native/')
+  );
+}
+
 const nativeTarget = (name) => `${GXT_NATIVE_DIR}/${name}`;
 
 /**

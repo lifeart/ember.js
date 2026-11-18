@@ -4,7 +4,7 @@ import { resolve, dirname, relative } from 'node:path';
 import { realpathSync, statSync, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { compiler } from '@lifeart/gxt/compiler';
+import { compiler, mayCallPrecompileTemplate } from '@lifeart/gxt/compiler';
 
 import {
   version,
@@ -19,6 +19,9 @@ import {
   GXT_NATIVE_ALIASES,
   GXT_NATIVE_DIR,
   NATIVE_DEBUG_FLAGS,
+  COMPAT_TEMPLATE_FLAGS,
+  COMPAT_DEBUG_TEMPLATE_FLAGS,
+  isGxtCompatOwnTemplateModule,
   gxtNativeAliasMatcher,
   gxtNativeSpecifierForPath,
   gxtSubpathRegExp,
@@ -134,7 +137,7 @@ export default defineConfig(({ mode }) => {
       // as the runtime compile (gxt-backend/compile.ts) has it.
       ...(useGxt
         ? isolateTestCompileErrors(
-            compiler(mode, {
+            gxtCompatCompiler(mode, {
               flags: {
                 WITH_EMBER_INTEGRATION: true,
                 WITH_HELPER_MANAGER: true,
@@ -445,6 +448,47 @@ function isolateTestCompileErrors(plugins) {
       transform: typeof hook === 'function' ? transform : { ...hook, handler: transform },
     };
   });
+}
+
+/**
+ * The gxt compiler of the compat build. An app's and the test suites'
+ * `.gjs` / `.gts` compile with the app flags (`appOptions`). Ember's own
+ * templates (isGxtCompatOwnTemplateModule: the `precompileTemplate(…)` call
+ * sites of its modules, gxt-backend's `templates.gts`) compile with the flags
+ * of the compat runtime compile (COMPAT_TEMPLATE_FLAGS): a call site's template
+ * string becomes a template maker that compile.ts's `precompileTemplate` takes,
+ * so a compat app compiles none of Ember's templates at runtime. One plugin:
+ * the app compiler's `config` hook (its `define` of the gxt runtime build
+ * constants) and a `transform` that hands each module to its compiler.
+ */
+function gxtCompatCompiler(mode, appOptions) {
+  const app = compiler(mode, appOptions);
+  const ownFlags = mode === 'development' ? COMPAT_DEBUG_TEMPLATE_FLAGS : COMPAT_TEMPLATE_FLAGS;
+  const own = compiler(mode, {
+    flags: { ...ownFlags },
+    precompileTemplate: true,
+    disableHMR: true,
+  });
+  // vite runs the `config` hook of `app` only; this one merges `own`'s flags.
+  const define = own.config({}, { mode, command: 'build' })?.define ?? {};
+  const drift = Object.entries(ownFlags).filter(([flag, value]) => define[flag] !== value);
+  if (drift.length > 0) {
+    throw new Error(
+      `[gxt] the gxt compiler plugin did not take COMPAT_TEMPLATE_FLAGS (${drift
+        .map(([flag]) => flag)
+        .join(', ')})`
+    );
+  }
+  const packagesDir = resolve(projectRoot, 'packages') + '/';
+  return {
+    ...app,
+    transform(code, id, options) {
+      const ownTemplates =
+        isGxtCompatOwnTemplateModule(id, packagesDir) &&
+        (/\.g[jt]s$/.test(id.split('?')[0]) || mayCallPrecompileTemplate(code));
+      return (ownTemplates ? own : app).transform.call(this, code, id, options);
+    },
+  };
 }
 
 function isTestModuleId(id) {

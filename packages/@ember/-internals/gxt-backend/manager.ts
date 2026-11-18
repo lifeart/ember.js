@@ -10262,14 +10262,12 @@ const $_MANAGERS = {
 // =============================================================================
 
 // Build-time-compiled components resolved by NAME from the owner registry
-// (see the branch in handleStringComponent) render through a synthesized
-// one-tag template, compiled once per component function: one name can be
-// registered with different functions (another owner, another test). Each
-// function gets its own tag name, because compile.ts keeps ONE scope-value
-// slot per template source and every compiled body reads the latest value:
-// two functions sharing a template source would render each other.
+// (see the branch in handleStringComponent) render through a one-tag template
+// that invokes the component's invoker (templates.gts
+// `buildTimeComponentTemplate`, which takes it through its scope), made once
+// per component function: one name can be registered with different functions
+// (another owner, another test).
 const _gxtBuildTimeComponentTpls = new WeakMap<object, any>();
-let _gxtBuildTimeComponentCount = 0;
 
 // The invocation's blocks in gxt's slot shape. A gxt template reads
 // `(has-block-params)` for block `name` from `slots[name + '_']`; the slots
@@ -10601,15 +10599,15 @@ function handleStringComponent(
   // Ember factory surface at all — no `create`/`extend`, an empty prototype,
   // and no manager/template association — so the classic instantiation path
   // below would throw container's "Failed to create an instance" assert.
-  // Detect that shape and invoke it GXT-natively by synthesizing a one-tag
-  // runtime template that references it lexically (scopeValues) — the same
-  // `$_c(<lexical>)` path build-time-compiled callers use, so all
-  // root/tree wiring is inherited from the runtime pipeline. The tag is
-  // `_gxtBuildTimeInvoker(fn)`, which hands `fn` the invocation's named
-  // arguments and blocks (block params, named blocks, has-block). The
-  // invocation's attributes and modifiers (`fw`) become the synthesized
-  // template's own (`$fw`), which its `...attributes` hands on, so the
-  // component's `...attributes` receives them as Glimmer's would.
+  // Detect that shape and invoke it GXT-natively through a one-tag template
+  // that references it lexically (templates.gts `buildTimeComponentTemplate`,
+  // compiled at build time) — the same `$_c(<lexical>)` path
+  // build-time-compiled callers use, so all root/tree wiring is inherited from
+  // the template pipeline. The tag is `_gxtBuildTimeInvoker(fn)`, which hands
+  // `fn` the invocation's named arguments and blocks (block params, named
+  // blocks, has-block). The invocation's attributes and modifiers (`fw`)
+  // become the template's own (`$fw`), which its `...attributes` hands on, so
+  // the component's `...attributes` receives them as Glimmer's would.
   const _btClass = factory?.class;
   if (
     !manager &&
@@ -10622,16 +10620,19 @@ function handleStringComponent(
     !INTERNAL_MANAGERS.has(_btClass) &&
     !COMPONENT_MANAGERS.has(_btClass)
   ) {
-    const compileFn = getGxtRenderer()?.compilePipeline.compileTemplate;
-    if (typeof compileFn === 'function') {
+    const pipeline = getGxtRenderer()?.compilePipeline;
+    const templateForFunction = pipeline?.templateForFunction;
+    const buildTimeComponentTemplate = pipeline?.buildTimeComponentTemplate;
+    if (
+      typeof templateForFunction === 'function' &&
+      typeof buildTimeComponentTemplate === 'function'
+    ) {
       let tplFactory = _gxtBuildTimeComponentTpls.get(_btClass);
       if (!tplFactory) {
-        const tag = `GxtBuildTimeComponent${++_gxtBuildTimeComponentCount}`;
-        tplFactory = compileFn(`<${tag} ...attributes @invocation={{this.__gxtBtArgs}} />`, {
-          strictMode: true,
-          scopeValues: { [tag]: _gxtBuildTimeInvoker(_btClass) },
-          moduleName: `gxt-build-time:${name}`,
-        });
+        tplFactory = templateForFunction(
+          buildTimeComponentTemplate(_gxtBuildTimeInvoker(_btClass)),
+          `gxt-build-time:${name}`
+        );
         _gxtBuildTimeComponentTpls.set(_btClass, tplFactory);
       }
       return () => {

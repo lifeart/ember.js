@@ -399,6 +399,15 @@ export interface GxtCompilePipelineCapabilities {
   templateForFunction?(templateFn: Function, moduleName?: string): unknown;
 
   /**
+   * The template function that renders a component compiled at build time and
+   * resolved by name: it invokes `Invoker` (templates.gts, compiled at build
+   * time). manager.ts reads it from here: importing templates.gts would load
+   * the Ember runtime wrappers its compiled code imports before compile.ts has
+   * set up the gxt global scope they need. Contributed by compile.ts.
+   */
+  buildTimeComponentTemplate?(Invoker: object): Function;
+
+  /**
    * `template()` of `@ember/template-compiler` in GXT builds: compile the
    * template with `compileTemplate` and set it as the template of the options'
    * `component` (by default a new template-only component), which it returns.

@@ -9,20 +9,21 @@
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Deliberately keyed off GXT_MODE *alone*, NOT the shared `isGxtEnabled()`
-// helper (scripts/gxt-alias-map.mjs). Under the Vite/GXT test harness
-// (GXT_MODE=true) the @lifeart/gxt compiler owns template compilation, so the
-// classic `babel-plugin-ember-template-compilation` below is skipped. The Rollup
-// `EMBER_RENDER_BACKEND=gxt` publish build, by contrast, intentionally keeps the
-// classic precompile pass — so this must not also flip on EMBER_RENDER_BACKEND.
-// See gxt-alias-map.mjs `isGxtEnabled` for the full asymmetry rationale.
+// Under the Vite/GXT test harness (GXT_MODE=true) the @lifeart/gxt compiler
+// owns template compilation, so the classic
+// `babel-plugin-ember-template-compilation` below is skipped.
 //
-// The gxt NATIVE layer (`EMBER_RENDER_BACKEND=gxt-native`, the native vite
-// config AND the rollup native dist) also skips it: native has no wire-format
-// templates — `precompileTemplate` is left for the gxt compiler
-// (rollup.config.mjs gxtNativeCompiler) and the native
-// `@ember/template-compilation`. Classic and compat rollup builds keep the pass.
-const useGxt = process.env.GXT_MODE === 'true' || process.env.EMBER_RENDER_BACKEND === 'gxt-native';
+// The gxt builds skip it too: their `precompileTemplate` call sites are left
+// for the gxt compiler, which compiles them at build time into template makers
+// for their own `@ember/template-compilation` — the native layer
+// (`EMBER_RENDER_BACKEND=gxt-native`, the native vite config AND the rollup
+// native dist: rollup.config.mjs gxtNativeCompiler) and the compat dist
+// (`EMBER_RENDER_BACKEND=gxt`: rollup.config.mjs gxtCompatTemplates). Neither
+// has wire-format templates. The classic build keeps the pass.
+const useGxt =
+  process.env.GXT_MODE === 'true' ||
+  process.env.EMBER_RENDER_BACKEND === 'gxt' ||
+  process.env.EMBER_RENDER_BACKEND === 'gxt-native';
 
 export default {
   plugins: [
