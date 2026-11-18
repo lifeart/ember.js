@@ -144,6 +144,13 @@ export default defineConfig(({ mode }) => {
                 // A helper / modifier call site passes its arguments' source
                 // paths: their references' debug labels (DEBUG).
                 EMBER_ARG_LABELS: true,
+                // `{{outlet}}` renders the route outlet: it compiles to
+                // `$_outlet(ctx)`, which renders the outlet component the
+                // compat backend registers as gxt's `outletComponent` host
+                // hook (compile.ts). Without it gxt reads `{{outlet}}` as a
+                // default-block yield, which renders nothing, so an app's
+                // `application.gjs` rendered none of its child routes.
+                EMBER_OUTLET: true,
               },
             })
           )

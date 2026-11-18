@@ -12585,8 +12585,12 @@ function handleManagedComponent(
       cache = { slots: new Map(), callCounter: new Map() };
       _managedComponentCache.set(owner, cache);
     }
-    // Reset call counters when entering a new render generation
-    const lastGen = _managedComponentLastGeneration.get(owner) || -1;
+    // Reset call counters when entering a new render generation. An app's
+    // renders all run in generation 0 (only the test harness advances it), so
+    // a recorded 0 is a generation too: read as "none", it reset the counters
+    // at every invocation, and every `<LinkTo>` of a template rendered the
+    // first one's instance with the last one's arguments.
+    const lastGen = _managedComponentLastGeneration.get(owner) ?? -1;
     if (lastGen !== _managedComponentGeneration) {
       cache.callCounter.clear();
       _managedComponentLastGeneration.set(owner, _managedComponentGeneration);

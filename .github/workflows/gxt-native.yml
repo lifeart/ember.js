@@ -3,8 +3,9 @@ name: GXT native
 # The gxt-native build (EMBER_RENDER_BACKEND=gxt-native: Ember on @lifeart/gxt,
 # no Glimmer VM). Its rollup dist is built, size-checked and asserted VM-free in
 # the `gxt-native` leg of gxt-dual-build.yml; this workflow boots apps on it,
-# packages it, and runs its test suite. Everything resolves the @lifeart/gxt
-# pinned in package.json devDependencies (one copy in the install).
+# packages it, and runs its test suite. The modern-app job also boots the same
+# app on the compat build (EMBER_RENDER_BACKEND=gxt). Everything resolves the
+# @lifeart/gxt pinned in package.json devDependencies (one copy in the install).
 
 on:
   push:
@@ -53,11 +54,19 @@ jobs:
         run: |
           node scripts/bundle-modern-app.mjs --from-dist --flavor lists --boot --assert-native \
             --json "$RUNNER_TEMP/modern-app-lists.json"
+      # The same strict app on the compat build (EMBER_RENDER_BACKEND=gxt), as
+      # a compat app consumes Ember: built from source through the repo
+      # pipeline (the compat dist has no entry for the gxt-wrapper redirect
+      # its templates need), boot-checked and gated like the apps above.
+      - name: Compat modern app from source, strict (boot-check)
+        run: |
+          node scripts/bundle-modern-app.mjs --variants gxt --boot \
+            --json "$RUNNER_TEMP/modern-app-compat.json"
       - name: Boot-check gate and bytes (job summary)
         run: |
           node scripts/bundle-modern-app-gate.mjs \
             "$RUNNER_TEMP/modern-app-strict.json" "$RUNNER_TEMP/modern-app-loose.json" \
-            "$RUNNER_TEMP/modern-app-lists.json"
+            "$RUNNER_TEMP/modern-app-lists.json" "$RUNNER_TEMP/modern-app-compat.json"
       - name: Build the ember-source-gxt-native package
         run: |
           node scripts/build-gxt-native-package.mjs \
@@ -84,7 +93,9 @@ jobs:
             ${{ runner.temp }}/modern-app-strict.json
             ${{ runner.temp }}/modern-app-loose.json
             ${{ runner.temp }}/modern-app-lists.json
+            ${{ runner.temp }}/modern-app-compat.json
             smoke-tests/modern-app/dist/*.log
+            smoke-tests/modern-app/dist/*-boot.json
             ${{ runner.temp }}/consumer-app/*.json
             ${{ runner.temp }}/consumer-app/*.log
             ${{ runner.temp }}/consumer-app/installed-packages.txt

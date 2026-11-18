@@ -527,7 +527,7 @@ import { inheritArgSources, recordArgSource } from './arg-sources';
 // A block param that follows a list row's item (`__componentThunk`).
 import { gxtIsItemSlotParam as _gxtIsItemSlotParam } from './gxt-next-exports';
 // Also installs the route-outlet hooks route.ts / router.ts call (gxt-bridge).
-import { defineEmberOutletElement } from './outlet';
+import { defineEmberOutletElement, OutletKeyword } from './outlet';
 // Installs the glimmer host that glimmer's renderer modules call (gxt-bridge).
 import './glimmer-host';
 // Installs the GXT `template()` of @ember/template-compiler (gxt-bridge), and
@@ -13010,6 +13010,61 @@ export function precompileTemplate(templateString: string, options?: GxtPrecompi
     }
   }
 
+  const templateFactory = _gxtTemplateFactory(
+    compilationResult,
+    options,
+    templateString,
+    _inElementLiteralIds
+  );
+
+  // Cache the result
+  templateCache.set(cacheKey, templateFactory);
+
+  return templateFactory;
+}
+
+/** gxt template function compiled at build time → its template factory. */
+const _gxtFunctionTemplateFactories = new WeakMap<
+  Function,
+  ReturnType<typeof _gxtTemplateFactory>
+>();
+
+/**
+ * The template factory of a template function gxt compiled at build time (a
+ * `.gjs` / `.gts` `<template>`, e.g. a route template): its template renders
+ * the function as a runtime-compiled template renders gxt's own template
+ * function. One per function: an outlet tells the routes it renders apart by
+ * their template.
+ */
+function _gxtTemplateFactoryForFunction(templateFn: Function, moduleName?: string) {
+  let factory = _gxtFunctionTemplateFactories.get(templateFn);
+  if (factory === undefined) {
+    factory = _gxtTemplateFactory(
+      { templateFn, code: '', __gxtNativePath: true },
+      { moduleName },
+      `[build-time template ${moduleName ?? templateFn.name}]`,
+      []
+    );
+    _gxtFunctionTemplateFactories.set(templateFn, factory);
+  }
+  return factory;
+}
+
+/**
+ * A compiled template as Ember uses one: a template factory (owner → template)
+ * whose template renders `compilationResult.templateFn` through the compat
+ * render layer. `compilationResult.__gxtNativePath` marks gxt's own template
+ * function (the one gxt's compiler emits, at build time or at runtime), whose
+ * preamble reads the slots and attributes from its arguments. `templateString`
+ * names the template in `toString()`, and `_inElementLiteralIds` are the
+ * literal destination ids of its `{{#in-element}}` blocks.
+ */
+function _gxtTemplateFactory(
+  compilationResult: { templateFn: Function; code?: string; __gxtNativePath?: boolean },
+  options: { moduleName?: string } | undefined,
+  templateString: string,
+  _inElementLiteralIds: readonly string[]
+) {
   // Helper function to convert template results to nodes
   const itemToNode = (item: any, depth = 0): Node | null => {
     if (item instanceof Node) {
@@ -13993,9 +14048,6 @@ export function precompileTemplate(templateString: string, options?: GxtPrecompi
   (templateFactory as any).moduleName = options?.moduleName || 'gxt-runtime-template';
   (templateFactory as any).id = `gxt-factory-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-  // Cache the result
-  templateCache.set(cacheKey, templateFactory);
-
   return templateFactory;
 }
 
@@ -14101,6 +14153,7 @@ _gxtRegisterHostHooks({
 });
 installCompilePipelinePart({
   compileTemplate: compileTemplate,
+  templateForFunction: _gxtTemplateFactoryForFunction,
   currentTemplateThis: _gxtGetTemplateThisFn,
   withTemplateThis: _gxtWithTemplateThis,
   resetIntervalBudget: _gxtResetIntervalBudget,
@@ -14308,6 +14361,10 @@ installRenderPassPart({
 // runtime so every compat build (not only the test page) has it.
 defineEmberMountElement();
 defineEmberOutletElement();
+// `{{outlet}}` in a template compiled at build time (an app's `.gjs` / `.gts`):
+// the compat build compiles it with gxt's EMBER_OUTLET flag (vite.config.mjs)
+// to `$_outlet(ctx)`, which renders this host hook's component.
+_gxtRegisterHostHooks({ outletComponent: OutletKeyword });
 
 // Host hook that runs inside manager.ts's `checkBacktracking` body,
 // transforming the assembled assertion message before it reaches `_assertFn`.

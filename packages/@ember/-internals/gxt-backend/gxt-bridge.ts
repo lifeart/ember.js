@@ -391,6 +391,14 @@ export interface GxtCompilePipelineCapabilities {
   compileTemplate?(templateString: string, options?: unknown): unknown;
 
   /**
+   * The template factory of a template function gxt compiled at build time (a
+   * `.gjs` / `.gts` `<template>`): it renders the function as compileTemplate's
+   * templates render gxt's own template function. One per function.
+   * Contributed by compile.ts.
+   */
+  templateForFunction?(templateFn: Function, moduleName?: string): unknown;
+
+  /**
    * `template()` of `@ember/template-compiler` in GXT builds: compile the
    * template with `compileTemplate` and set it as the template of the options'
    * `component` (by default a new template-only component), which it returns.

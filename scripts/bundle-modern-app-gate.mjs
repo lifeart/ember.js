@@ -5,10 +5,9 @@
 //   node scripts/bundle-modern-app-gate.mjs <strict.json> [<loose.json> …]
 //
 // bundle-modern-app.mjs reports boot-checks but exits 0 when a variant fails to
-// boot (its default local run includes the compat `gxt` variant, which has a
-// known boot gap). This gate fails unless every variant in every given file was
-// boot-checked and passed all of its checks, and no `--assert-native` run
-// reported a violation. It prints the boot-JS bytes (raw / gzip / brotli,
+// boot. This gate fails unless every variant in every given file (the compat
+// `gxt` app built from source included) was boot-checked and passed all of its
+// checks, and no `--assert-native` run reported a violation. It prints the boot-JS bytes (raw / gzip / brotli,
 // gxt runtime brotli) per variant, each gxt-native variant against the classic
 // one of the same flavor, and appends the table to GITHUB_STEP_SUMMARY when set.
 import { appendFileSync, readFileSync } from 'node:fs';

@@ -34,12 +34,14 @@ import { DEBUG } from '@glimmer/env';
 import { templateOnlyComponent } from '@glimmer/runtime/lib/component/template-only';
 import { invokableFor } from 'router_js';
 import type Route from '@ember/routing/route';
+import { $_GET_ARGS, $_edp, $_fin } from '@lifeart/gxt';
 import {
   componentCapabilities,
   hasInternalComponentManager,
   setComponentManager,
   setComponentTemplate,
 } from './manager';
+import { $_tag } from './ember-gxt-wrappers';
 import {
   getClassicRouteWrapper,
   getGxtRenderer,
@@ -278,6 +280,20 @@ function classicLevelContext(nestedOutlet: GxtOutletState): any {
   }
 
   return nestedContext;
+}
+
+/**
+ * `{{outlet}}` in a template compiled at build time: the compat build compiles
+ * it with gxt's EMBER_OUTLET flag to `$_outlet(ctx)`, which renders this gxt
+ * component, the `outletComponent` host hook (compile.ts registers it). It
+ * renders `<ember-outlet>`, the element a runtime-compiled `{{outlet}}`
+ * becomes, which renders the next level of the current outlet state. It is
+ * the function gxt compiles `<template><ember-outlet /></template>` to: gxt
+ * constructs it with the invocation's arguments, as a template-only component.
+ */
+export function OutletKeyword(this: object): object {
+  $_GET_ARGS(this as never, arguments);
+  return $_fin([$_tag('ember-outlet', $_edp, this, [])], this as never);
 }
 
 export function defineEmberOutletElement(): void {
@@ -626,20 +642,37 @@ function buildRenderState(route: ClassicRouteLike): GxtRenderState {
       // function. It is not an Ember `TemplateFactory` (no `asLayout`) and
       // carries none of the gxt wrapper brands (`__gxtCompiled` /
       // `__gxtFactory`). Calling it as `factory(owner)` here would crash
-      // because no GXT root context or args exist yet, so store it uninvoked:
-      // the outlet root template (`root-template.ts`) sets up the owner, root
-      // context and args before calling it. Ember `TemplateFactory`s and
-      // wrapped gxt factories still go through `factory(owner)`.
+      // because no GXT root context or args exist yet. Ember
+      // `TemplateFactory`s and wrapped gxt factories still go through
+      // `factory(owner)`.
       let candidate = templateFactoryOrComponent as unknown as Record<string, unknown>;
       let isRawGxtFn =
         typeof templateFactoryOrComponent === 'function' &&
         !('asLayout' in templateFactoryOrComponent) &&
         !candidate['__gxtCompiled'] &&
         !candidate['__gxtFactory'];
+      // The function gxt compiles a `<template>` to (`function () {…}`: no
+      // declared parameter, it reads its arguments through `arguments`, and
+      // constructible, as gxt constructs a template-only component) renders as
+      // a runtime-compiled template renders gxt's own template function
+      // (`templateForFunction`), at the top level and in a nested level's
+      // `<ember-outlet>` alike. Any other raw function (a template factory
+      // chain such as the test helpers' `(owner) => …` templates) is stored
+      // uninvoked: the root template unwraps it when it renders
+      // (root-template.ts `renderTemplateWithContext`).
+      let isGxtTemplateFn =
+        isRawGxtFn &&
+        (templateFactoryOrComponent as Function).length === 0 &&
+        (templateFactoryOrComponent as Function).prototype !== undefined;
 
-      template = isRawGxtFn
-        ? templateFactoryOrComponent
-        : (templateFactoryOrComponent as (owner: InternalOwner) => object)(owner);
+      template = isGxtTemplateFn
+        ? (templateForFunction(
+            templateFactoryOrComponent as Function,
+            templateName
+          )(owner) as object)
+        : isRawGxtFn
+          ? templateFactoryOrComponent
+          : (templateFactoryOrComponent as (owner: InternalOwner) => object)(owner);
     }
   } else {
     // default `{{outlet}}`
@@ -823,6 +856,15 @@ function resolveTemplate(template: object, owner: InternalOwner): unknown {
     typeof template === 'function'
     ? (template as (owner: InternalOwner) => unknown)(owner)
     : template;
+}
+
+function templateForFunction(
+  templateFn: Function,
+  moduleName: string
+): (owner: InternalOwner) => unknown {
+  let forFunction = getGxtRenderer()?.compilePipeline.templateForFunction;
+  assert('[gxt] the GXT template layer is not installed', typeof forFunction === 'function');
+  return forFunction(templateFn, `template:${moduleName}`) as (owner: InternalOwner) => unknown;
 }
 
 function compileTemplate(source: string, options: object): object {
